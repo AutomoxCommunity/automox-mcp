@@ -1,0 +1,70 @@
+[project]
+name = "automox-mcp"
+version = "0.1.0"
+description = "An MCP server implementation for Automox"
+readme = "README.md"
+authors = [
+  { name = "Automox" }
+]
+license = "MIT"
+requires-python = ">=3.11"
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: System Administrators",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: System :: Systems Administration"
+]
+dependencies = [
+  "fastmcp>=2.0.0",
+  "httpx>=0.28",
+  "pydantic>=2.12",
+  "python-dotenv>=1.1"
+]
+
+[project.scripts]
+automox-mcp = "automox_mcp:main"
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.2",
+  "pytest-asyncio>=0.23",
+  "ruff>=0.4",
+  "mypy>=1.9",
+  "build>=1.2.2",
+  "twine>=5.1"
+]
+
+[project.urls]
+Homepage = "https://github.com/AutomoxCommunity/automox-mcp"
+Repository = "https://github.com/AutomoxCommunity/automox-mcp"
+Issues = "https://github.com/AutomoxCommunity/automox-mcp/issues"
+Documentation = "https://github.com/AutomoxCommunity/automox-mcp#readme"
+
+[build-system]
+requires = ["setuptools>=65", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+automox_mcp = ["py.typed"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
+
+[tool.mypy]
+python_version = "3.13"
+warn_return_any = true
+warn_unused_configs = true
+packages = ["automox_mcp"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

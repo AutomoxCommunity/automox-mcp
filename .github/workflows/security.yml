@@ -1,0 +1,134 @@
+name: Security Scans
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.13"
+
+jobs:
+
+  trufflehog:
+    name: TruffleHog Secrets Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Scan working tree for secrets
+        run: |
+          set -euo pipefail
+          docker run --rm -v "$PWD:/pwd" trufflesecurity/trufflehog:latest \
+            filesystem --directory=/pwd --results=verified,unknown --json --fail \
+            | tee trufflehog.json
+
+      - name: Upload TruffleHog report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: trufflehog-report
+          path: trufflehog.json
+
+  mcp-scanner:
+    name: MCP Scanner
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@5a7eac68fb9809dea845d802897dc5c723910fa3 # v7.1.3
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Sync project dependencies
+        run: uv sync --extra dev --frozen
+
+      - name: Run mcp-scanner against stdio server
+        env:
+          AUTOMOX_API_KEY: test-api-key
+          AUTOMOX_ACCOUNT_UUID: test-account
+          AUTOMOX_ORG_ID: "0"
+          AUTOMOX_MCP_SKIP_DOTENV: "1"
+        run: |
+          set -euo pipefail
+          source .venv/bin/activate
+          uv pip install cisco-ai-mcp-scanner
+          mcp-scanner \
+            --stdio-command uv \
+            --stdio-args run automox-mcp \
+            --stdio-env AUTOMOX_API_KEY=test-api-key \
+            --stdio-env AUTOMOX_ACCOUNT_UUID=test-account \
+            --stdio-env AUTOMOX_ORG_ID=0 \
+            --stdio-env AUTOMOX_MCP_SKIP_DOTENV=1 \
+            --analyzers yara \
+            --format summary \
+            | tee mcp-scanner.txt
+
+      - name: Fail if MCP Scanner reports unsafe tools
+        if: ${{ always() }}
+        run: |
+          if [ ! -f mcp-scanner.txt ]; then
+            echo "mcp-scanner.txt not found; mcp-scanner likely failed."
+            exit 1
+          fi
+          python3 - <<'PY'
+          import pathlib, re, sys
+
+          summary = pathlib.Path("mcp-scanner.txt").read_text()
+          match = re.search(r"Unsafe tools:\s*(\d+)", summary)
+          if match is None:
+              print("Unable to locate 'Unsafe tools' line in MCP scanner output.")
+              sys.exit(1)
+          unsafe_count = int(match.group(1))
+          if unsafe_count > 0:
+              print(summary)
+              print(f"Unsafe tools detected: {unsafe_count}")
+              sys.exit(1)
+          print("MCP Scanner reported no unsafe tools.")
+          PY
+
+      - name: Upload MCP Scanner report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: mcp-scanner-summary
+          path: mcp-scanner.txt
+
+  zizmor:
+    name: Zizmor GitHub Actions audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6.0.0
+        with:
+          python-version: "3.13"
+
+      - name: Install zizmor
+        run: python -m pip install --upgrade pip zizmor
+
+      - name: Scan workflows
+        env:
+          ZIZMOR_NO_ONLINE_AUDITS: "true"
+        run: zizmor --collect=workflows --strict-collection --format=github .

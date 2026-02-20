@@ -126,11 +126,25 @@ def _get_env(name: str) -> str | None:
 
 
 def _validate_env() -> None:
-    """Validate required environment variables are present."""
+    """Validate required environment variables are present and well-formed."""
     required_vars = ["AUTOMOX_API_KEY", "AUTOMOX_ACCOUNT_UUID", "AUTOMOX_ORG_ID"]
     missing = [var for var in required_vars if _get_env(var) is None]
     if missing:
         raise RuntimeError(f"Missing required environment variables: {missing}")
+
+    # AUTOMOX_ORG_ID must be a positive integer
+    org_id_raw = _get_env("AUTOMOX_ORG_ID")
+    if org_id_raw is not None:
+        try:
+            org_id_int = int(org_id_raw)
+        except ValueError:
+            raise RuntimeError(
+                f"AUTOMOX_ORG_ID must be a positive integer, got: {org_id_raw!r}"
+            )
+        if org_id_int <= 0:
+            raise RuntimeError(
+                f"AUTOMOX_ORG_ID must be a positive integer, got: {org_id_int}"
+            )
 
 
 def _load_env_file() -> None:
@@ -149,17 +163,30 @@ def create_server() -> FastMCP:
     server: FastMCP = FastMCP(
         name="Automox MCP",
         instructions=(
-            "Curated Automox workflows for policy health, device insights, remediation, and "
-            "account management. Use these tools to summarize policies, inspect devices, "
-            "surface devices needing attention, execute policies, run device commands for "
-            "immediate remediation, and manage account invitations.\n\n"
+            "Curated Automox workflows for policy health, device insights, remediation, "
+            "account management, server group management, package/patch visibility, "
+            "event history, compliance reports, and webhook subscriptions.\n\n"
+            "CAPABILITIES:\n"
+            "- Devices: list, search, detail (with inventory), health metrics, "
+            "devices needing attention, execute commands (scan/patch/reboot)\n"
+            "- Policies: catalog, detail, health overview, execution timeline, "
+            "run results, create/update, execute, patch approvals\n"
+            "- Packages: list device packages, search organization packages\n"
+            "- Groups: list, get, create, update, delete server groups\n"
+            "- Events: list organization events with filters\n"
+            "- Reports: pre-patch readiness, non-compliant devices\n"
+            "- Webhooks: list event types, list/get/create/update/delete webhooks, "
+            "test delivery, rotate signing secret\n"
+            "- Audit: audit trail activity search\n"
+            "- Account: invite/remove users\n\n"
             "IMPORTANT: When working with Automox data, proactively check available resources:\n"
             "- Use resource://servergroups/list to translate server_group_id values to "
             "human-readable names\n"
             "- Use resource://policies/quick-start for copy-paste policy creation templates "
             "(RECOMMENDED)\n"
             "- Use resource://policies/schema when creating or updating policies\n"
-            "- Use resource://policies/schedule-syntax for scheduling help\n\n"
+            "- Use resource://policies/schedule-syntax for scheduling help\n"
+            "- Use resource://webhooks/event-types for available webhook event types\n\n"
             "SCHEDULE INTERPRETATION:\n"
             "- When you retrieve a policy with policy_detail, check the '_important' field "
             "for current schedule\n"
@@ -171,6 +198,10 @@ def create_server() -> FastMCP:
             "- Use format: {'action': 'update', 'policy_id': 12345, 'policy': "
             "{'schedule': {'days': ['weekend'], 'time': '02:00'}}}\n"
             "- Only include fields you want to change in the policy object\n\n"
+            "WEBHOOKS:\n"
+            "- When creating a webhook, SAVE THE SECRET immediately — it is only shown once\n"
+            "- When rotating a webhook secret, the old secret is immediately invalidated\n"
+            "- Max 5 webhooks per organization, HTTPS URLs only\n\n"
             "Always translate numeric server_group_id values to group names in your responses."
         ),
     )

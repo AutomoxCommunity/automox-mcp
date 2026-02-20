@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 from collections import deque
 from collections.abc import Mapping, Sequence
@@ -11,6 +12,25 @@ from typing import Any, cast
 
 from automox_mcp.client import AutomoxAPIError
 from automox_mcp.schemas import PaginationMetadata, ToolResponse
+
+
+def is_read_only() -> bool:
+    """Return True when the server is running in read-only mode."""
+    value = os.environ.get("AUTOMOX_MCP_READ_ONLY", "")
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def get_enabled_modules() -> set[str] | None:
+    """Return the set of enabled module names, or None if all are enabled.
+
+    Controlled by ``AUTOMOX_MCP_MODULES`` (comma-separated).  Valid names:
+    devices, policies, patches, approvals, groups, reports, audit, users,
+    inventory, events, webhooks.
+    """
+    raw = os.environ.get("AUTOMOX_MCP_MODULES", "").strip()
+    if not raw:
+        return None
+    return {m.strip().lower() for m in raw.split(",") if m.strip()}
 
 
 class RateLimitError(RuntimeError):
@@ -160,4 +180,6 @@ __all__ = [
     "as_tool_response",
     "enforce_rate_limit",
     "format_error",
+    "get_enabled_modules",
+    "is_read_only",
 ]

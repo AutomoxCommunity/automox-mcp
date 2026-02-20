@@ -1,0 +1,123 @@
+"""Package workflows for Automox MCP."""
+
+from __future__ import annotations
+
+from collections.abc import Mapping
+from typing import Any
+
+from ..client import AutomoxClient
+
+
+async def list_device_packages(
+    client: AutomoxClient,
+    *,
+    org_id: int,
+    device_id: int,
+    page: int | None = None,
+    limit: int | None = None,
+) -> dict[str, Any]:
+    """List software packages installed on a specific device."""
+    params: dict[str, Any] = {"o": org_id}
+    if page is not None:
+        params["page"] = page
+    if limit is not None:
+        params["limit"] = limit
+
+    packages = await client.get(
+        f"/servers/{device_id}/packages", params=params, api="console"
+    )
+
+    if not isinstance(packages, list):
+        packages = []
+
+    total = len(packages)
+    summary: list[dict[str, Any]] = []
+    for pkg in packages:
+        if not isinstance(pkg, Mapping):
+            continue
+        entry: dict[str, Any] = {
+            "id": pkg.get("id"),
+            "name": pkg.get("display_name") or pkg.get("name"),
+            "version": pkg.get("version"),
+            "installed": pkg.get("installed"),
+            "repo": pkg.get("repo"),
+        }
+        severity = pkg.get("severity")
+        if severity is not None:
+            entry["severity"] = severity
+        patch_status = pkg.get("status") or pkg.get("patch_status")
+        if patch_status is not None:
+            entry["patch_status"] = patch_status
+        is_managed = pkg.get("is_managed")
+        if is_managed is not None:
+            entry["is_managed"] = is_managed
+        summary.append(entry)
+
+    return {
+        "data": {
+            "device_id": device_id,
+            "total_packages": total,
+            "packages": summary,
+        },
+        "metadata": {
+            "deprecated_endpoint": False,
+        },
+    }
+
+
+async def search_org_packages(
+    client: AutomoxClient,
+    *,
+    org_id: int,
+    include_unmanaged: bool | None = None,
+    awaiting: bool | None = None,
+    page: int | None = None,
+    limit: int | None = None,
+) -> dict[str, Any]:
+    """Search packages across the organization."""
+    params: dict[str, Any] = {"o": org_id}
+    if include_unmanaged is not None:
+        params["include_unmanaged"] = str(include_unmanaged).lower()
+    if awaiting is not None:
+        params["awaiting"] = str(awaiting).lower()
+    if page is not None:
+        params["page"] = page
+    if limit is not None:
+        params["limit"] = limit
+
+    packages = await client.get("/orgs/packages", params=params, api="console")
+
+    if not isinstance(packages, list):
+        packages = []
+
+    total = len(packages)
+    summary: list[dict[str, Any]] = []
+    for pkg in packages:
+        if not isinstance(pkg, Mapping):
+            continue
+        entry: dict[str, Any] = {
+            "id": pkg.get("id"),
+            "name": pkg.get("display_name") or pkg.get("name"),
+            "version": pkg.get("version"),
+            "severity": pkg.get("severity"),
+        }
+        device_count = pkg.get("device_count")
+        if device_count is not None:
+            entry["device_count"] = device_count
+        is_managed = pkg.get("is_managed")
+        if is_managed is not None:
+            entry["is_managed"] = is_managed
+        awaiting_flag = pkg.get("awaiting")
+        if awaiting_flag is not None:
+            entry["awaiting"] = awaiting_flag
+        summary.append(entry)
+
+    return {
+        "data": {
+            "total_packages": total,
+            "packages": summary,
+        },
+        "metadata": {
+            "deprecated_endpoint": False,
+        },
+    }

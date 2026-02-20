@@ -510,13 +510,13 @@ class GetUserParams(ForbidExtraModel):
 
 class GetPrepatchReportParams(ForbidExtraModel):
     group_id: int | None = Field(None, description="Filter by Server Group ID")
-    limit: int | None = Field(None, ge=1, description="Maximum number of results")
+    limit: int | None = Field(None, ge=1, le=500, description="Maximum number of results")
     offset: int | None = Field(None, ge=0, description="Offset for pagination")
 
 
 class GetNeedsAttentionReportParams(ForbidExtraModel):
     group_id: int | None = Field(None, description="Filter by Server Group ID")
-    limit: int | None = Field(None, ge=1, description="Maximum number of results")
+    limit: int | None = Field(None, ge=1, le=500, description="Maximum number of results")
     offset: int | None = Field(None, ge=0, description="Offset for pagination")
 
 
@@ -616,7 +616,7 @@ class CreateServerGroupParams(ForbidExtraModel):
     parent_server_group_id: int | None = Field(None, description="Parent group ID")
     ui_color: str | None = Field(None, description="UI color for group")
     notes: str | None = Field(None, description="Group notes")
-    policies: list | None = Field(None, description="Policy IDs to assign")
+    policies: list[int] | None = Field(None, description="Policy IDs to assign")
 
 
 class UpdateServerGroupParams(ForbidExtraModel):
@@ -626,7 +626,7 @@ class UpdateServerGroupParams(ForbidExtraModel):
     parent_server_group_id: int | None = Field(None, description="Parent group ID")
     ui_color: str | None = Field(None, description="UI color for group")
     notes: str | None = Field(None, description="Group notes")
-    policies: list | None = Field(None, description="Policy IDs to assign")
+    policies: list[int] | None = Field(None, description="Policy IDs to assign")
 
 
 class UpdateApprovalParams(ForbidExtraModel):

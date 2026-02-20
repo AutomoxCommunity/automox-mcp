@@ -32,13 +32,9 @@ def _normalize_status(value: Any) -> str:
                 statuses.append(normalized)
         if not statuses:
             return "unknown"
-        unique_statuses = sorted(set(statuses))
+        unique_statuses = set(statuses)
         if len(unique_statuses) == 1:
-            return unique_statuses[0]
-        priority_order = ["failed", "error", "cancelled", "partial", "pending", "success"]
-        for label in priority_order:
-            if label in unique_statuses:
-                return "mixed"
+            return next(iter(unique_statuses))
         return "mixed"
 
     status = str(value).strip().lower()
@@ -519,8 +515,8 @@ async def list_device_inventory(
             continue
         if not include_unmanaged and not is_managed:
             continue
-        policy_status = summary_fields["policy_status"]
-        if policy_status_filter and policy_status != policy_status_filter:
+        device_policy_status = summary_fields["policy_status"]
+        if policy_status_filter and device_policy_status != policy_status_filter:
             continue
 
         curated_devices.append(
@@ -529,7 +525,7 @@ async def list_device_inventory(
                 "hostname": _format_device_display_name(item),
                 "managed": is_managed,
                 "os": item.get("os_name") or item.get("platform"),
-                "policy_status": policy_status,
+                "policy_status": device_policy_status,
                 "policy_failures": _count_failed_policies(item) or None,
                 "pending_patches": summary_fields["pending_patches"],
                 "needs_attention": summary_fields["needs_attention"],
@@ -537,6 +533,8 @@ async def list_device_inventory(
                 "server_group_id": item.get("server_group_id"),
             }
         )
+        if len(curated_devices) >= limit:
+            break
 
     preview = curated_devices[:limit]
 

@@ -1,4 +1,4 @@
-"""Audit trail tools for Automox MCP."""
+"""Package-related tools for Automox MCP."""
 
 from __future__ import annotations
 
@@ -11,7 +11,12 @@ from pydantic import BaseModel, ValidationError
 
 from .. import workflows
 from ..client import AutomoxAPIError, AutomoxClient
-from ..schemas import AuditTrailEventsParams, OrgIdContextMixin, OrgIdRequiredMixin
+from ..schemas import (
+    GetDevicePackagesParams,
+    GetOrganizationPackagesParams,
+    OrgIdContextMixin,
+    OrgIdRequiredMixin,
+)
 from ..utils.tooling import (
     RateLimitError,
     as_tool_response,
@@ -21,13 +26,15 @@ from ..utils.tooling import (
 
 
 def register(server: FastMCP, *, read_only: bool = False) -> None:
-    """Register audit trail-related tools."""
+    """Register package-related tools."""
 
     async def _call(
         func: Callable[..., Awaitable[dict[str, Any]]],
         params_model: type[BaseModel],
         raw_params: dict[str, Any],
         api: str | None = None,
+        *,
+        inject_org_id: bool = False,
     ) -> dict[str, Any]:
         try:
             await enforce_rate_limit(api)
@@ -45,6 +52,12 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
                 payload = model.model_dump(mode="python", exclude_none=True)
                 if isinstance(model, (OrgIdContextMixin, OrgIdRequiredMixin)):
                     payload["org_id"] = model.org_id
+                elif inject_org_id:
+                    if client_org_id is None:
+                        raise ToolError(
+                            "org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly."
+                        )
+                    payload["org_id"] = client_org_id
                 result: dict[str, Any] = await func(session, **payload)
         except (ValidationError, ValueError) as exc:
             raise ToolError(str(exc)) from exc
@@ -59,32 +72,52 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
         return as_tool_response(result)
 
     @server.tool(
-        name="audit_trail_user_activity",
-        description="Retrieve Automox audit trail events performed by a user on a specific date.",
+        name="list_device_packages",
+        description=(
+            "List software packages installed on a specific Automox device. "
+            "Returns package names, versions, patch status, and severity."
+        ),
     )
-    async def audit_trail_user_activity(
-        date: str,
-        actor_email: str | None = None,
-        actor_uuid: str | None = None,
-        actor_name: str | None = None,
-        cursor: str | None = None,
+    async def list_device_packages(
+        device_id: int,
+        page: int | None = None,
         limit: int | None = None,
-        include_raw_events: bool | None = False,
-        org_uuid: str | None = None,
     ) -> dict[str, Any]:
         params = {
-            "date": date,
-            "actor_email": actor_email,
-            "actor_uuid": actor_uuid,
-            "actor_name": actor_name,
-            "cursor": cursor,
+            "device_id": device_id,
+            "page": page,
             "limit": limit,
-            "include_raw_events": include_raw_events,
-            "org_uuid": org_uuid,
         }
         return await _call(
-            workflows.audit_trail_user_activity,
-            AuditTrailEventsParams,
+            workflows.list_device_packages,
+            GetDevicePackagesParams,
+            params,
+            api="console",
+            inject_org_id=True,
+        )
+
+    @server.tool(
+        name="search_org_packages",
+        description=(
+            "Search software packages across the Automox organization. "
+            "Filter by managed status or packages awaiting installation."
+        ),
+    )
+    async def search_org_packages(
+        include_unmanaged: bool | None = None,
+        awaiting: bool | None = None,
+        page: int | None = None,
+        limit: int | None = None,
+    ) -> dict[str, Any]:
+        params = {
+            "include_unmanaged": include_unmanaged,
+            "awaiting": awaiting,
+            "page": page,
+            "limit": limit,
+        }
+        return await _call(
+            workflows.search_org_packages,
+            GetOrganizationPackagesParams,
             params,
             api="console",
         )

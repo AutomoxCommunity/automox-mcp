@@ -23,10 +23,19 @@ common operational scenarios.
 - [Available Tools](#available-tools)
   - [Device Management (6 tools)](#device-management-6-tools)
   - [Policy Management (9 tools)](#policy-management-9-tools)
+  - [Package Management (2 tools)](#package-management-2-tools)
+  - [Group Management (5 tools)](#group-management-5-tools)
+  - [Webhook Management (8 tools)](#webhook-management-8-tools)
+  - [Events (1 tool)](#events-1-tool)
+  - [Reports (2 tools)](#reports-2-tools)
   - [Account Management (2 tools)](#account-management-2-tools)
   - [Audit Trail (1 tool)](#audit-trail-1-tool)
+  - [MCP Resources](#mcp-resources)
   - [Example Workflows](#example-workflows)
   - [Tool Parameters](#tool-parameters)
+- [Configuration](#configuration)
+  - [Read-Only Mode](#read-only-mode)
+  - [Modular Architecture](#modular-architecture)
 - [Setup & Usage](#setup--usage)
   - [Prerequisites](#prerequisites)
   - [Finding the values in your console](#finding-the-values-in-your-console)
@@ -49,7 +58,7 @@ common operational scenarios.
 
 ## Available Tools
 
-The MCP server exposes 18 high-level workflow tools designed for common Automox management tasks:
+The MCP server exposes 36 workflow tools designed for common Automox management tasks:
 
 ### Device Management (6 tools)
 - **`list_devices`** - Summarize device inventory and policy status across the organization. Includes unmanaged devices by default and supports `policy_status`/`managed` filters so you can zero in on, for example, non-compliant managed endpoints.
@@ -70,6 +79,34 @@ The MCP server exposes 18 high-level workflow tools designed for common Automox 
 - **`decide_patch_approval`** - Approve or reject an Automox patch approval request.
 - **`execute_policy_now`** - Execute a policy immediately for remediation (all devices or specific device).
 
+### Package Management (2 tools)
+- **`list_device_packages`** - List software packages installed on a specific device. Returns package names, versions, patch status, and severity.
+- **`search_org_packages`** - Search packages across the organization. Filter by managed status or packages awaiting installation.
+
+### Group Management (5 tools)
+- **`list_server_groups`** - List all server groups with device counts and assigned policies.
+- **`get_server_group`** - Get detailed information about a specific server group.
+- **`create_server_group`** - Create a new server group with name, refresh interval, and optional parent group, policies, and notes.
+- **`update_server_group`** - Update an existing server group.
+- **`delete_server_group`** - Delete a server group permanently.
+
+### Webhook Management (8 tools)
+- **`list_webhook_event_types`** - List all available webhook event types with descriptions. Use this to discover which events can trigger webhook deliveries.
+- **`list_webhooks`** - List all webhook subscriptions for the organization. Supports cursor-based pagination.
+- **`get_webhook`** - Retrieve details for a specific webhook subscription.
+- **`create_webhook`** - Create a new webhook subscription. The response includes a signing secret that is **only shown once** — save it immediately. Max 5 webhooks per organization; URL must be HTTPS.
+- **`update_webhook`** - Update an existing webhook (partial update). Can change name, URL, enabled status, or event types.
+- **`delete_webhook`** - Delete a webhook subscription permanently.
+- **`test_webhook`** - Send a test delivery to a webhook endpoint. Returns success status, HTTP status code, and response time.
+- **`rotate_webhook_secret`** - Rotate the signing secret for a webhook. The old secret is immediately invalidated. Save the new secret — it is only shown once.
+
+### Events (1 tool)
+- **`list_events`** - List organization events with optional filters by policy, device, user, event name, or date range.
+
+### Reports (2 tools)
+- **`prepatch_report`** - Retrieve the pre-patch readiness report showing devices with pending patches before the next scheduled patch window.
+- **`noncompliant_report`** - Retrieve the non-compliant devices report showing devices that need attention due to policy failures or missing patches.
+
 ### Account Management (2 tools)
 - **`invite_user_to_account`** - Invite a user to the Automox account with optional zone assignments.
 - **`remove_user_from_account`** - Remove a user from the Automox account by UUID.
@@ -77,6 +114,17 @@ The MCP server exposes 18 high-level workflow tools designed for common Automox 
 ### Audit Trail (1 tool)
 - **`audit_trail_user_activity`** - Retrieve Automox audit trail events performed by a specific user on a given date, with optional pagination cursor support. Set `include_raw_events=true` to include sanitized event payloads when deeper investigation is required. Pass either the full email address or provide `actor_name`/partial email hints and the tool will resolve the matching Automox user automatically.
 
+### MCP Resources
+
+The server also exposes 5 MCP resources that provide reference data and schemas:
+
+| Resource URI | Description |
+|---|---|
+| `resource://policies/quick-start` | Copy-paste policy creation templates (recommended starting point) |
+| `resource://policies/schema` | Full policy schema for create/update operations |
+| `resource://policies/schedule-syntax` | Schedule bitmask syntax reference |
+| `resource://servergroups/list` | Live server group ID-to-name mapping |
+| `resource://webhooks/event-types` | All 39 webhook event types with categories, descriptions, and delivery limits |
 
 ### Example Workflows
 
@@ -173,6 +221,11 @@ Most tools accept optional parameters for filtering and pagination:
 - **Device tools**: `group_id`, `limit`, `include_unmanaged`, `device_id`
 - **Policy tools**: `org_uuid` (optional; auto-resolved from configured Automox org), `window_days`, `report_days`, `policy_id`
 - **Search tools**: `hostname_contains`, `ip_address`, `tag`, `patch_status`
+- **Package tools**: `device_id`, `include_unmanaged`, `awaiting`, `page`, `limit`
+- **Group tools**: `group_id`, `name`, `refresh_interval`, `parent_server_group_id`, `policies`, `page`, `limit`
+- **Webhook tools**: `org_uuid` (optional; auto-resolved), `webhook_id`, `name`, `url`, `event_types`, `enabled`, `cursor`, `limit`
+- **Event tools**: `policy_id`, `server_id`, `user_id`, `event_name`, `start_date`, `end_date`, `page`, `limit`
+- **Report tools**: `group_id`, `limit`, `offset`
 - **Audit tools**: `date`, `actor_email`, `actor_uuid`, `cursor`, `limit`, `include_raw_events`, `org_uuid` (optional)
 - **Execution tools**:
   - `execute_policy_now`: `policy_id` (required), `action` (remediateAll or remediateDevice), `device_id` (optional, required for remediateDevice)
@@ -180,6 +233,41 @@ Most tools accept optional parameters for filtering and pagination:
   - `apply_policy_changes`: accepts one or more `operations` where each entry contains `action` (`create`/`update`) and a policy payload. The helper accepts convenient shorthands (`filter_name`, `filter_names`), converts friendly `schedule` blocks, and enforces Automox-friendly defaults (e.g., inclusion of `id` during updates).
   - `policy_run_results`: `policy_uuid`, `exec_token`, and optional filters (`org_uuid`, `result_status`, `device_name`, pagination arguments).
 
+## Configuration
+
+### Read-Only Mode
+
+Set `AUTOMOX_MCP_READ_ONLY=true` to disable all write operations. In this mode, only read-only tools are registered (22 of 36 tools). Destructive tools like `execute_device_command`, `apply_policy_changes`, `create_webhook`, `delete_server_group`, etc. will not be available.
+
+This is useful for auditing, reporting, and monitoring use cases where you want to prevent accidental modifications.
+
+```bash
+AUTOMOX_MCP_READ_ONLY=true
+```
+
+### Modular Architecture
+
+Set `AUTOMOX_MCP_MODULES` to a comma-separated list of module names to load only the tools you need. This reduces the tool surface area for focused use cases and improves token efficiency.
+
+Available modules: `audit`, `devices`, `policies`, `users`, `groups`, `events`, `reports`, `packages`, `webhooks`
+
+```bash
+# Only load device and policy tools
+AUTOMOX_MCP_MODULES=devices,policies
+
+# Only load webhook management
+AUTOMOX_MCP_MODULES=webhooks
+
+# Load everything (default when variable is unset)
+# AUTOMOX_MCP_MODULES=
+```
+
+Both `AUTOMOX_MCP_READ_ONLY` and `AUTOMOX_MCP_MODULES` can be combined. For example, to expose only read-only device and policy tools:
+
+```bash
+AUTOMOX_MCP_READ_ONLY=true
+AUTOMOX_MCP_MODULES=devices,policies
+```
 
 ## Setup & Usage
 
@@ -208,9 +296,14 @@ cp .env.example .env
 Then edit `.env` to add your credentials:
 
 ```bash
+# Required
 AUTOMOX_API_KEY=your-api-key
 AUTOMOX_ACCOUNT_UUID=your-account-uuid-here
 AUTOMOX_ORG_ID=your-org-id-here
+
+# Optional
+# AUTOMOX_MCP_READ_ONLY=true          # Disable all write operations
+# AUTOMOX_MCP_MODULES=devices,policies # Load only specific tool modules
 ```
 
 ### Quick Start (No Installation Required)
@@ -355,7 +448,7 @@ mcp-scanner \
   --stdio-args run automox-mcp \
   --stdio-env AUTOMOX_API_KEY=test-api-key \
   --stdio-env AUTOMOX_ACCOUNT_UUID=test-account \
-  --stdio-env AUTOMOX_ORG_ID=0 \
+  --stdio-env AUTOMOX_ORG_ID=1 \
   --stdio-env AUTOMOX_MCP_SKIP_DOTENV=1 \
   --analyzers yara \
   --format summary

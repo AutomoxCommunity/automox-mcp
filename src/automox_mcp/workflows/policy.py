@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from collections import Counter, defaultdict
 from collections.abc import Mapping, Sequence
@@ -12,8 +13,10 @@ from uuid import UUID
 
 from fastmcp.exceptions import ToolError
 
-from ..client import AutomoxClient
+from ..client import AutomoxAPIError, AutomoxClient
 from ..utils import resolve_org_uuid
+
+logger = logging.getLogger(__name__)
 
 
 def _normalize_status(value: str | None) -> str:
@@ -1234,8 +1237,9 @@ async def describe_policy(
                     "status_breakdown": history["data"].get("status_breakdown"),
                     "recent_executions": history["data"].get("recent_executions"),
                 }
-            except (ValueError, TypeError, Exception):
+            except (AutomoxAPIError, ValueError, TypeError, KeyError) as exc:
                 # Gracefully handle if policy history is unavailable
+                logger.debug("Failed to fetch policy history: %s", exc)
                 recent_activity = None
 
     # Decode schedule_days bitmask for better readability and add to top level
@@ -1346,7 +1350,8 @@ async def apply_policy_changes(
                         )
                         if isinstance(latest_policy, Mapping):
                             entry["policy"] = latest_policy
-                    except Exception:
+                    except (AutomoxAPIError, ValueError, TypeError, KeyError) as exc:
+                        logger.debug("Failed to fetch created policy %s: %s", policy_id, exc)
                         entry.setdefault("warnings", []).append(
                             f"Created policy {policy_id}, but failed to retrieve latest state."
                         )
@@ -1409,7 +1414,8 @@ async def apply_policy_changes(
                     )
                     if isinstance(latest_policy, Mapping):
                         entry["policy"] = latest_policy
-                except Exception:
+                except (AutomoxAPIError, ValueError, TypeError, KeyError) as exc:
+                    logger.debug("Failed to fetch updated policy %s: %s", policy_id, exc)
                     entry.setdefault("warnings", []).append(
                         f"Updated policy {policy_id}, but failed to retrieve latest state."
                     )

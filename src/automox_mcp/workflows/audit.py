@@ -13,6 +13,7 @@ from pydantic import EmailStr, TypeAdapter, ValidationError
 
 from ..client import AutomoxAPIError, AutomoxClient
 from ..utils import resolve_org_uuid
+from ..utils.tooling import _redact_sensitive_fields
 
 _EMAIL_VALIDATOR: TypeAdapter[EmailStr] = TypeAdapter(EmailStr)
 
@@ -42,15 +43,7 @@ def _email_looks_valid(value: str | None) -> bool:
         _EMAIL_VALIDATOR.validate_python(value)
     except ValidationError:
         return False
-    else:
-        return True
-    email = _normalize_email(value)
-    if not email:
-        return False
-    if "@" not in email:
-        return False
-    local, _, domain = email.partition("@")
-    return bool(local) and bool(domain)
+    return True
 
 
 def _tokenize(value: str | None) -> list[str]:
@@ -215,7 +208,7 @@ async def _lookup_actor_from_hints(
                 "error": {
                     "status_code": exc.status_code,
                     "message": str(exc),
-                    "payload": exc.payload,
+                    "payload": _redact_sensitive_fields(exc.payload) if exc.payload else None,
                 },
             }
             if partial_email and partial_email != resolved_email:

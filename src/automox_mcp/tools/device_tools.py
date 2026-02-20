@@ -29,7 +29,7 @@ from ..utils.tooling import (
 )
 
 
-def register(server: FastMCP) -> None:
+def register(server: FastMCP, *, read_only: bool = False) -> None:
     """Register device-related tools."""
 
     async def _call(
@@ -61,6 +61,10 @@ def register(server: FastMCP) -> None:
             raise ToolError(str(exc)) from exc
         except AutomoxAPIError as exc:
             raise ToolError(format_error(exc)) from exc
+        except ToolError:
+            raise
+        except Exception as exc:
+            raise ToolError(f"Unexpected error: {type(exc).__name__}: {exc}") from exc
         return as_tool_response(result)
 
     @server.tool(
@@ -193,27 +197,29 @@ def register(server: FastMCP) -> None:
             api="console",
         )
 
-    @server.tool(
-        name="execute_device_command",
-        description="Issue an immediate command to a device (scan, patch, or reboot).",
-        annotations={"destructiveHint": True},
-    )
-    async def execute_device_command(
-        device_id: int,
-        command_type: str,
-        patch_names: str | None = None,
-    ) -> dict[str, Any]:
-        params = {
-            "device_id": device_id,
-            "command_type": command_type,
-            "patch_names": patch_names,
-        }
-        return await _call(
-            workflows.issue_device_command,
-            IssueDeviceCommandParams,
-            params,
-            api="console",
+    if not read_only:
+
+        @server.tool(
+            name="execute_device_command",
+            description="Issue an immediate command to a device (scan, patch, or reboot).",
+            annotations={"destructiveHint": True},
         )
+        async def execute_device_command(
+            device_id: int,
+            command_type: str,
+            patch_names: str | None = None,
+        ) -> dict[str, Any]:
+            params = {
+                "device_id": device_id,
+                "command_type": command_type,
+                "patch_names": patch_names,
+            }
+            return await _call(
+                workflows.issue_device_command,
+                IssueDeviceCommandParams,
+                params,
+                api="console",
+            )
 
 
 __all__ = ["register"]

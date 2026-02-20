@@ -33,7 +33,7 @@ from ..utils.tooling import (
 )
 
 
-def register(server: FastMCP) -> None:
+def register(server: FastMCP, *, read_only: bool = False) -> None:
     """Register policy-related tools."""
 
     async def _call(
@@ -51,10 +51,11 @@ def register(server: FastMCP) -> None:
             async with client as session:
                 params = dict(raw_params)
                 if org_uuid_field is not None:
+                    raw_org_id = params.get("org_id")
                     resolved_uuid = await resolve_org_uuid(
                         session,
                         explicit_uuid=params.get(org_uuid_field),
-                        org_id=params.get("org_id") or client_org_id,
+                        org_id=raw_org_id if raw_org_id is not None else client_org_id,
                         allow_account_uuid=allow_account_uuid,
                     )
                     params[org_uuid_field] = resolved_uuid
@@ -75,6 +76,10 @@ def register(server: FastMCP) -> None:
             raise ToolError(str(exc)) from exc
         except AutomoxAPIError as exc:
             raise ToolError(format_error(exc)) from exc
+        except ToolError:
+            raise
+        except Exception as exc:
+            raise ToolError(f"Unexpected error: {type(exc).__name__}: {exc}") from exc
         return as_tool_response(result)
 
     @server.tool(
@@ -217,73 +222,75 @@ def register(server: FastMCP) -> None:
             api="console",
         )
 
-    @server.tool(
-        name="decide_patch_approval",
-        description="Approve or reject an Automox patch approval request.",
-        annotations={"destructiveHint": True},
-    )
-    async def decide_patch_approval(
-        approval_id: int,
-        decision: str,
-        notes: str | None = None,
-    ) -> dict[str, Any]:
-        params = {
-            "approval_id": approval_id,
-            "decision": decision,
-            "notes": notes,
-        }
-        return await _call(
-            workflows.resolve_patch_approval,
-            PatchApprovalDecisionParams,
-            params,
-            api="console",
-        )
+    if not read_only:
 
-    @server.tool(
-        name="apply_policy_changes",
-        description="Create or update Automox policies with automatic format correction.",
-        annotations={"destructiveHint": True},
-    )
-    async def apply_policy_changes_tool(
-        operations: list[dict[str, Any]],
-        preview: bool | None = False,
-    ) -> dict[str, Any]:
-        normalized_operations = workflows.normalize_policy_operations_input(operations)
-        params = {
-            "operations": normalized_operations,
-            "preview": preview,
-        }
-        return await _call(
-            workflows.apply_policy_changes,
-            PolicyChangeRequestParams,
-            params,
-            api="console",
+        @server.tool(
+            name="decide_patch_approval",
+            description="Approve or reject an Automox patch approval request.",
+            annotations={"destructiveHint": True},
         )
+        async def decide_patch_approval(
+            approval_id: int,
+            decision: str,
+            notes: str | None = None,
+        ) -> dict[str, Any]:
+            params = {
+                "approval_id": approval_id,
+                "decision": decision,
+                "notes": notes,
+            }
+            return await _call(
+                workflows.resolve_patch_approval,
+                PatchApprovalDecisionParams,
+                params,
+                api="console",
+            )
 
-    @server.tool(
-        name="execute_policy_now",
-        description=(
-            "Execute an Automox policy immediately for remediation "
-            "(all devices or specific device)."
-        ),
-        annotations={"destructiveHint": True},
-    )
-    async def execute_policy_now(
-        policy_id: int,
-        action: str,
-        device_id: int | None = None,
-    ) -> dict[str, Any]:
-        params = {
-            "policy_id": policy_id,
-            "action": action,
-            "device_id": device_id,
-        }
-        return await _call(
-            workflows.execute_policy,
-            ExecutePolicyParams,
-            params,
-            api="console",
+        @server.tool(
+            name="apply_policy_changes",
+            description="Create or update Automox policies with automatic format correction.",
+            annotations={"destructiveHint": True},
         )
+        async def apply_policy_changes_tool(
+            operations: list[dict[str, Any]],
+            preview: bool | None = False,
+        ) -> dict[str, Any]:
+            normalized_operations = workflows.normalize_policy_operations_input(operations)
+            params = {
+                "operations": normalized_operations,
+                "preview": preview,
+            }
+            return await _call(
+                workflows.apply_policy_changes,
+                PolicyChangeRequestParams,
+                params,
+                api="console",
+            )
+
+        @server.tool(
+            name="execute_policy_now",
+            description=(
+                "Execute an Automox policy immediately for remediation "
+                "(all devices or specific device)."
+            ),
+            annotations={"destructiveHint": True},
+        )
+        async def execute_policy_now(
+            policy_id: int,
+            action: str,
+            device_id: int | None = None,
+        ) -> dict[str, Any]:
+            params = {
+                "policy_id": policy_id,
+                "action": action,
+                "device_id": device_id,
+            }
+            return await _call(
+                workflows.execute_policy,
+                ExecutePolicyParams,
+                params,
+                api="console",
+            )
 
 
 __all__ = ["register"]

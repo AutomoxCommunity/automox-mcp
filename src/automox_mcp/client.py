@@ -250,8 +250,8 @@ class AutomoxClient:
 
         target = str(client.base_url)
 
-        # Log the request for debugging
-        logger.debug(f"Request: {method} {target}{path} params={params}")
+        # Log the request for debugging (omit params to avoid leaking sensitive values)
+        logger.debug("Request: %s %s%s", method, target, path)
 
         try:
             response = await client.request(

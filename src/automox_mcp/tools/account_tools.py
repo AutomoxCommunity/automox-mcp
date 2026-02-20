@@ -21,7 +21,7 @@ from ..utils.tooling import (
 )
 
 
-def register(server: FastMCP) -> None:
+def register(server: FastMCP, *, read_only: bool = False) -> None:
     """Register account-related tools."""
 
     async def _call(
@@ -45,6 +45,10 @@ def register(server: FastMCP) -> None:
             raise ToolError(str(exc)) from exc
         except AutomoxAPIError as exc:
             raise ToolError(format_error(exc)) from exc
+        except ToolError:
+            raise
+        except Exception as exc:
+            raise ToolError(f"Unexpected error: {type(exc).__name__}: {exc}") from exc
         return as_tool_response(result)
 
     def _resolve_account_id(explicit: str | None = None) -> str:
@@ -58,47 +62,49 @@ def register(server: FastMCP) -> None:
             )
         return env_value
 
-    @server.tool(
-        name="invite_user_to_account",
-        description="Invite a user to the Automox account with optional zone assignments.",
-        annotations={"destructiveHint": True},
-    )
-    async def invite_user_to_account(
-        email: str,
-        account_rbac_role: Literal["global-admin", "no-global-access"],
-        zone_assignments: list[ZoneAssignment] | None = None,
-    ) -> dict[str, Any]:
-        params = {
-            "account_id": _resolve_account_id(None),
-            "email": email,
-            "account_rbac_role": account_rbac_role,
-            "zone_assignments": zone_assignments,
-        }
-        return await _call(
-            workflows.invite_user_to_account,
-            InviteUserParams,
-            params,
-            api="console",
-        )
+    if not read_only:
 
-    @server.tool(
-        name="remove_user_from_account",
-        description="Remove a user from the Automox account by UUID.",
-        annotations={"destructiveHint": True},
-    )
-    async def remove_user_from_account(
-        user_id: str,
-    ) -> dict[str, Any]:
-        params = {
-            "account_id": _resolve_account_id(None),
-            "user_id": user_id,
-        }
-        return await _call(
-            workflows.remove_user_from_account,
-            RemoveUserFromAccountParams,
-            params,
-            api="console",
+        @server.tool(
+            name="invite_user_to_account",
+            description="Invite a user to the Automox account with optional zone assignments.",
+            annotations={"destructiveHint": True},
         )
+        async def invite_user_to_account(
+            email: str,
+            account_rbac_role: Literal["global-admin", "no-global-access"],
+            zone_assignments: list[ZoneAssignment] | None = None,
+        ) -> dict[str, Any]:
+            params = {
+                "account_id": _resolve_account_id(None),
+                "email": email,
+                "account_rbac_role": account_rbac_role,
+                "zone_assignments": zone_assignments,
+            }
+            return await _call(
+                workflows.invite_user_to_account,
+                InviteUserParams,
+                params,
+                api="console",
+            )
+
+        @server.tool(
+            name="remove_user_from_account",
+            description="Remove a user from the Automox account by UUID.",
+            annotations={"destructiveHint": True},
+        )
+        async def remove_user_from_account(
+            user_id: str,
+        ) -> dict[str, Any]:
+            params = {
+                "account_id": _resolve_account_id(None),
+                "user_id": user_id,
+            }
+            return await _call(
+                workflows.remove_user_from_account,
+                RemoveUserFromAccountParams,
+                params,
+                api="console",
+            )
 
 
 __all__ = ["register"]

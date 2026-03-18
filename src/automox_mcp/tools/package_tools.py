@@ -32,13 +32,12 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
         func: Callable[..., Awaitable[dict[str, Any]]],
         params_model: type[BaseModel],
         raw_params: dict[str, Any],
-        api: str | None = None,
         *,
         inject_org_id: bool = False,
     ) -> dict[str, Any]:
         try:
-            await enforce_rate_limit(api)
-            client = AutomoxClient(default_api=api)
+            await enforce_rate_limit()
+            client = AutomoxClient()
             client_org_id = getattr(client, "org_id", None)
             async with client as session:
                 params = dict(raw_params)
@@ -92,7 +91,7 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
             workflows.list_device_packages,
             GetDevicePackagesParams,
             params,
-            api="console",
+
             inject_org_id=True,
         )
 
@@ -119,7 +118,7 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
             workflows.search_org_packages,
             GetOrganizationPackagesParams,
             params,
-            api="console",
+
         )
 
 

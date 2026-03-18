@@ -40,13 +40,12 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
         func: Callable[..., Awaitable[dict[str, Any]]],
         params_model: type[BaseModel],
         raw_params: dict[str, Any],
-        api: str | None = None,
         org_uuid_field: str | None = None,
         allow_account_uuid: bool = False,
     ) -> dict[str, Any]:
         try:
-            await enforce_rate_limit(api)
-            client = AutomoxClient(default_api=api)
+            await enforce_rate_limit()
+            client = AutomoxClient()
             client_org_id = getattr(client, "org_id", None)
             async with client as session:
                 params = dict(raw_params)
@@ -101,7 +100,7 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
             workflows.summarize_policy_activity,
             PolicyHealthSummaryParams,
             params,
-            api="policyreport",
+
             org_uuid_field="org_uuid",
             allow_account_uuid=True,
         )
@@ -125,7 +124,7 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
             workflows.summarize_policy_execution_history,
             PolicyExecutionTimelineParams,
             params,
-            api="policyreport",
+
             org_uuid_field="org_uuid",
             allow_account_uuid=True,
         )
@@ -160,7 +159,7 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
             workflows.describe_policy_run_result,
             RunDetailParams,
             params,
-            api="policyreport",
+
             org_uuid_field="org_uuid",
             allow_account_uuid=True,
         )
@@ -182,7 +181,7 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
             workflows.summarize_policies,
             PolicySummaryParams,
             params,
-            api="console",
+
         )
 
     @server.tool(
@@ -200,7 +199,7 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
             workflows.describe_policy,
             PolicyDetailParams,
             params,
-            api="console",
+
         )
 
     @server.tool(
@@ -219,7 +218,7 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
             workflows.summarize_patch_approvals,
             PatchApprovalSummaryParams,
             params,
-            api="console",
+
         )
 
     if not read_only:
@@ -243,7 +242,7 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
                 workflows.resolve_patch_approval,
                 PatchApprovalDecisionParams,
                 params,
-                api="console",
+    
             )
 
         @server.tool(
@@ -264,7 +263,7 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
                 workflows.apply_policy_changes,
                 PolicyChangeRequestParams,
                 params,
-                api="console",
+    
             )
 
         @server.tool(
@@ -289,7 +288,7 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
                 workflows.execute_policy,
                 ExecutePolicyParams,
                 params,
-                api="console",
+    
             )
 
 

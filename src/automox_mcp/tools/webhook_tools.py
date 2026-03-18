@@ -93,12 +93,11 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
         func: Callable[..., Awaitable[dict[str, Any]]],
         params_model: type[BaseModel] | None,
         raw_params: dict[str, Any],
-        api: str | None = None,
         org_uuid_field: str | None = None,
     ) -> dict[str, Any]:
         try:
-            await enforce_rate_limit(api)
-            client = AutomoxClient(default_api=api)
+            await enforce_rate_limit()
+            client = AutomoxClient()
             client_org_id = getattr(client, "org_id", None)
             async with client as session:
                 params = dict(raw_params)
@@ -143,7 +142,7 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
             workflows.list_webhook_event_types,
             None,
             {},
-            api="console",
+
         )
 
     @server.tool(
@@ -167,7 +166,7 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
             workflows.list_webhooks,
             ListWebhooksParams,
             params,
-            api="console",
+
             org_uuid_field="org_uuid",
         )
 
@@ -187,7 +186,7 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
             workflows.get_webhook,
             GetWebhookParams,
             params,
-            api="console",
+
             org_uuid_field="org_uuid",
         )
 
@@ -220,7 +219,7 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
                 workflows.create_webhook,
                 CreateWebhookParams,
                 params,
-                api="console",
+    
                 org_uuid_field="org_uuid",
             )
 
@@ -252,7 +251,7 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
                 workflows.update_webhook,
                 UpdateWebhookParams,
                 params,
-                api="console",
+    
                 org_uuid_field="org_uuid",
             )
 
@@ -273,7 +272,7 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
                 workflows.delete_webhook,
                 DeleteWebhookParams,
                 params,
-                api="console",
+    
                 org_uuid_field="org_uuid",
             )
 
@@ -297,7 +296,7 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
                 workflows.test_webhook,
                 TestWebhookParams,
                 params,
-                api="console",
+    
                 org_uuid_field="org_uuid",
             )
 
@@ -321,7 +320,7 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
                 workflows.rotate_webhook_secret,
                 RotateWebhookSecretParams,
                 params,
-                api="console",
+    
                 org_uuid_field="org_uuid",
             )
 

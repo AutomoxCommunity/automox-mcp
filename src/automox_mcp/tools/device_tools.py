@@ -36,11 +36,10 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
         func: Callable[..., Awaitable[dict[str, Any]]],
         params_model: type[BaseModel],
         raw_params: dict[str, Any],
-        api: str | None = None,
     ) -> dict[str, Any]:
         try:
-            await enforce_rate_limit(api)
-            client = AutomoxClient(default_api=api)
+            await enforce_rate_limit()
+            client = AutomoxClient()
             client_org_id = getattr(client, "org_id", None)
             async with client as session:
                 params = dict(raw_params)
@@ -94,7 +93,7 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
             workflows.list_device_inventory,
             DeviceInventoryOverviewParams,
             params,
-            api="console",
+
         )
 
     @server.tool(
@@ -115,7 +114,7 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
             "include_queue": include_queue,
             "include_raw_details": include_raw_details,
         }
-        return await _call(workflows.describe_device, DeviceDetailParams, params, api="console")
+        return await _call(workflows.describe_device, DeviceDetailParams, params)
 
     @server.tool(
         name="devices_needing_attention",
@@ -133,7 +132,7 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
             workflows.list_devices_needing_attention,
             DevicesNeedingAttentionParams,
             params,
-            api="console",
+
         )
 
     @server.tool(
@@ -167,7 +166,7 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
             workflows.search_devices,
             DeviceSearchParams,
             params,
-            api="console",
+
         )
 
     @server.tool(
@@ -194,7 +193,7 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
             workflows.summarize_device_health,
             DeviceHealthSummaryParams,
             params,
-            api="console",
+
         )
 
     if not read_only:
@@ -218,7 +217,7 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
                 workflows.issue_device_command,
                 IssueDeviceCommandParams,
                 params,
-                api="console",
+    
             )
 
 

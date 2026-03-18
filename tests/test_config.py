@@ -38,7 +38,7 @@ def test_client_reads_environment_defaults(monkeypatch):
     assert client.api_key == "env-key"
     assert client.account_uuid == "account-uuid"
     assert client.org_id == 17
-    assert NullAsyncClient.instances == 2  # console + policyreport clients are created
+    assert NullAsyncClient.instances == 1  # single _http client is created
 
 
 def test_client_requires_api_key(monkeypatch):

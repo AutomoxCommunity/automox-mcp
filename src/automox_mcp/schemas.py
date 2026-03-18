@@ -150,7 +150,7 @@ class PolicyExecutionTimelineParams(ForbidExtraModel):
     org_uuid: UUID
     policy_uuid: UUID
     report_days: int | None = Field(7, ge=1, le=180)
-    limit: int | None = Field(50, ge=10, le=200)
+    limit: int | None = Field(50, ge=1, le=5000)
 
 
 class PolicyDefinition(BaseModel):
@@ -613,7 +613,7 @@ class PreviewPolicyDeviceFiltersParams(ForbidExtraModel):
 class CreateServerGroupParams(ForbidExtraModel):
     name: str = Field(description="Group name")
     refresh_interval: int = Field(description="Refresh interval in minutes")
-    parent_server_group_id: int | None = Field(None, description="Parent group ID")
+    parent_server_group_id: int = Field(description="Parent group ID (required by API)")
     ui_color: str | None = Field(None, description="UI color for group")
     notes: str | None = Field(None, description="Group notes")
     policies: list[int] | None = Field(None, description="Policy IDs to assign")
@@ -623,7 +623,7 @@ class UpdateServerGroupParams(ForbidExtraModel):
     group_id: int = Field(description="Server group ID")
     name: str = Field(description="Group name")
     refresh_interval: int = Field(description="Refresh interval in minutes")
-    parent_server_group_id: int | None = Field(None, description="Parent group ID")
+    parent_server_group_id: int = Field(description="Parent group ID (required by API)")
     ui_color: str | None = Field(None, description="UI color for group")
     notes: str | None = Field(None, description="Group notes")
     policies: list[int] | None = Field(None, description="Policy IDs to assign")

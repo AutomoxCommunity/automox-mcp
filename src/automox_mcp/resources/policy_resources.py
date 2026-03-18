@@ -640,7 +640,7 @@ If you only provide schedule_days, the MCP will automatically set:
 
 This means your policy will run on the specified days EVERY week of EVERY month.
 
-Reference: https://developer.automox.com/developer-portal/policy_filters_schedule/
+Reference: https://docs.automox.com/product/Developer/policy_filters_schedule.htm
 
 ## Friendly Schedule Syntax (Recommended)
 

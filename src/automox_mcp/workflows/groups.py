@@ -38,7 +38,7 @@ async def list_server_groups(
     if limit is not None:
         params["limit"] = limit
 
-    groups = await client.get("/servergroups", params=params, api="console")
+    groups = await client.get("/servergroups", params=params)
 
     if not isinstance(groups, list):
         groups = []
@@ -64,7 +64,7 @@ async def get_server_group(
 ) -> dict[str, Any]:
     """Retrieve details for a specific server group."""
     params: dict[str, Any] = {"o": org_id}
-    group = await client.get(f"/servergroups/{group_id}", params=params, api="console")
+    group = await client.get(f"/servergroups/{group_id}", params=params)
 
     data: dict[str, Any]
     if isinstance(group, Mapping):
@@ -106,7 +106,7 @@ async def create_server_group(
         body["policies"] = policies
 
     params: dict[str, Any] = {"o": org_id}
-    result = await client.post("/servergroups", json_data=body, params=params, api="console")
+    result = await client.post("/servergroups", json_data=body, params=params)
 
     data: dict[str, Any]
     if isinstance(result, Mapping):
@@ -151,8 +151,7 @@ async def update_server_group(
 
     params: dict[str, Any] = {"o": org_id}
     result = await client.put(
-        f"/servergroups/{group_id}", json_data=body, params=params, api="console"
-    )
+        f"/servergroups/{group_id}", json_data=body, params=params    )
 
     data: dict[str, Any]
     if isinstance(result, Mapping):
@@ -177,7 +176,7 @@ async def delete_server_group(
 ) -> dict[str, Any]:
     """Delete a server group."""
     params: dict[str, Any] = {"o": org_id}
-    await client.delete(f"/servergroups/{group_id}", params=params, api="console")
+    await client.delete(f"/servergroups/{group_id}", params=params)
 
     return {
         "data": {

@@ -28,16 +28,15 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
         func: Callable[..., Awaitable[dict[str, Any]]],
         params_model: type[BaseModel] | None,
         raw_params: dict[str, Any],
-        api: str | None = None,
     ) -> dict[str, Any]:
         try:
-            await enforce_rate_limit(api)
+            await enforce_rate_limit()
             params = dict(raw_params)
             payload = params
             if params_model is not None:
                 model = params_model(**params)
                 payload = model.model_dump(mode="python", exclude_none=True)
-            async with AutomoxClient(default_api=api) as client:
+            async with AutomoxClient() as client:
                 result: dict[str, Any] = await func(client, **payload)
         except (ValidationError, ValueError) as exc:
             raise ToolError(str(exc)) from exc
@@ -84,7 +83,7 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
                 workflows.invite_user_to_account,
                 InviteUserParams,
                 params,
-                api="console",
+
             )
 
         @server.tool(
@@ -103,7 +102,7 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
                 workflows.remove_user_from_account,
                 RemoveUserFromAccountParams,
                 params,
-                api="console",
+
             )
 
 

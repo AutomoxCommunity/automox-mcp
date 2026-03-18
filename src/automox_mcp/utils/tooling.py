@@ -65,20 +65,12 @@ class RateLimiter:
             self._timestamps.append(now)
 
 
-_RATE_LIMITERS: dict[str, RateLimiter] = {
-    "console": RateLimiter(name="Automox console API", max_calls=30, period_seconds=60.0),
-    "policyreport": RateLimiter(
-        name="Automox policy report API", max_calls=20, period_seconds=60.0
-    ),
-}
-_DEFAULT_LIMITER = RateLimiter(name="Automox API", max_calls=30, period_seconds=60.0)
+_RATE_LIMITER = RateLimiter(name="Automox API", max_calls=30, period_seconds=60.0)
 
 
-async def enforce_rate_limit(api: str | None = None) -> None:
-    """Ensure the current invocation does not exceed per-API rate limits."""
-    key = (api or "").strip().lower() or "console"
-    limiter = _RATE_LIMITERS.get(key, _DEFAULT_LIMITER)
-    await limiter.acquire()
+async def enforce_rate_limit() -> None:
+    """Ensure the current invocation does not exceed the API rate limit."""
+    await _RATE_LIMITER.acquire()
 
 
 _ALLOWED_ERROR_KEYS = {"code", "detail", "message", "title", "error"}

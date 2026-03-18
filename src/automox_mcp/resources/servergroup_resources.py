@@ -31,14 +31,14 @@ def register(server: FastMCP) -> None:
         Use this resource to map server_group_id values from device data
         to human-readable group names.
         """
-        client = AutomoxClient(default_api="console")
+        client = AutomoxClient()
         async with client as session:
             org_id = client.org_id
             if not org_id:
                 return {"error": "org_id required - set AUTOMOX_ORG_ID environment variable"}
 
             params = {"o": org_id}
-            groups = await session.get("/servergroups", params=params, api="console")
+            groups = await session.get("/servergroups", params=params)
 
             if not isinstance(groups, list):
                 groups = []

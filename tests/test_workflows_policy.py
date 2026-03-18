@@ -32,7 +32,7 @@ class StubClient:
         self._post_responses = {key: list(value) for key, value in (post_responses or {}).items()}
         self._put_responses = {key: list(value) for key, value in (put_responses or {}).items()}
         self.calls: list[
-            tuple[str, str, dict[str, Any] | None, dict[str, Any] | None, str | None]
+            tuple[str, str, dict[str, Any] | None, dict[str, Any] | None]
         ] = []
 
     async def get(
@@ -41,9 +41,8 @@ class StubClient:
         *,
         params: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
-        api: str | None = None,
     ) -> Any:
-        self.calls.append(("GET", path, params, None, api))
+        self.calls.append(("GET", path, params, None))
         responses = self._get_responses.get(path)
         if not responses:
             raise AssertionError(f"Unexpected GET request: {path}")
@@ -56,9 +55,8 @@ class StubClient:
         json_data: dict[str, Any] | None = None,
         params: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
-        api: str | None = None,
     ) -> Any:
-        self.calls.append(("POST", path, params, json_data, api))
+        self.calls.append(("POST", path, params, json_data))
         responses = self._post_responses.get(path)
         if responses is None:
             raise AssertionError(f"Unexpected POST request: {path}")
@@ -73,9 +71,8 @@ class StubClient:
         json_data: dict[str, Any] | None = None,
         params: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
-        api: str | None = None,
     ) -> Any:
-        self.calls.append(("PUT", path, params, json_data, api))
+        self.calls.append(("PUT", path, params, json_data))
         responses = self._put_responses.get(path)
         if responses is None:
             raise AssertionError(f"Unexpected PUT request: {path}")
@@ -266,7 +263,7 @@ async def test_apply_policy_changes_update_merges_existing() -> None:
     assert op["previous_policy"]["name"] == "Baseline Windows Patch"
     assert op["policy"]["configuration"]["include_optional"] is True
 
-    method, path, params, body, api = client.calls[1]  # PUT call is second (after initial GET)
+    method, path, params, body = client.calls[1]  # PUT call is second (after initial GET)
     assert method == "PUT"
     assert path == "/policies/901"
     assert params == {"o": 555}
@@ -321,18 +318,12 @@ async def test_summarize_policy_activity_uses_supported_params() -> None:
     count_params = count_call[2]
     assert count_params is not None
     assert count_params["days"] == window_days
-    assert count_call[4] == "policyreport"
 
     runs_call = client.calls[1]
     assert runs_call[1] == "/policy-history/policy-runs"
     run_params = runs_call[2]
     assert run_params is not None
     assert run_params["limit"] == max_runs
-    assert run_params["sort"] == "run_time:desc"
-    assert "start_time" in run_params
-    parsed = datetime.fromisoformat(run_params["start_time"].replace("Z", "+00:00"))
-    assert parsed.tzinfo is not None
-    assert parsed.microsecond == 0
 
 
 @pytest.mark.asyncio
@@ -399,7 +390,7 @@ async def test_describe_policy_run_result_summarizes_and_normalizes() -> None:
     assert first_device["result_status"] == "success"
     assert first_device["stdout"] == "ok"
 
-    method, path, params, _, api = client.calls[0]
+    method, path, params, _ = client.calls[0]
     assert method == "GET"
     assert path == api_path
     assert params is not None

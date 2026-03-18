@@ -65,7 +65,7 @@ async def resolve_org_uuid(
             "AUTOMOX_ORG_ID."
         )
 
-    orgs_payload = await client.get("/orgs", api="console")
+    orgs_payload = await client.get("/orgs")
     for candidate in _candidate_org_sequences(orgs_payload):
         if not isinstance(candidate, Mapping):
             continue

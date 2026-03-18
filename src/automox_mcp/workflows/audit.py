@@ -197,7 +197,6 @@ async def _lookup_actor_from_hints(
             response = await client.get(
                 f"/accounts/{account_uuid}/users",
                 params=params,
-                api="console",
             )
         except AutomoxAPIError as exc:
             error_payload: dict[str, Any] = {
@@ -660,7 +659,6 @@ async def audit_trail_user_activity(
         f"/audit-service/v1/orgs/{resolved_org_uuid}/events",
         params=params,
         headers=headers,
-        api="console",
     )
 
     api_metadata: Mapping[str, Any] | None = None

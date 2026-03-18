@@ -25,7 +25,7 @@ def success_result():
 
 
 @pytest.mark.asyncio
-async def test_policy_tool_prefers_policyreport(monkeypatch):
+async def test_policy_tool_creates_client(monkeypatch):
     async def fake_workflow(client, **kwargs):
         return success_result()
 
@@ -34,8 +34,8 @@ async def test_policy_tool_prefers_policyreport(monkeypatch):
     recorded = []
 
     class RecordingClient:
-        def __init__(self, *, default_api=None, **kwargs):
-            recorded.append(default_api)
+        def __init__(self, **kwargs):
+            recorded.append(True)
             self.org_id = 42
             self.org_uuid = None
 
@@ -45,7 +45,7 @@ async def test_policy_tool_prefers_policyreport(monkeypatch):
         async def __aexit__(self, exc_type, exc, tb):
             return False
 
-        async def get(self, path, *, params=None, headers=None, api=None):
+        async def get(self, path, *, params=None, headers=None):
             raise AssertionError("resolve_org_uuid should not call get when org_uuid provided.")
 
     monkeypatch.setattr(policy_tools, "AutomoxClient", RecordingClient)
@@ -55,14 +55,14 @@ async def test_policy_tool_prefers_policyreport(monkeypatch):
     tool_fn = server.tools["policy_health_overview"]
 
     await tool_fn(org_uuid=str(UUID("56c0ba07-69f2-4f7c-b0a1-2bb0ed68578e")))
-    assert recorded[-1] == "policyreport"
+    assert recorded[-1] is True
 
 
 @pytest.mark.asyncio
 async def test_policy_tool_resolves_org_uuid(monkeypatch):
     resolved_uuid = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 
-    recorded = {"default_api": None, "calls": []}
+    recorded = {"created": False, "calls": []}
 
     async def fake_workflow(client, **kwargs):
         recorded["calls"].append(kwargs)
@@ -72,8 +72,8 @@ async def test_policy_tool_resolves_org_uuid(monkeypatch):
     monkeypatch.setattr(policy_tools.workflows, "summarize_policy_activity", fake_workflow)
 
     class RecordingClient:
-        def __init__(self, *, default_api=None, **kwargs):
-            recorded["default_api"] = default_api
+        def __init__(self, **kwargs):
+            recorded["created"] = True
             self.org_id = 123
             self.org_uuid = None
             self.account_uuid = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
@@ -84,7 +84,7 @@ async def test_policy_tool_resolves_org_uuid(monkeypatch):
         async def __aexit__(self, exc_type, exc, tb):
             return False
 
-        async def get(self, path, *, params=None, headers=None, api=None):
+        async def get(self, path, *, params=None, headers=None):
             assert path == "/orgs"
             return [
                 {"id": 999, "org_uuid": "ffffffff-ffff-ffff-ffff-ffffffffffff"},
@@ -99,7 +99,7 @@ async def test_policy_tool_resolves_org_uuid(monkeypatch):
 
     await tool_fn()
 
-    assert recorded["default_api"] == "policyreport"
+    assert recorded["created"] is True
     assert recorded["calls"], "workflow should have been invoked"
 
 
@@ -114,7 +114,7 @@ async def test_policy_catalog_allows_limit_one(monkeypatch):
     monkeypatch.setattr(policy_tools.workflows, "summarize_policies", fake_workflow)
 
     class RecordingClient:
-        def __init__(self, *, default_api=None, **kwargs):
+        def __init__(self, **kwargs):
             self.org_id = 7
 
         async def __aenter__(self):
@@ -144,7 +144,7 @@ async def test_policy_detail_allows_zero_recent_runs(monkeypatch):
     monkeypatch.setattr(policy_tools.workflows, "describe_policy", fake_workflow)
 
     class RecordingClient:
-        def __init__(self, *, default_api=None, **kwargs):
+        def __init__(self, **kwargs):
             self.org_id = 10
 
         async def __aenter__(self):
@@ -164,7 +164,7 @@ async def test_policy_detail_allows_zero_recent_runs(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_device_tool_prefers_console(monkeypatch):
+async def test_device_tool_creates_client(monkeypatch):
     async def fake_workflow(client, **kwargs):
         return success_result()
 
@@ -173,8 +173,8 @@ async def test_device_tool_prefers_console(monkeypatch):
     recorded = []
 
     class RecordingClient:
-        def __init__(self, *, default_api=None, **kwargs):
-            recorded.append(default_api)
+        def __init__(self, **kwargs):
+            recorded.append(True)
             self.org_id = 42
 
         async def __aenter__(self):
@@ -190,7 +190,7 @@ async def test_device_tool_prefers_console(monkeypatch):
     tool_fn = server.tools["list_devices"]
 
     await tool_fn()
-    assert recorded[-1] == "console"
+    assert recorded[-1] is True
 
 
 @pytest.mark.asyncio
@@ -207,8 +207,8 @@ async def test_account_tools_use_env_fallback(monkeypatch):
     captured = {}
 
     class RecordingClient:
-        def __init__(self, *, default_api=None, **kwargs):
-            captured["default_api"] = default_api
+        def __init__(self, **kwargs):
+            captured["created"] = True
 
         async def __aenter__(self):
             return self
@@ -223,7 +223,7 @@ async def test_account_tools_use_env_fallback(monkeypatch):
     tool_fn = server.tools["invite_user_to_account"]
 
     await tool_fn(email="user@example.com", account_rbac_role="global-admin")
-    assert captured["default_api"] == "console"
+    assert captured["created"] is True
 
 
 @pytest.mark.asyncio

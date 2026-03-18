@@ -13,7 +13,7 @@ from uuid import UUID
 
 from fastmcp.exceptions import ToolError
 
-from ..client import AutomoxAPIError, AutomoxClient
+from ..client import AutomoxAPIError, AutomoxClient, AutomoxResponse
 from ..utils import resolve_org_uuid
 
 logger = logging.getLogger(__name__)
@@ -704,7 +704,7 @@ async def _prepare_policy_payload_for_update(
     existing_original: Mapping[str, Any] | None = None
     existing_sanitized: Mapping[str, Any] | None = None
     if merge_existing:
-        existing = await client.get(f"/policies/{policy_id}", params={"o": org_id}, api="console")
+        existing = await client.get(f"/policies/{policy_id}", params={"o": org_id})
         if not isinstance(existing, Mapping):
             raise ValueError(f"Failed to retrieve policy {policy_id} for update.")
         existing_original = existing
@@ -763,39 +763,54 @@ async def summarize_policy_activity(
 ) -> dict[str, Any]:
     """Aggregate policy activity for an organization over the requested window."""
 
-    # Get policy run counts
-    count_params = {"org": str(org_uuid), "days": window_days}
-    run_counts = await client.get(
-        "/policy-history/policy-run-count", params=count_params, api="policyreport"
-    )
-
-    # Get policy runs
-    run_params = {
-        "org": str(org_uuid),
-        "limit": max_runs,
-        "sort": "run_time:desc",
-    }
-    if window_days:
-        # Align with Automox expectation of ISO 8601 timestamps suffixed with Z.
-        earliest_time = datetime.now(UTC) - timedelta(days=window_days)
-        run_params["start_time"] = (
-            earliest_time.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    # Get policy run counts — this endpoint may not be available on all API
+    # configurations, so treat it as optional.
+    run_counts: AutomoxResponse = {}
+    try:
+        count_params = {"org": str(org_uuid), "days": window_days}
+        run_counts = await client.get(
+            "/policy-history/policy-run-count", params=count_params,
         )
+    except AutomoxAPIError:
+        logger.warning("policy-run-count endpoint unavailable, skipping")
+
+    # Get policy runs — use only org (required) + limit to avoid validation errors.
+    # The sort default is already "run_time:desc" per the API spec.
+    run_params: dict[str, Any] = {
+        "org": str(org_uuid),
+        "limit": min(max_runs, 5000),
+    }
     policy_runs = await client.get(
-        "/policy-history/policy-runs", params=run_params, api="policyreport"
+        "/policy-history/policy-runs", params=run_params,
     )
 
-    run_items = policy_runs.get("data") if isinstance(policy_runs, Mapping) else None
-    runs: Sequence[Mapping[str, Any]] = run_items if isinstance(run_items, Sequence) else []
+    runs: Sequence[Mapping[str, Any]] = []
+    if isinstance(policy_runs, Mapping):
+        run_items = policy_runs.get("data")
+        if isinstance(run_items, Sequence):
+            runs = run_items
+    elif isinstance(policy_runs, Sequence):
+        runs = policy_runs
 
+    # Each run item contains aggregate device counts: success, failed, pending,
+    # not_included, remediation_not_applicable, device_count, etc.
     status_counter: Counter[str] = Counter()
     policy_breakdown: dict[str, dict[str, Any]] = defaultdict(
-        lambda: {"total_runs": 0, "failed_runs": 0}
+        lambda: {"total_runs": 0, "failed_runs": 0, "total_devices": 0, "failed_devices": 0}
     )
 
     for item in runs:
-        status = _normalize_status(item.get("result_status") or item.get("status"))
-        status_counter[status] += 1
+        failed = item.get("failed") or 0
+        success = item.get("success") or 0
+        device_count = item.get("device_count") or 0
+
+        # Classify the run overall
+        if failed > 0:
+            status_counter["failed"] += 1
+        elif success > 0:
+            status_counter["success"] += 1
+        else:
+            status_counter["unknown"] += 1
 
         policy_key = str(
             item.get("policy_uuid") or item.get("policy_id") or item.get("policy_name") or "unknown"
@@ -803,8 +818,11 @@ async def summarize_policy_activity(
         entry = policy_breakdown[policy_key]
         entry["policy_uuid"] = item.get("policy_uuid") or entry.get("policy_uuid")
         entry["policy_name"] = item.get("policy_name") or entry.get("policy_name") or policy_key
+        entry["policy_type"] = item.get("policy_type") or entry.get("policy_type")
         entry["total_runs"] += 1
-        if status not in {"success"}:
+        entry["total_devices"] += device_count
+        entry["failed_devices"] += failed
+        if failed > 0:
             entry["failed_runs"] += 1
 
     top_failures_list = sorted(
@@ -825,17 +843,17 @@ async def summarize_policy_activity(
         reverse=True,
     )[:top_failures]
 
-    raw_counts_data = None
+    # PolicyRunCount returns {"policy_runs": N} directly
+    total_policy_runs = None
     if isinstance(run_counts, Mapping):
-        raw_counts_data = run_counts.get("data")
+        total_policy_runs = run_counts.get("policy_runs")
 
     overview = {
         "window_days": window_days,
+        "total_policy_runs": total_policy_runs,
         "total_runs_considered": len(runs),
         "status_breakdown": dict(status_counter),
         "top_failing_policies": top_failures_list,
-        "recent_runs": list(_take(runs, 10)),
-        "raw_counts": raw_counts_data,
     }
 
     metadata = {
@@ -859,33 +877,32 @@ async def summarize_policy_execution_history(
     report_days: int | None = 7,
     limit: int = 50,
 ) -> dict[str, Any]:
-    """Return a concise execution timeline for a specific policy."""
+    """Return a concise execution timeline for a specific policy.
 
-    params: dict[str, Any] = {
-        "org": str(org_uuid),
-        "policy_uuid": str(policy_uuid),
-        "sort": "-started_at",
-    }
-    if report_days is not None:
-        params["report_days"] = report_days
+    Uses ``/policy-history/policy-runs`` with a ``policy_uuid`` filter
+    which returns rich per-run data (device counts, success/failure
+    breakdowns) instead of the minimal ``/policies/{uuid}/runs`` endpoint.
+    """
 
-    path = f"/policy-history/policies/{policy_uuid}/runs"
-    payload = await client.get(path, params=params, api="policyreport")
+    # The API requires operator syntax for filters (e.g. policy_uuid:equals=UUID).
+    # httpx URL-encodes colons in param keys (%3A), which the API rejects.
+    # Build the full query string manually to preserve the literal colon.
+    from urllib.parse import urlencode
+
+    safe_params = urlencode({"org": str(org_uuid), "limit": min(limit, 5000)})
+    path = f"/policy-history/policy-runs?policy_uuid:equals={policy_uuid}&{safe_params}"
+    payload = await client.get(path)
+
     runs: Sequence[Mapping[str, Any]] = []
     policy_name: Any = None
 
     if isinstance(payload, Mapping):
-        candidate_sequences = (
-            seq
-            for seq in (
-                payload.get("runs"),
-                payload.get("items"),
-                payload.get("data"),
-            )
-            if isinstance(seq, Sequence)
-        )
-        runs = next(candidate_sequences, [])  # type: ignore[arg-type]
-        policy_name = payload.get("policy_name") or payload.get("name")
+        run_items = payload.get("data")
+        if isinstance(run_items, Sequence):
+            runs = run_items
+        # Try to extract policy name from first run item
+        if runs:
+            policy_name = runs[0].get("policy_name")
     elif isinstance(payload, Sequence):
         runs = payload  # type: ignore[assignment]
 
@@ -895,16 +912,29 @@ async def summarize_policy_execution_history(
     timeline = []
 
     for item in runs:
-        status = _normalize_status(item.get("result_status") or item.get("status"))
+        exec_token = item.get("execution_token") or item.get("exec_token")
+        run_time = item.get("run_time")
+        failed = item.get("failed") or 0
+        success = item.get("success") or 0
+
+        if failed > 0:
+            status = "failed"
+        elif success > 0:
+            status = "success"
+        else:
+            status = "unknown"
         status_counter[status] += 1
+
         timeline.append(
             {
-                "exec_token": item.get("exec_token") or item.get("execution_token"),
-                "started_at": item.get("started_at") or item.get("start_time"),
-                "completed_at": item.get("completed_at") or item.get("end_time"),
-                "status": status,
-                "device_failures": item.get("device_failures") or item.get("failed_devices"),
-                "summary": item.get("summary"),
+                "exec_token": exec_token,
+                "run_time": run_time,
+                "status": status if status != "unknown" else None,
+                "device_count": item.get("device_count"),
+                "success": success,
+                "failed": failed,
+                "pending": item.get("pending"),
+                "not_included": item.get("not_included"),
             }
         )
 
@@ -916,7 +946,7 @@ async def summarize_policy_execution_history(
         "recent_executions": timeline,
     }
 
-    metadata = {
+    metadata: dict[str, Any] = {
         "deprecated_endpoint": False,
         "org_uuid": str(org_uuid),
         "policy_uuid": str(policy_uuid),
@@ -959,7 +989,7 @@ async def summarize_policies(
     preview: list[Mapping[str, Any]] = []
 
     while True:
-        policies_response = await client.get("/policies", params=params, api="console")
+        policies_response = await client.get("/policies", params=params)
         page_results: list[Mapping[str, Any]] = []
         if isinstance(policies_response, Sequence):
             page_results = [item for item in policies_response if isinstance(item, Mapping)]
@@ -1015,7 +1045,7 @@ async def summarize_policies(
             break
 
     stats_params = {"o": resolved_org_id}
-    stats_data = await client.get("/policystats", params=stats_params, api="console")
+    stats_data = await client.get("/policystats", params=stats_params)
     total_available: int | None = None
     if isinstance(stats_data, Sequence):
         # Count unique policies represented in the stats payload as a proxy for total policies
@@ -1179,7 +1209,7 @@ async def describe_policy(
 
     params = {"o": resolved_org_id}
     try:
-        policy_response = await client.get(f"/policies/{policy_id}", params=params, api="console")
+        policy_response = await client.get(f"/policies/{policy_id}", params=params)
     except Exception as e:
         # Provide detailed error with the exact request that failed
         raise ValueError(
@@ -1335,7 +1365,6 @@ async def apply_policy_changes(
                     "/policies",
                     json_data=payload,
                     params={"o": resolved_org_id},
-                    api="console",
                 )
                 entry["status"] = "created"
                 entry["response"] = response_data
@@ -1346,7 +1375,6 @@ async def apply_policy_changes(
                         latest_policy = await client.get(
                             f"/policies/{policy_id}",
                             params={"o": resolved_org_id},
-                            api="console",
                         )
                         if isinstance(latest_policy, Mapping):
                             entry["policy"] = latest_policy
@@ -1402,7 +1430,6 @@ async def apply_policy_changes(
                     f"/policies/{policy_id}",
                     json_data=payload,
                     params={"o": resolved_org_id},
-                    api="console",
                 )
                 entry["status"] = "updated"
                 entry["response"] = response_data
@@ -1410,7 +1437,6 @@ async def apply_policy_changes(
                     latest_policy = await client.get(
                         f"/policies/{policy_id}",
                         params={"o": resolved_org_id},
-                        api="console",
                     )
                     if isinstance(latest_policy, Mapping):
                         entry["policy"] = latest_policy
@@ -1468,7 +1494,7 @@ async def describe_policy_run_result(
         params["max_output_length"] = max_output_length
 
     path = f"/policy-history/policies/{policy_uuid}/{exec_token}"
-    payload = await client.get(path, params=params, api="policyreport")
+    payload = await client.get(path, params=params)
 
     devices_raw: Sequence[Mapping[str, Any]] = []
     pagination_meta: Mapping[str, Any] | None = None
@@ -1552,7 +1578,7 @@ async def summarize_patch_approvals(
         raise ValueError("org_id required - pass explicitly or set AUTOMOX_ORG_ID")
 
     params = {"o": resolved_org_id, "limit": limit}
-    approvals = await client.get("/approvals", params=params, api="console")
+    approvals = await client.get("/approvals", params=params)
     approvals = approvals if isinstance(approvals, Sequence) else []
 
     status_filter = (status or "").lower()
@@ -1640,8 +1666,7 @@ async def resolve_patch_approval(
 
     params = {"o": resolved_org_id}
     response_data = await client.put(
-        f"/approvals/{approval_id}", json_data=body, params=params, api="console"
-    )
+        f"/approvals/{approval_id}", json_data=body, params=params    )
 
     data = {
         "approval_id": approval_id,
@@ -1709,8 +1734,7 @@ async def execute_policy(
 
     params = {"o": resolved_org_id}
     response_data = await client.post(
-        f"/policies/{policy_id}/action", json_data=body, params=params, api="console"
-    )
+        f"/policies/{policy_id}/action", json_data=body, params=params    )
 
     data = {
         "policy_id": policy_id,

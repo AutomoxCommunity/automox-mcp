@@ -27,11 +27,10 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
         func: Callable[..., Awaitable[dict[str, Any]]],
         params_model: type[BaseModel],
         raw_params: dict[str, Any],
-        api: str | None = None,
     ) -> dict[str, Any]:
         try:
-            await enforce_rate_limit(api)
-            client = AutomoxClient(default_api=api)
+            await enforce_rate_limit()
+            client = AutomoxClient()
             client_org_id = getattr(client, "org_id", None)
             async with client as session:
                 params = dict(raw_params)
@@ -86,7 +85,7 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
             workflows.audit_trail_user_activity,
             AuditTrailEventsParams,
             params,
-            api="console",
+
         )
 
 

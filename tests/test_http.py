@@ -84,36 +84,22 @@ def reset_stubs(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_get_success_uses_console_client():
+async def test_get_success_uses_single_http_client():
     async with AutomoxClient(org_id=42) as client:
-        console_client, policy_client = StubAsyncClient.instances
-        console_client.responses = [StubResponse(json_data={"ok": True})]
+        (http_client,) = StubAsyncClient.instances
+        http_client.responses = [StubResponse(json_data={"ok": True})]
         payload = await client.get("/foo")
 
     assert payload == {"ok": True}
-    assert console_client.calls[0]["path"] == "/foo"
-    assert console_client.headers["Authorization"] == "Bearer test-key"
-    assert policy_client.calls == []
-
-
-@pytest.mark.asyncio
-async def test_get_uses_policyreport_when_requested():
-    async with AutomoxClient(org_id=42) as client:
-        console_client, policy_client = StubAsyncClient.instances
-        policy_client.responses = [StubResponse(json_data={"ok": True})]
-        payload = await client.get("/foo", api="policyreport")
-
-    assert payload == {"ok": True}
-    assert policy_client.calls[0]["path"] == "/foo"
-    assert policy_client.headers["Authorization"] == "Bearer test-key"
-    assert console_client.calls == []
+    assert http_client.calls[0]["path"] == "/foo"
+    assert http_client.headers["Authorization"] == "Bearer test-key"
 
 
 @pytest.mark.asyncio
 async def test_get_raises_rate_limit():
     async with AutomoxClient(org_id=42) as client:
-        console_client, _ = StubAsyncClient.instances
-        console_client.responses = [
+        (http_client,) = StubAsyncClient.instances
+        http_client.responses = [
             StubResponse(status_code=429, json_data={"message": "slow down"})
         ]
         with pytest.raises(AutomoxRateLimitError):
@@ -123,8 +109,8 @@ async def test_get_raises_rate_limit():
 @pytest.mark.asyncio
 async def test_get_raises_api_error_with_payload():
     async with AutomoxClient(org_id=42) as client:
-        console_client, _ = StubAsyncClient.instances
-        console_client.responses = [
+        (http_client,) = StubAsyncClient.instances
+        http_client.responses = [
             StubResponse(status_code=401, json_data={"message": "bad auth", "code": "unauthorized"})
         ]
         with pytest.raises(AutomoxAPIError) as exc:
@@ -135,16 +121,12 @@ async def test_get_raises_api_error_with_payload():
 
 
 @pytest.mark.asyncio
-async def test_invalid_json_falls_back_to_policyreport():
+async def test_invalid_json_raises_api_error():
     async with AutomoxClient(org_id=42) as client:
-        console_client, policy_client = StubAsyncClient.instances
-        console_client.responses = [
+        (http_client,) = StubAsyncClient.instances
+        http_client.responses = [
             StubResponse(status_code=200, text="not json", json_error=True),
         ]
-        policy_client.responses = [StubResponse(json_data={"ok": True})]
 
-        payload = await client.get("/foo")
-
-    assert payload == {"ok": True}
-    assert console_client.calls[0]["path"] == "/foo"
-    assert policy_client.calls[0]["path"] == "/foo"
+        with pytest.raises(AutomoxAPIError, match="invalid JSON"):
+            await client.get("/foo")

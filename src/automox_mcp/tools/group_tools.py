@@ -35,13 +35,12 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
         func: Callable[..., Awaitable[dict[str, Any]]],
         params_model: type[BaseModel],
         raw_params: dict[str, Any],
-        api: str | None = None,
         *,
         inject_org_id: bool = False,
     ) -> dict[str, Any]:
         try:
-            await enforce_rate_limit(api)
-            client = AutomoxClient(default_api=api)
+            await enforce_rate_limit()
+            client = AutomoxClient()
             client_org_id = getattr(client, "org_id", None)
             async with client as session:
                 params = dict(raw_params)
@@ -90,7 +89,7 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
             workflows.list_server_groups,
             ListServerGroupsParams,
             params,
-            api="console",
+
             inject_org_id=True,
         )
 
@@ -108,7 +107,7 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
             workflows.get_server_group,
             GetServerGroupParams,
             params,
-            api="console",
+
             inject_org_id=True,
         )
 
@@ -122,7 +121,7 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
         async def create_server_group(
             name: str,
             refresh_interval: int,
-            parent_server_group_id: int | None = None,
+            parent_server_group_id: int,
             ui_color: str | None = None,
             notes: str | None = None,
             policies: list[int] | None = None,
@@ -139,7 +138,7 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
                 workflows.create_server_group,
                 CreateServerGroupParams,
                 params,
-                api="console",
+    
                 inject_org_id=True,
             )
 
@@ -152,7 +151,7 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
             group_id: int,
             name: str,
             refresh_interval: int,
-            parent_server_group_id: int | None = None,
+            parent_server_group_id: int,
             ui_color: str | None = None,
             notes: str | None = None,
             policies: list[int] | None = None,
@@ -170,7 +169,7 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
                 workflows.update_server_group,
                 UpdateServerGroupParams,
                 params,
-                api="console",
+    
                 inject_org_id=True,
             )
 
@@ -189,7 +188,7 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
                 workflows.delete_server_group,
                 DeleteServerGroupParams,
                 params,
-                api="console",
+    
             )
 
 

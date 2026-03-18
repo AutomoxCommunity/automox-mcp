@@ -26,8 +26,7 @@ async def invite_user_to_account(
         body["zone_assignments"] = zone_assignments
 
     invitation = await client.post(
-        f"/accounts/{account_id}/invitations", json_data=body, api="console"
-    )
+        f"/accounts/{account_id}/invitations", json_data=body    )
 
     data = {
         "email": email,
@@ -55,7 +54,7 @@ async def remove_user_from_account(
 ) -> dict[str, Any]:
     """Remove an Automox user from the account."""
 
-    await client.delete(f"/accounts/{account_id}/users/{user_id}", api="console")
+    await client.delete(f"/accounts/{account_id}/users/{user_id}")
 
     data = {
         "user_id": str(user_id),

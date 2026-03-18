@@ -25,7 +25,7 @@ async def list_webhook_event_types(
     client: AutomoxClient,
 ) -> dict[str, Any]:
     """Retrieve the list of available webhook event types."""
-    result = await client.get("/webhooks/event-types", api="console")
+    result = await client.get("/webhooks/event-types")
 
     data: Any
     if isinstance(result, Mapping):
@@ -58,8 +58,7 @@ async def list_webhooks(
         params["cursor"] = cursor
 
     result = await client.get(
-        f"/organizations/{org_uuid}/webhooks", params=params, api="console"
-    )
+        f"/organizations/{org_uuid}/webhooks", params=params    )
 
     webhooks: list[dict[str, Any]] = []
     next_cursor: str | None = None
@@ -98,8 +97,7 @@ async def get_webhook(
 ) -> dict[str, Any]:
     """Retrieve details for a specific webhook."""
     result = await client.get(
-        f"/organizations/{org_uuid}/webhooks/{webhook_id}", api="console"
-    )
+        f"/organizations/{org_uuid}/webhooks/{webhook_id}"    )
 
     data: dict[str, Any]
     if isinstance(result, Mapping):
@@ -134,8 +132,7 @@ async def create_webhook(
     }
 
     result = await client.post(
-        f"/organizations/{org_uuid}/webhooks", json_data=body, api="console"
-    )
+        f"/organizations/{org_uuid}/webhooks", json_data=body    )
 
     data: dict[str, Any]
     if isinstance(result, Mapping):
@@ -188,7 +185,6 @@ async def update_webhook(
     result = await client.put(
         f"/organizations/{org_uuid}/webhooks/{webhook_id}",
         json_data=body,
-        api="console",
     )
 
     data: dict[str, Any]
@@ -214,8 +210,7 @@ async def delete_webhook(
 ) -> dict[str, Any]:
     """Delete a webhook permanently."""
     await client.delete(
-        f"/organizations/{org_uuid}/webhooks/{webhook_id}", api="console"
-    )
+        f"/organizations/{org_uuid}/webhooks/{webhook_id}"    )
 
     return {
         "data": {
@@ -236,8 +231,7 @@ async def test_webhook(
 ) -> dict[str, Any]:
     """Send a test delivery to a webhook endpoint."""
     result = await client.post(
-        f"/organizations/{org_uuid}/webhooks/{webhook_id}/test", api="console"
-    )
+        f"/organizations/{org_uuid}/webhooks/{webhook_id}/test"    )
 
     data: dict[str, Any]
     if isinstance(result, Mapping):
@@ -271,7 +265,6 @@ async def rotate_webhook_secret(
     """
     result = await client.post(
         f"/organizations/{org_uuid}/webhooks/{webhook_id}/secret/rotate",
-        api="console",
     )
 
     data: dict[str, Any]

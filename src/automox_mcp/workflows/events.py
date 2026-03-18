@@ -43,7 +43,7 @@ async def list_events(
     if end_date is not None:
         params["endDate"] = end_date
 
-    events = await client.get("/events", params=params, api="console")
+    events = await client.get("/events", params=params)
 
     if not isinstance(events, list):
         events_list: list[Any] = [events] if events else []

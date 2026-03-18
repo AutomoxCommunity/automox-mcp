@@ -442,7 +442,7 @@ async def list_devices_needing_attention(
     if group_id is not None:
         params["groupId"] = group_id
 
-    report = await client.get("/reports/needs-attention", params=params, api="console")
+    report = await client.get("/reports/needs-attention", params=params)
 
     items = report.get("data") if isinstance(report, Mapping) else None
     devices: Sequence[Mapping[str, Any]] = items if isinstance(items, Sequence) else []
@@ -501,7 +501,7 @@ async def list_device_inventory(
     if limit is not None:
         params["limit"] = limit
 
-    payload = await client.get("/servers", params=params, api="console")
+    payload = await client.get("/servers", params=params)
     devices: Sequence[Mapping[str, Any]] = payload if isinstance(payload, list) else []
 
     policy_status_filter = _normalize_status(policy_status) if policy_status else None
@@ -525,6 +525,7 @@ async def list_device_inventory(
                 "hostname": _format_device_display_name(item),
                 "managed": is_managed,
                 "os": item.get("os_name") or item.get("platform"),
+                "agent_version": item.get("agent_version"),
                 "policy_status": device_policy_status,
                 "policy_failures": _count_failed_policies(item) or None,
                 "pending_patches": summary_fields["pending_patches"],
@@ -586,7 +587,7 @@ async def describe_device(
         "includeServerEvents": 1,
         "includeNextPatchTime": 1,
     }
-    device_response = await client.get(f"/servers/{device_id}", params=params, api="console")
+    device_response = await client.get(f"/servers/{device_id}", params=params)
     device_data: Mapping[str, Any] = device_response if isinstance(device_response, Mapping) else {}
 
     packages_preview: list[dict[str, Any]] = []
@@ -596,8 +597,7 @@ async def describe_device(
     if include_packages:
         pkg_params: dict[str, Any] = {"o": resolved_org_id, "limit": 10}
         packages_raw = await client.get(
-            f"/servers/{device_id}/packages", params=pkg_params, api="console"
-        )
+            f"/servers/{device_id}/packages", params=pkg_params        )
         if isinstance(packages_raw, Sequence):
             packages_preview = [
                 {
@@ -621,7 +621,7 @@ async def describe_device(
                 org_uuid_val = UUID(str(org_uuid_str))
                 device_uuid_uuid = UUID(str(device_uuid_str))
                 path = f"/device-details/orgs/{org_uuid_val}/devices/{device_uuid_uuid}/inventory"
-                inventory_raw = await client.get(path, api="console")
+                inventory_raw = await client.get(path)
                 if isinstance(inventory_raw, Mapping):
                     inventory_map: Mapping[str, Any] = inventory_raw
                     categories: list[dict[str, Any]] = []
@@ -646,8 +646,7 @@ async def describe_device(
     if include_queue:
         queue_params: dict[str, Any] = {"o": resolved_org_id}
         queue_raw = await client.get(
-            f"/servers/{device_id}/queues", params=queue_params, api="console"
-        )
+            f"/servers/{device_id}/queues", params=queue_params        )
         if isinstance(queue_raw, Sequence):
             queue_preview = [
                 {
@@ -870,7 +869,7 @@ async def search_devices(
         else:
             severity_values = []
 
-    devices = await client.get("/servers", params=params, api="console")
+    devices = await client.get("/servers", params=params)
     devices = devices if isinstance(devices, Sequence) else []
 
     filtered = []
@@ -970,7 +969,7 @@ async def summarize_device_health(
     if group_id is not None:
         params["groupId"] = group_id
 
-    devices = await client.get("/servers", params=params, api="console")
+    devices = await client.get("/servers", params=params)
     devices = devices if isinstance(devices, Sequence) else []
 
     totals: Counter[str] = Counter()
@@ -1188,8 +1187,7 @@ async def issue_device_command(
 
     params = {"o": resolved_org_id}
     response_data = await client.post(
-        f"/servers/{device_id}/queues", json_data=body, params=params, api="console"
-    )
+        f"/servers/{device_id}/queues", json_data=body, params=params    )
 
     data = {
         "device_id": device_id,

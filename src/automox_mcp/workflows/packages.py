@@ -24,8 +24,7 @@ async def list_device_packages(
         params["limit"] = limit
 
     packages = await client.get(
-        f"/servers/{device_id}/packages", params=params, api="console"
-    )
+        f"/servers/{device_id}/packages", params=params    )
 
     if not isinstance(packages, list):
         packages = []
@@ -75,17 +74,17 @@ async def search_org_packages(
     limit: int | None = None,
 ) -> dict[str, Any]:
     """Search packages across the organization."""
-    params: dict[str, Any] = {"o": org_id}
+    params: dict[str, Any] = {}
     if include_unmanaged is not None:
-        params["include_unmanaged"] = str(include_unmanaged).lower()
+        params["includeUnmanaged"] = 1 if include_unmanaged else 0
     if awaiting is not None:
-        params["awaiting"] = str(awaiting).lower()
+        params["awaiting"] = 1 if awaiting else 0
     if page is not None:
         params["page"] = page
     if limit is not None:
         params["limit"] = limit
 
-    packages = await client.get("/orgs/packages", params=params, api="console")
+    packages = await client.get(f"/orgs/{org_id}/packages", params=params)
 
     if not isinstance(packages, list):
         packages = []

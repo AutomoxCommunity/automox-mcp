@@ -279,11 +279,14 @@ AUTOMOX_MCP_MODULES=devices,policies
   - Org ID
   - API credentials
 
+> [!NOTE]
+> Both global and org-scoped API keys work. However, all three environment variables (`AUTOMOX_API_KEY`, `AUTOMOX_ACCOUNT_UUID`, `AUTOMOX_ORG_ID`) are always required. The MCP server uses `AUTOMOX_ORG_ID` to scope every API call to a specific organization, so even a global key needs to be paired with the target org ID.
+
 #### Finding the values in your console
 
-- **API Key**: Log in to Automox Console → Ellipsis (Top Right) → Secrets & Keys → Add API Key ([Docs](https://docs.automox.com/product/Product_Documentation/Settings/Managing_Keys.htm))
+- **API Key**: Log in to Automox Console → Ellipsis (Top Right) → Secrets & Keys → Add API Key ([Docs](https://docs.automox.com/product/Product_Documentation/Settings/Managing_Keys.htm)). Both global and org-scoped keys are supported.
 - **Account UUID**: Also found in Secrets & Keys section.
-- **Org ID**: Your organization's 6 digit numeric identifier - you can usually find this in the URL when managing your organization in the Automox Console.
+- **Org ID**: Your organization's numeric identifier — you can usually find this in the URL when managing your organization in the Automox Console. This is required even when using a global API key, as it tells the server which organization to operate against.
 
 ### Environment Configuration
 

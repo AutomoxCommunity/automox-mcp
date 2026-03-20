@@ -244,7 +244,7 @@ class AutomoxClient:
     def _build_error(self, response: httpx.Response) -> AutomoxAPIError:
         payload = self._extract_error_payload(response)
         message = payload.get("message") or payload.get("title") or "automox API error"
-        error_cls = AutomoxRateLimitError if response.status_code == 429 else AutomoxAPIError
+        error_cls = AutomoxAPIError
         logger.warning(
             "automox request failed",
             extra={

@@ -521,6 +521,30 @@ async def test_full_profile_inventory_summarizes_key_values(monkeypatch: pytest.
     assert proc["item_count"] == 2
     assert proc["key_values"]["CPU Name"] == "Intel i7"
     assert proc["key_values"]["CPU Cores"] == 8
+    assert None not in proc["key_values"]  # no None keys from unnamed items
+
+
+@pytest.mark.asyncio
+async def test_full_profile_skips_unnamed_inventory_items(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Items without friendly_name or name should be excluded from key_values."""
+    inv_with_unnamed = copy.deepcopy(_INVENTORY_RESPONSE)
+    # Add an item with no name fields
+    inv_with_unnamed["data"]["categories"]["Hardware"]["sub_categories"]["Processor"]["items"].append(
+        {"name": None, "friendly_name": None, "value": "mystery", "type": "string", "collected_at": None},
+    )
+    _patch_sub_workflows(
+        monkeypatch,
+        get_device_inventory=AsyncMock(return_value=inv_with_unnamed),
+    )
+    client = StubClient()
+
+    result = await get_device_full_profile(
+        cast(AutomoxClient, client), org_id=555, device_id=101,
+    )
+
+    proc = result["data"]["inventory"]["categories"]["Hardware"]["sub_categories"]["Processor"]
+    assert None not in proc["key_values"]
+    assert "mystery" not in proc["key_values"].values()
 
 
 @pytest.mark.asyncio

@@ -272,7 +272,7 @@ async def get_device_full_profile(
                 val = item.get("value")
                 friendly = item.get("friendly_name") or item.get("name")
                 # Only include scalar values (skip large nested structures)
-                if isinstance(val, (str, int, float, bool)) and val != "":
+                if friendly and isinstance(val, (str, int, float, bool)) and val != "":
                     key_values[friendly] = val
             sub_summaries[sub_name] = {
                 "item_count": sub_content.get("item_count", 0),

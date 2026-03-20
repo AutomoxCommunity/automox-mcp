@@ -7,6 +7,8 @@ from .account import invite_user_to_account, remove_user_from_account
 from .audit import audit_trail_user_activity
 from .devices import (
     describe_device,
+    get_device_inventory,
+    get_device_inventory_categories,
     issue_device_command,
     list_device_inventory,
     list_devices_needing_attention,
@@ -37,7 +39,7 @@ from .policy import (
     summarize_policy_activity,
     summarize_policy_execution_history,
 )
-from .compound import get_compliance_snapshot, get_patch_tuesday_readiness
+from .compound import get_compliance_snapshot, get_device_full_profile, get_patch_tuesday_readiness
 from .reports import get_noncompliant_report, get_prepatch_report
 from .webhooks import (
     create_webhook,
@@ -74,6 +76,9 @@ __all__ = [
     "describe_policy_run_result",
     "execute_policy",
     "get_compliance_snapshot",
+    "get_device_full_profile",
+    "get_device_inventory",
+    "get_device_inventory_categories",
     "get_noncompliant_report",
     "get_patch_tuesday_readiness",
     "get_policy_compliance_stats",

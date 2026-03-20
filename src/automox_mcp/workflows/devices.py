@@ -9,7 +9,8 @@ from datetime import UTC, datetime
 from typing import Any, Literal, cast
 from uuid import UUID
 
-from ..client import AutomoxClient
+from ..client import AutomoxAPIError, AutomoxClient
+from ..utils import resolve_org_uuid
 
 
 def _normalize_status(value: Any) -> str:
@@ -610,37 +611,23 @@ async def describe_device(
             ]
 
     if include_inventory:
-        org_uuid_str = (
-            device_data.get("org_uuid")
-            or device_data.get("organization_uuid")
-            or device_data.get("orgId")
-        )
-        device_uuid_str = device_data.get("device_uuid") or device_data.get("uuid")
         try:
-            if org_uuid_str and device_uuid_str:
-                org_uuid_val = UUID(str(org_uuid_str))
-                device_uuid_uuid = UUID(str(device_uuid_str))
-                path = f"/device-details/orgs/{org_uuid_val}/devices/{device_uuid_uuid}/inventory"
-                inventory_raw = await client.get(path)
-                if isinstance(inventory_raw, Mapping):
-                    inventory_map: Mapping[str, Any] = inventory_raw
-                    categories: list[dict[str, Any]] = []
-                    for name, items in inventory_map.items():
-                        entry: dict[str, Any] = {"name": name}
-                        if isinstance(items, Sequence) and not isinstance(
-                            items, (str, bytes, bytearray)
-                        ):
-                            entry["item_count"] = len(items)
-                        elif isinstance(items, Mapping):
-                            entry["item_count"] = len(items)
-                        categories.append(entry)
-                        if len(categories) >= 15:
-                            break
-                    inventory_summary = {
-                        "total_categories": len(inventory_map),
-                        "categories": categories,
-                    }
-        except (ValueError, TypeError):
+            inv_result = await get_device_inventory(
+                client, org_id=resolved_org_id, device_id=device_id,
+            )
+            inv_data = inv_result.get("data") or {}
+            inv_categories = inv_data.get("categories") or {}
+            categories: list[dict[str, Any]] = []
+            for cat_name, cat_content in inv_categories.items():
+                sub_cats = cat_content.get("sub_categories", {})
+                item_count = sum(s.get("item_count", 0) for s in sub_cats.values())
+                categories.append({"name": cat_name, "item_count": item_count})
+            inventory_summary = {
+                "total_categories": len(categories),
+                "total_items": inv_data.get("total_items", 0),
+                "categories": categories,
+            }
+        except (AutomoxAPIError, ValueError, TypeError, AttributeError, Exception):
             inventory_summary = None
 
     if include_queue:
@@ -825,6 +812,176 @@ async def describe_device(
     return {
         "data": data,
         "metadata": metadata,
+    }
+
+
+async def _resolve_device_uuid(
+    client: AutomoxClient,
+    *,
+    device_id: int,
+    org_id: int,
+) -> str | None:
+    """Look up a device's UUID from its numeric ID."""
+    params = {"o": org_id}
+    try:
+        response = await client.get(f"/servers/{device_id}", params=params)
+        if isinstance(response, Mapping):
+            return str(
+                response.get("uuid")
+                or response.get("device_uuid")
+                or ""
+            ) or None
+    except (AutomoxAPIError, Exception):
+        pass
+    return None
+
+
+async def get_device_inventory(
+    client: AutomoxClient,
+    *,
+    org_id: int | None = None,
+    device_id: int,
+    category: str | None = None,
+) -> dict[str, Any]:
+    """Retrieve device inventory data from the device-details API.
+
+    Uses org UUID + device UUID to call the Console API inventory endpoint.
+    Optionally filter by category (Hardware, Health, Network, Security,
+    Services, Summary, System, Users).
+    """
+    resolved_org_id = org_id or client.org_id
+    if not resolved_org_id:
+        raise ValueError("org_id required - pass explicitly or set AUTOMOX_ORG_ID")
+
+    # Resolve org UUID
+    org_uuid_str = await resolve_org_uuid(
+        client, org_id=resolved_org_id, allow_account_uuid=False,
+    )
+
+    # Resolve device UUID
+    device_uuid_str = await _resolve_device_uuid(
+        client, device_id=device_id, org_id=resolved_org_id,
+    )
+    if not device_uuid_str:
+        raise ValueError(
+            f"Could not resolve UUID for device {device_id}. "
+            f"The device may not exist in organization {resolved_org_id}."
+        )
+
+    path = f"/device-details/orgs/{org_uuid_str}/devices/{device_uuid_str}/inventory"
+    params: dict[str, Any] = {}
+    if category:
+        params["category"] = category
+
+    inventory_raw = await client.get(path, params=params)
+
+    # Parse the nested categories → sub_categories → data structure
+    categories_data: dict[str, Any] = {}
+    if isinstance(inventory_raw, Mapping):
+        raw_categories = inventory_raw.get("categories")
+        if isinstance(raw_categories, Mapping):
+            for cat_name, cat_content in raw_categories.items():
+                cat_entry: dict[str, Any] = {"name": cat_name, "sub_categories": {}}
+                if isinstance(cat_content, Mapping):
+                    sub_cats = cat_content.get("sub_categories")
+                    if isinstance(sub_cats, Mapping):
+                        for sub_name, sub_content in sub_cats.items():
+                            items: list[dict[str, Any]] = []
+                            if isinstance(sub_content, Mapping):
+                                data_items = sub_content.get("data")
+                                if isinstance(data_items, Sequence) and not isinstance(
+                                    data_items, (str, bytes)
+                                ):
+                                    for item in data_items:
+                                        if isinstance(item, Mapping):
+                                            items.append({
+                                                "name": item.get("name"),
+                                                "friendly_name": item.get("friendly_name"),
+                                                "value": item.get("value"),
+                                                "type": item.get("type"),
+                                                "collected_at": item.get("collected_at"),
+                                            })
+                            cat_entry["sub_categories"][sub_name] = {
+                                "item_count": len(items),
+                                "items": items,
+                            }
+                categories_data[cat_name] = cat_entry
+
+    total_items = sum(
+        sub["item_count"]
+        for cat in categories_data.values()
+        for sub in cat.get("sub_categories", {}).values()
+    )
+
+    return {
+        "data": {
+            "device_id": device_id,
+            "device_uuid": device_uuid_str,
+            "category_filter": category,
+            "total_categories": len(categories_data),
+            "total_items": total_items,
+            "categories": categories_data,
+        },
+        "metadata": {
+            "deprecated_endpoint": False,
+            "org_id": resolved_org_id,
+            "org_uuid": org_uuid_str,
+            "device_id": device_id,
+            "device_uuid": device_uuid_str,
+            "category_filter": category,
+        },
+    }
+
+
+async def get_device_inventory_categories(
+    client: AutomoxClient,
+    *,
+    org_id: int | None = None,
+    device_id: int,
+) -> dict[str, Any]:
+    """Retrieve available inventory categories for a device."""
+    resolved_org_id = org_id or client.org_id
+    if not resolved_org_id:
+        raise ValueError("org_id required - pass explicitly or set AUTOMOX_ORG_ID")
+
+    org_uuid_str = await resolve_org_uuid(
+        client, org_id=resolved_org_id, allow_account_uuid=False,
+    )
+
+    device_uuid_str = await _resolve_device_uuid(
+        client, device_id=device_id, org_id=resolved_org_id,
+    )
+    if not device_uuid_str:
+        raise ValueError(
+            f"Could not resolve UUID for device {device_id}. "
+            f"The device may not exist in organization {resolved_org_id}."
+        )
+
+    path = f"/device-details/orgs/{org_uuid_str}/devices/{device_uuid_str}/categories"
+    categories_raw = await client.get(path)
+
+    categories: list[dict[str, str]] = []
+    if isinstance(categories_raw, Sequence) and not isinstance(categories_raw, (str, bytes)):
+        for item in categories_raw:
+            if isinstance(item, Mapping):
+                categories.append({
+                    "name": item.get("name", ""),
+                    "friendly_name": item.get("friendly_name", ""),
+                })
+
+    return {
+        "data": {
+            "device_id": device_id,
+            "device_uuid": device_uuid_str,
+            "categories": categories,
+        },
+        "metadata": {
+            "deprecated_endpoint": False,
+            "org_id": resolved_org_id,
+            "org_uuid": org_uuid_str,
+            "device_id": device_id,
+            "device_uuid": device_uuid_str,
+        },
     }
 
 

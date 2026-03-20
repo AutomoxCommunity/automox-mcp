@@ -195,3 +195,73 @@ async def get_compliance_snapshot(
             "errors": errors if errors else None,
         },
     }
+
+
+async def get_device_full_profile(
+    client: AutomoxClient,
+    *,
+    org_id: int,
+    device_id: int,
+) -> dict[str, Any]:
+    """Combine device detail, packages, inventory, and policy status into one view.
+
+    Answers: "Give me the full profile for [device]."
+    """
+    errors: list[str] = []
+
+    # 1. Device detail (includes policy status, queue)
+    device_info: dict[str, Any] = {}
+    try:
+        device_info = await devices.describe_device(
+            client,
+            org_id=org_id,
+            device_id=device_id,
+            include_packages=False,
+            include_inventory=False,  # We'll get full inventory separately
+            include_queue=True,
+        )
+    except (AutomoxAPIError, Exception) as exc:
+        errors.append(f"device_detail: {exc}")
+
+    # 2. Full device inventory
+    inventory: dict[str, Any] = {}
+    try:
+        inventory = await devices.get_device_inventory(
+            client, org_id=org_id, device_id=device_id,
+        )
+    except (AutomoxAPIError, Exception) as exc:
+        errors.append(f"device_inventory: {exc}")
+
+    # 3. Full package list
+    full_packages: dict[str, Any] = {}
+    try:
+        full_packages = await packages.list_device_packages(
+            client, org_id=org_id, device_id=device_id, limit=500,
+        )
+    except (AutomoxAPIError, Exception) as exc:
+        errors.append(f"device_packages: {exc}")
+
+    device_data = device_info.get("data") or {}
+    inventory_data = inventory.get("data") or {}
+    packages_data = full_packages.get("data") or {}
+
+    return {
+        "data": {
+            "device": device_data.get("core", {}),
+            "policy_assignments": device_data.get("policy_assignments", {}),
+            "pending_commands": device_data.get("pending_commands", []),
+            "device_facts": device_data.get("device_facts"),
+            "inventory": {
+                "total_categories": inventory_data.get("total_categories", 0),
+                "total_items": inventory_data.get("total_items", 0),
+                "categories": inventory_data.get("categories", {}),
+            },
+            "packages": {
+                "total": packages_data.get("total_packages", 0),
+                "packages": packages_data.get("packages", []),
+            },
+        },
+        "metadata": {
+            "errors": errors if errors else None,
+        },
+    }

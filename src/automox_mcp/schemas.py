@@ -331,6 +331,22 @@ class DeviceDetailParams(OrgIdContextMixin, ForbidExtraModel):
     )
 
 
+class DeviceInventoryParams(OrgIdContextMixin, ForbidExtraModel):
+    device_id: int = Field(description="Device identifier", ge=1)
+    category: str | None = Field(
+        None,
+        description=(
+            "Inventory category to retrieve. Use get_device_inventory_categories "
+            "to discover available categories. Common values: Hardware, Health, "
+            "Network, Security, Services, Summary, System, Users."
+        ),
+    )
+
+
+class DeviceIdOnlyParams(OrgIdContextMixin, ForbidExtraModel):
+    device_id: int = Field(description="Device identifier", ge=1)
+
+
 class DeviceSearchParams(OrgIdContextMixin, ForbidExtraModel):
     hostname_contains: str | None = Field(
         None, description="Match devices whose hostname or custom name contains this text"

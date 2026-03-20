@@ -118,5 +118,21 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
             workflows.compound.get_compliance_snapshot, params,
         )
 
+    @server.tool(
+        name="get_device_full_profile",
+        description=(
+            "Complete device profile combining device detail, full package list, "
+            "hardware/software inventory, and policy assignments in a single call. "
+            "Answers 'Give me the full profile for this device.'"
+        ),
+    )
+    async def get_device_full_profile(
+        device_id: int,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {"device_id": device_id}
+        return await _call(
+            workflows.compound.get_device_full_profile, params,
+        )
+
 
 __all__ = ["register"]

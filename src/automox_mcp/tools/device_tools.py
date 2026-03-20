@@ -14,7 +14,9 @@ from ..client import AutomoxAPIError, AutomoxClient
 from ..schemas import (
     DeviceDetailParams,
     DeviceHealthSummaryParams,
+    DeviceIdOnlyParams,
     DeviceInventoryOverviewParams,
+    DeviceInventoryParams,
     DeviceSearchParams,
     DevicesNeedingAttentionParams,
     IssueDeviceCommandParams,
@@ -194,6 +196,45 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
             DeviceHealthSummaryParams,
             params,
 
+        )
+
+    @server.tool(
+        name="get_device_inventory",
+        description=(
+            "Retrieve detailed device inventory data including hardware, network, "
+            "security, services, system, and user information. Optionally filter "
+            "by category. Uses the Console API device-details endpoint."
+        ),
+    )
+    async def get_device_inventory_tool(
+        device_id: int,
+        category: str | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {"device_id": device_id}
+        if category is not None:
+            params["category"] = category
+        return await _call(
+            workflows.get_device_inventory,
+            DeviceInventoryParams,
+            params,
+        )
+
+    @server.tool(
+        name="get_device_inventory_categories",
+        description=(
+            "List available inventory categories for a device. Categories are "
+            "dynamic per device. Use this to discover what inventory data is "
+            "available before requesting specific categories."
+        ),
+    )
+    async def get_device_inventory_categories_tool(
+        device_id: int,
+    ) -> dict[str, Any]:
+        params = {"device_id": device_id}
+        return await _call(
+            workflows.get_device_inventory_categories,
+            DeviceIdOnlyParams,
+            params,
         )
 
     if not read_only:

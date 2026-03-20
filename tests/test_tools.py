@@ -116,5 +116,14 @@ async def test_create_server_registers_core_tools(monkeypatch):
     server = automox_mcp.create_server()
     tools = await server.get_tools()
     tool_names = set(tools.keys())
-    required = {"execute_policy_now", "execute_device_command", "audit_trail_user_activity"}
+    required = {
+        "execute_policy_now",
+        "execute_device_command",
+        "audit_trail_user_activity",
+        "get_patch_tuesday_readiness",
+        "get_compliance_snapshot",
+        "delete_policy",
+        "clone_policy",
+        "policy_compliance_stats",
+    }
     assert required.issubset(tool_names)

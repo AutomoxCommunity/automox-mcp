@@ -600,7 +600,12 @@ class IssueDeviceCommandParams(OrgIdContextMixin, ForbidExtraModel):
 
 class ClonePolicyParams(ForbidExtraModel):
     policy_id: int = Field(description="Policy ID to clone")
-    target_zone_ids: list = Field(description="List of target zone IDs")
+    name: str | None = Field(None, description="Name for the cloned policy (defaults to '<source> (Clone)')")
+    server_groups: list[int] | None = Field(None, description="Server group IDs for the clone")
+
+
+class DeletePolicyToolParams(OrgIdContextMixin, ForbidExtraModel):
+    policy_id: int = Field(description="Policy ID to delete", ge=1)
 
 
 class PreviewPolicyDeviceFiltersParams(ForbidExtraModel):

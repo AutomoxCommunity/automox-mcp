@@ -12,6 +12,8 @@ from pydantic import BaseModel, ValidationError
 from .. import workflows
 from ..client import AutomoxAPIError, AutomoxClient
 from ..schemas import (
+    ClonePolicyParams,
+    DeletePolicyToolParams,
     ExecutePolicyParams,
     OrgIdContextMixin,
     OrgIdRequiredMixin,
@@ -270,7 +272,7 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
             params = {"policy_id": policy_id}
             return await _call(
                 workflows.delete_policy,
-                PolicyDetailParams,
+                DeletePolicyToolParams,
                 params,
             )
 
@@ -294,7 +296,7 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
                 params["server_groups"] = server_groups
             return await _call(
                 workflows.clone_policy,
-                PolicyDetailParams,
+                ClonePolicyParams,
                 params,
             )
 

@@ -22,6 +22,7 @@ _MODULE_REGISTRY: dict[str, tuple[str, bool]] = {
     "reports": ("report_tools", False),
     "packages": ("package_tools", False),
     "webhooks": ("webhook_tools", True),
+    "compound": ("compound_tools", False),
 }
 
 

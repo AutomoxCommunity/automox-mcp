@@ -203,6 +203,20 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
         )
 
     @server.tool(
+        name="policy_compliance_stats",
+        description=(
+            "Retrieve per-policy compliance statistics showing compliant vs "
+            "non-compliant device counts and compliance rates for the organization."
+        ),
+    )
+    async def policy_compliance_stats() -> dict[str, Any]:
+        return await _call(
+            workflows.get_policy_compliance_stats,
+            PolicySummaryParams,
+            {},
+        )
+
+    @server.tool(
         name="patch_approvals_summary",
         description="Summarize pending patch approvals and their severity.",
     )
@@ -243,6 +257,45 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
                 PatchApprovalDecisionParams,
                 params,
     
+            )
+
+        @server.tool(
+            name="delete_policy",
+            description="Permanently delete an Automox policy by ID.",
+            annotations={"destructiveHint": True},
+        )
+        async def delete_policy(
+            policy_id: int,
+        ) -> dict[str, Any]:
+            params = {"policy_id": policy_id}
+            return await _call(
+                workflows.delete_policy,
+                PolicyDetailParams,
+                params,
+            )
+
+        @server.tool(
+            name="clone_policy",
+            description=(
+                "Clone an existing Automox policy. Creates a copy with an optional "
+                "new name and server group assignments."
+            ),
+            annotations={"destructiveHint": True},
+        )
+        async def clone_policy(
+            policy_id: int,
+            name: str | None = None,
+            server_groups: list[int] | None = None,
+        ) -> dict[str, Any]:
+            params: dict[str, Any] = {"policy_id": policy_id}
+            if name is not None:
+                params["name"] = name
+            if server_groups is not None:
+                params["server_groups"] = server_groups
+            return await _call(
+                workflows.clone_policy,
+                PolicyDetailParams,
+                params,
             )
 
         @server.tool(

@@ -10,6 +10,7 @@ if TYPE_CHECKING:
 
 def register_resources(server: FastMCP) -> None:
     """Register all MCP resources with the server."""
+    from .platform_resources import register as register_platform_resources
     from .policy_resources import register_policy_resources
     from .servergroup_resources import register as register_servergroup_resources
     from .webhook_resources import register as register_webhook_resources
@@ -17,6 +18,7 @@ def register_resources(server: FastMCP) -> None:
     register_policy_resources(server)
     register_servergroup_resources(server)
     register_webhook_resources(server)
+    register_platform_resources(server)
 
 
 __all__ = ["register_resources"]

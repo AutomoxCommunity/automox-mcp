@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from . import account, audit, devices, events, groups, packages, policy, reports, webhooks
+from . import account, audit, compound, devices, events, groups, packages, policy, reports, webhooks
 from .account import invite_user_to_account, remove_user_from_account
 from .audit import audit_trail_user_activity
 from .devices import (
@@ -24,9 +24,12 @@ from .groups import (
 from .packages import list_device_packages, search_org_packages
 from .policy import (
     apply_policy_changes,
+    clone_policy,
+    delete_policy,
     describe_policy,
     describe_policy_run_result,
     execute_policy,
+    get_policy_compliance_stats,
     normalize_policy_operations_input,
     resolve_patch_approval,
     summarize_patch_approvals,
@@ -34,6 +37,7 @@ from .policy import (
     summarize_policy_activity,
     summarize_policy_execution_history,
 )
+from .compound import get_compliance_snapshot, get_patch_tuesday_readiness
 from .reports import get_noncompliant_report, get_prepatch_report
 from .webhooks import (
     create_webhook,
@@ -49,6 +53,7 @@ from .webhooks import (
 __all__ = [
     "account",
     "audit",
+    "compound",
     "devices",
     "events",
     "groups",
@@ -58,15 +63,20 @@ __all__ = [
     "webhooks",
     "apply_policy_changes",
     "audit_trail_user_activity",
+    "clone_policy",
     "create_server_group",
     "create_webhook",
+    "delete_policy",
     "delete_server_group",
     "delete_webhook",
     "describe_device",
     "describe_policy",
     "describe_policy_run_result",
     "execute_policy",
+    "get_compliance_snapshot",
     "get_noncompliant_report",
+    "get_patch_tuesday_readiness",
+    "get_policy_compliance_stats",
     "get_prepatch_report",
     "get_server_group",
     "get_webhook",

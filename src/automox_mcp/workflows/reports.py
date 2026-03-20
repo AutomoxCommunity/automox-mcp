@@ -2,10 +2,49 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from typing import Any
 
 from ..client import AutomoxClient
+
+
+_SEVERITY_RANK: dict[str, int] = {
+    "critical": 4,
+    "high": 3,
+    "medium": 2,
+    "low": 1,
+    "none": 0,
+}
+
+
+def _highest_patch_severity(patches: Any) -> str:
+    """Return the highest severity found across a device's patches."""
+    if not patches:
+        return "unknown"
+    items: Sequence[Any]
+    if isinstance(patches, Mapping):
+        items = list(patches.values())
+    elif isinstance(patches, Sequence) and not isinstance(patches, (str, bytes)):
+        items = patches
+    else:
+        return "unknown"
+
+    max_rank = -1
+    for patch in items:
+        if not isinstance(patch, Mapping):
+            continue
+        sev = str(
+            patch.get("severity") or patch.get("cve_severity") or ""
+        ).lower().strip()
+        rank = _SEVERITY_RANK.get(sev, -1)
+        if rank > max_rank:
+            max_rank = rank
+
+    for sev_name, rank in _SEVERITY_RANK.items():
+        if rank == max_rank:
+            return sev_name
+    return "unknown"
 
 
 def _extract_devices(response: Any, *wrapper_keys: str) -> list[Any]:
@@ -54,22 +93,51 @@ async def get_prepatch_report(
     limit: int | None = None,
     offset: int | None = None,
 ) -> dict[str, Any]:
-    """Retrieve the pre-patch readiness report."""
+    """Retrieve the pre-patch readiness report.
+
+    Automatically paginates to fetch all devices unless an explicit
+    limit/offset is provided (single-page mode).
+    """
     params: dict[str, Any] = {"o": org_id}
     if group_id is not None:
         params["groupId"] = group_id
-    if limit is not None:
-        params["limit"] = limit
-    if offset is not None:
-        params["offset"] = offset
 
-    report = await client.get("/reports/prepatch", params=params)
+    # If caller provided explicit limit/offset, do a single request (backwards compat)
+    single_page = limit is not None or offset is not None
+    if single_page:
+        if limit is not None:
+            params["limit"] = limit
+        if offset is not None:
+            params["offset"] = offset
 
-    # Response shape: {"prepatch": {"total": N, ..., "devices": [...]}}
-    device_list = _extract_devices(report, "prepatch", "devices")
-    summary = _extract_summary(report, "prepatch")
+    page_size = limit or 500
+    params.setdefault("limit", page_size)
+    params.setdefault("offset", 0)
+
+    device_list: list[Any] = []
+    summary: dict[str, Any] = {}
+
+    while True:
+        report = await client.get("/reports/prepatch", params=params)
+
+        # Response shape: {"prepatch": {"total": N, ..., "devices": [...]}}
+        page_devices = _extract_devices(report, "prepatch", "devices")
+        if not summary:
+            summary = _extract_summary(report, "prepatch")
+
+        device_list.extend(page_devices)
+
+        if single_page:
+            break
+
+        total = summary.get("total") or 0
+        if len(device_list) >= total or not page_devices:
+            break
+
+        params["offset"] = params["offset"] + page_size
 
     devices: list[dict[str, Any]] = []
+    severity_counter: Counter[str] = Counter()
     for item in device_list:
         if not isinstance(item, Mapping):
             continue
@@ -80,6 +148,9 @@ async def get_prepatch_report(
         elif isinstance(patches, Mapping):
             patch_count = sum(1 for _ in patches)
 
+        device_severity = _highest_patch_severity(patches)
+        severity_counter[device_severity] += 1
+
         entry: dict[str, Any] = {
             "server_id": item.get("id"),
             "server_name": item.get("name"),
@@ -89,13 +160,29 @@ async def get_prepatch_report(
             "compliant": item.get("compliant"),
             "needs_reboot": item.get("needsReboot"),
             "pending_patches": patch_count,
+            "highest_severity": device_severity,
         }
         devices.append(entry)
 
+    total_org_devices = summary.get("total") or 0
+    devices_needing_patches = len(devices)
+    device_severity_summary = {
+        "total_org_devices": total_org_devices,
+        "devices_needing_patches": devices_needing_patches,
+        "critical": severity_counter.get("critical", 0),
+        "high": severity_counter.get("high", 0),
+        "medium": severity_counter.get("medium", 0),
+        "low": severity_counter.get("low", 0),
+        "none": severity_counter.get("none", 0),
+        "unknown": severity_counter.get("unknown", 0),
+    }
+
     return {
         "data": {
-            "total_devices": summary.get("total") or len(devices),
-            "summary": summary,
+            "total_org_devices": total_org_devices,
+            "total_devices": devices_needing_patches,
+            "summary": device_severity_summary,
+            "api_summary": summary,
             "devices": devices,
         },
         "metadata": {

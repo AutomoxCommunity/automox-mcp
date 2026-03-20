@@ -1000,17 +1000,21 @@ async def summarize_policies(
         for policy_item in page_results:
             if not isinstance(policy_item, Mapping):
                 continue
+            status_raw = str(policy_item.get("status") or "").lower()
             active_flag = (
                 policy_item.get("active")
                 or policy_item.get("enabled")
                 or policy_item.get("is_active")
             )
-            is_active = False if active_flag in (False, 0, "false", "inactive") else True
+            if active_flag is not None:
+                is_active = active_flag not in (False, 0, "false", "inactive")
+            else:
+                is_active = status_raw not in ("inactive", "disabled")
             if not include_inactive and not is_active:
                 continue
 
             policy_type = (
-                policy_item.get("policy_type") or policy_item.get("type") or "unknown"
+                policy_item.get("policy_type_name") or policy_item.get("policy_type") or policy_item.get("type") or "unknown"
             ).lower()
             type_counts[policy_type] += 1
             status = _normalize_status(
@@ -1026,9 +1030,12 @@ async def summarize_policies(
                         "policy_id": policy_item.get("id"),
                         "policy_uuid": policy_item.get("guid") or policy_item.get("uuid"),
                         "name": policy_item.get("name"),
-                        "type": policy_item.get("policy_type") or policy_item.get("type"),
+                        "type": policy_item.get("policy_type_name") or policy_item.get("policy_type") or policy_item.get("type"),
                         "status": policy_item.get("status"),
                         "targets": policy_item.get("target"),
+                        "server_groups": policy_item.get("server_groups"),
+                        "schedule_days": policy_item.get("schedule_days"),
+                        "schedule_time": policy_item.get("schedule_time"),
                         "next_run": policy_item.get("next_run"),
                     }
                 )
@@ -1753,4 +1760,161 @@ async def execute_policy(
     return {
         "data": data,
         "metadata": metadata,
+    }
+
+
+async def delete_policy(
+    client: AutomoxClient,
+    *,
+    org_id: int | None = None,
+    policy_id: int,
+) -> dict[str, Any]:
+    """Delete an Automox policy by ID."""
+    resolved_org_id = org_id or client.org_id
+    if not resolved_org_id:
+        raise ValueError("org_id required - pass explicitly or set AUTOMOX_ORG_ID")
+
+    params = {"o": resolved_org_id}
+    await client.delete(f"/policies/{policy_id}", params=params)
+
+    return {
+        "data": {
+            "policy_id": policy_id,
+            "deleted": True,
+        },
+        "metadata": {
+            "deprecated_endpoint": False,
+            "org_id": resolved_org_id,
+        },
+    }
+
+
+async def clone_policy(
+    client: AutomoxClient,
+    *,
+    org_id: int | None = None,
+    policy_id: int,
+    name: str | None = None,
+    server_groups: list[int] | None = None,
+) -> dict[str, Any]:
+    """Clone an existing Automox policy.
+
+    Fetches the source policy, strips read-only fields, optionally overrides
+    name and server_groups, then creates a new policy via POST.
+    """
+    resolved_org_id = org_id or client.org_id
+    if not resolved_org_id:
+        raise ValueError("org_id required - pass explicitly or set AUTOMOX_ORG_ID")
+
+    params = {"o": resolved_org_id}
+    source = await client.get(f"/policies/{policy_id}", params=params)
+    if not isinstance(source, Mapping):
+        raise ValueError(f"Failed to retrieve policy {policy_id} for cloning.")
+
+    # Build the clone payload — strip read-only fields
+    payload = {k: v for k, v in source.items() if k not in _READ_ONLY_POLICY_FIELDS}
+    payload["organization_id"] = resolved_org_id
+
+    # Apply overrides
+    if name is not None:
+        payload["name"] = name
+    else:
+        source_name = source.get("name") or f"Policy {policy_id}"
+        payload["name"] = f"{source_name} (Clone)"
+
+    if server_groups is not None:
+        payload["server_groups"] = server_groups
+
+    response = await client.post("/policies", json_data=payload, params=params)
+
+    new_policy_id = (
+        _extract_policy_id_from_response(response)
+        if isinstance(response, Mapping)
+        else None
+    )
+
+    return {
+        "data": {
+            "source_policy_id": policy_id,
+            "cloned_policy_id": new_policy_id,
+            "name": payload.get("name"),
+            "response": response,
+        },
+        "metadata": {
+            "deprecated_endpoint": False,
+            "org_id": resolved_org_id,
+        },
+    }
+
+
+async def get_policy_compliance_stats(
+    client: AutomoxClient,
+    *,
+    org_id: int | None = None,
+) -> dict[str, Any]:
+    """Retrieve policy compliance statistics for the organization.
+
+    Returns per-policy device counts, compliance rates, and status breakdowns
+    from the /policystats endpoint.
+    """
+    resolved_org_id = org_id or client.org_id
+    if not resolved_org_id:
+        raise ValueError("org_id required - pass explicitly or set AUTOMOX_ORG_ID")
+
+    params = {"o": resolved_org_id}
+    stats = await client.get("/policystats", params=params)
+
+    policy_stats: list[dict[str, Any]] = []
+    total_compliant = 0
+    total_noncompliant = 0
+    total_devices = 0
+
+    if isinstance(stats, Sequence):
+        for item in stats:
+            if not isinstance(item, Mapping):
+                continue
+            compliant = item.get("compliant", 0) or 0
+            noncompliant = (
+                item.get("non_compliant", 0) or item.get("noncompliant", 0) or 0
+            )
+            device_count = compliant + noncompliant
+
+            total_compliant += compliant
+            total_noncompliant += noncompliant
+            total_devices += device_count
+
+            policy_stats.append({
+                "policy_id": item.get("policy_id"),
+                "policy_name": item.get("policy_name") or item.get("name"),
+                "compliant_devices": compliant,
+                "noncompliant_devices": noncompliant,
+                "total_devices": device_count,
+                "compliance_rate_percent": (
+                    round(compliant / device_count * 100, 1)
+                    if device_count > 0
+                    else 0
+                ),
+            })
+
+    overall_rate = (
+        round(total_compliant / total_devices * 100, 1)
+        if total_devices > 0
+        else 0
+    )
+
+    return {
+        "data": {
+            "overall_compliance": {
+                "total_devices_evaluated": total_devices,
+                "compliant": total_compliant,
+                "noncompliant": total_noncompliant,
+                "compliance_rate_percent": overall_rate,
+            },
+            "per_policy_stats": policy_stats,
+        },
+        "metadata": {
+            "deprecated_endpoint": False,
+            "org_id": resolved_org_id,
+            "policy_count": len(policy_stats),
+        },
     }

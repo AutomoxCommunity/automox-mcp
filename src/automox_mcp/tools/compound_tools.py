@@ -1,0 +1,122 @@
+"""Compound tools that combine multiple API calls into single high-value responses."""
+
+from __future__ import annotations
+
+from collections.abc import Awaitable, Callable
+from typing import Any
+
+from fastmcp import FastMCP
+from fastmcp.exceptions import ToolError
+from pydantic import BaseModel, ValidationError
+
+from .. import workflows
+from ..client import AutomoxAPIError, AutomoxClient
+from ..schemas import OrgIdContextMixin, OrgIdRequiredMixin
+from ..utils import resolve_org_uuid
+from ..utils.tooling import (
+    RateLimitError,
+    as_tool_response,
+    enforce_rate_limit,
+    format_error,
+)
+
+
+def register(server: FastMCP, *, read_only: bool = False) -> None:
+    """Register compound tools."""
+
+    async def _call(
+        func: Callable[..., Awaitable[dict[str, Any]]],
+        raw_params: dict[str, Any],
+    ) -> dict[str, Any]:
+        try:
+            await enforce_rate_limit()
+            client = AutomoxClient()
+            client_org_id = getattr(client, "org_id", None)
+            async with client as session:
+                if client_org_id is None:
+                    raise ToolError(
+                        "org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly."
+                    )
+                raw_params["org_id"] = client_org_id
+                result: dict[str, Any] = await func(session, **raw_params)
+        except (ValidationError, ValueError) as exc:
+            raise ToolError(str(exc)) from exc
+        except RateLimitError as exc:
+            raise ToolError(str(exc)) from exc
+        except AutomoxAPIError as exc:
+            raise ToolError(format_error(exc)) from exc
+        except ToolError:
+            raise
+        except Exception as exc:
+            raise ToolError(f"Unexpected error: {type(exc).__name__}: {exc}") from exc
+        return as_tool_response(result)
+
+    async def _call_with_org_uuid(
+        func: Callable[..., Awaitable[dict[str, Any]]],
+        raw_params: dict[str, Any],
+    ) -> dict[str, Any]:
+        try:
+            await enforce_rate_limit()
+            client = AutomoxClient()
+            client_org_id = getattr(client, "org_id", None)
+            async with client as session:
+                if client_org_id is None:
+                    raise ToolError(
+                        "org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly."
+                    )
+                org_uuid = await resolve_org_uuid(
+                    session,
+                    org_id=client_org_id,
+                    allow_account_uuid=True,
+                )
+                raw_params["org_id"] = client_org_id
+                raw_params["org_uuid"] = str(org_uuid)
+                result: dict[str, Any] = await func(session, **raw_params)
+        except (ValidationError, ValueError) as exc:
+            raise ToolError(str(exc)) from exc
+        except RateLimitError as exc:
+            raise ToolError(str(exc)) from exc
+        except AutomoxAPIError as exc:
+            raise ToolError(format_error(exc)) from exc
+        except ToolError:
+            raise
+        except Exception as exc:
+            raise ToolError(f"Unexpected error: {type(exc).__name__}: {exc}") from exc
+        return as_tool_response(result)
+
+    @server.tool(
+        name="get_patch_tuesday_readiness",
+        description=(
+            "Combined view of pre-patch report, pending approvals, and patch policy "
+            "schedules. Answers 'Are we ready for Patch Tuesday?' in a single call."
+        ),
+    )
+    async def get_patch_tuesday_readiness(
+        group_id: int | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        if group_id is not None:
+            params["group_id"] = group_id
+        return await _call_with_org_uuid(
+            workflows.compound.get_patch_tuesday_readiness, params,
+        )
+
+    @server.tool(
+        name="get_compliance_snapshot",
+        description=(
+            "Combined view of non-compliant devices, fleet health metrics, and "
+            "policy statistics. Answers 'What is our compliance posture?' in a single call."
+        ),
+    )
+    async def get_compliance_snapshot(
+        group_id: int | None = None,
+    ) -> dict[str, Any]:
+        params: dict[str, Any] = {}
+        if group_id is not None:
+            params["group_id"] = group_id
+        return await _call(
+            workflows.compound.get_compliance_snapshot, params,
+        )
+
+
+__all__ = ["register"]

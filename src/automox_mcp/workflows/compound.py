@@ -2,11 +2,28 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Mapping
 from typing import Any
 
 from ..client import AutomoxAPIError, AutomoxClient
 from . import devices, packages, policy, reports
+
+
+def _settle(
+    results: tuple[Any, ...],
+    labels: tuple[str, ...],
+) -> tuple[list[Any], list[str]]:
+    """Separate gather(return_exceptions=True) results into values and errors."""
+    values: list[Any] = []
+    errors: list[str] = []
+    for result, label in zip(results, labels):
+        if isinstance(result, BaseException):
+            errors.append(f"{label}: {result}")
+            values.append({})
+        else:
+            values.append(result)
+    return values, errors
 
 
 async def get_patch_tuesday_readiness(
@@ -20,39 +37,25 @@ async def get_patch_tuesday_readiness(
 
     Answers: "Are we ready for Patch Tuesday?"
     """
-    errors: list[str] = []
-
-    # 1. Pre-patch report
-    prepatch: dict[str, Any] = {}
-    try:
-        prepatch = await reports.get_prepatch_report(
-            client, org_id=org_id, group_id=group_id,
-        )
-    except (AutomoxAPIError, Exception) as exc:
-        errors.append(f"prepatch_report: {exc}")
-
-    # 2. Pending patch approvals
-    approvals: dict[str, Any] = {}
-    try:
-        approvals = await policy.summarize_patch_approvals(
-            client, org_id=org_id,
-        )
-    except (AutomoxAPIError, Exception) as exc:
-        errors.append(f"patch_approvals: {exc}")
-
-    # 3. Patch policy schedules
-    patch_policies: list[dict[str, Any]] = []
-    try:
-        catalog = await policy.summarize_policies(
+    raw_results = await asyncio.gather(
+        reports.get_prepatch_report(client, org_id=org_id, group_id=group_id),
+        policy.summarize_patch_approvals(client, org_id=org_id),
+        policy.summarize_policies(
             client, org_id=org_id, limit=200, page=0, include_inactive=False,
-        )
-        catalog_data = catalog.get("data") or {}
-        all_policies = catalog_data.get("policies") or []
-        for p in all_policies:
-            if isinstance(p, Mapping) and str(p.get("type") or "").lower() == "patch":
-                patch_policies.append(dict(p))
-    except (AutomoxAPIError, Exception) as exc:
-        errors.append(f"policy_catalog: {exc}")
+        ),
+        return_exceptions=True,
+    )
+
+    (prepatch, approvals, catalog), errors = _settle(
+        raw_results, ("prepatch_report", "patch_approvals", "policy_catalog"),
+    )
+
+    patch_policies: list[dict[str, Any]] = []
+    catalog_data = catalog.get("data") or {}
+    all_policies = catalog_data.get("policies") or []
+    for p in all_policies:
+        if isinstance(p, Mapping) and str(p.get("type") or "").lower() == "patch":
+            patch_policies.append(dict(p))
 
     prepatch_data = prepatch.get("data") or {}
     approvals_data = approvals.get("data") or {}
@@ -113,54 +116,42 @@ async def get_compliance_snapshot(
 
     Answers: "What's our overall compliance posture?"
     """
-    errors: list[str] = []
-
-    # 1. Non-compliant report
-    noncompliant: dict[str, Any] = {}
-    try:
-        noncompliant = await reports.get_noncompliant_report(
-            client, org_id=org_id, group_id=group_id,
-        )
-    except (AutomoxAPIError, Exception) as exc:
-        errors.append(f"noncompliant_report: {exc}")
-
-    # 2. Device health metrics
-    health: dict[str, Any] = {}
-    try:
-        health = await devices.summarize_device_health(
+    raw_results = await asyncio.gather(
+        reports.get_noncompliant_report(client, org_id=org_id, group_id=group_id),
+        devices.summarize_device_health(
             client,
             org_id=org_id,
             group_id=group_id,
             include_unmanaged=False,
             limit=500,
             max_stale_devices=10,
-        )
-    except (AutomoxAPIError, Exception) as exc:
-        errors.append(f"device_health: {exc}")
-
-    # 3. Policy catalog summary
-    policy_summary: dict[str, Any] = {}
-    try:
-        catalog = await policy.summarize_policies(
+        ),
+        policy.summarize_policies(
             client, org_id=org_id, limit=200, page=0, include_inactive=False,
-        )
-        catalog_data = catalog.get("data") or {}
-        all_policies = catalog_data.get("policies") or []
-        type_counts: dict[str, int] = {}
-        status_counts: dict[str, int] = {}
-        for p in all_policies:
-            if isinstance(p, Mapping):
-                ptype = str(p.get("type", "unknown"))
-                type_counts[ptype] = type_counts.get(ptype, 0) + 1
-                pstatus = str(p.get("status", "unknown"))
-                status_counts[pstatus] = status_counts.get(pstatus, 0) + 1
-        policy_summary = {
-            "total_policies": catalog_data.get("total_count") or len(all_policies),
-            "by_type": type_counts,
-            "by_status": status_counts,
-        }
-    except (AutomoxAPIError, Exception) as exc:
-        errors.append(f"policy_catalog: {exc}")
+        ),
+        return_exceptions=True,
+    )
+
+    (noncompliant, health, catalog), errors = _settle(
+        raw_results, ("noncompliant_report", "device_health", "policy_catalog"),
+    )
+
+    policy_summary: dict[str, Any] = {}
+    catalog_data = catalog.get("data") or {}
+    all_policies = catalog_data.get("policies") or []
+    type_counts: dict[str, int] = {}
+    status_counts: dict[str, int] = {}
+    for p in all_policies:
+        if isinstance(p, Mapping):
+            ptype = str(p.get("type", "unknown"))
+            type_counts[ptype] = type_counts.get(ptype, 0) + 1
+            pstatus = str(p.get("status", "unknown"))
+            status_counts[pstatus] = status_counts.get(pstatus, 0) + 1
+    policy_summary = {
+        "total_policies": catalog_data.get("total_count") or len(all_policies),
+        "by_type": type_counts,
+        "by_status": status_counts,
+    }
 
     noncompliant_data = noncompliant.get("data") or {}
     health_data = health.get("data") or {}
@@ -213,46 +204,32 @@ async def get_device_full_profile(
     note indicating how many were omitted.  Use get_device_inventory or
     list_device_packages for full data.
     """
-    errors: list[str] = []
-    section_status: dict[str, str] = {}
+    labels = ("device_detail", "device_inventory", "device_packages")
 
-    # 1. Device detail (includes policy status, queue)
-    device_info: dict[str, Any] = {}
-    try:
-        device_info = await devices.describe_device(
+    raw_results = await asyncio.gather(
+        devices.describe_device(
             client,
             org_id=org_id,
             device_id=device_id,
             include_packages=False,
-            include_inventory=False,  # We'll get full inventory separately
+            include_inventory=False,
             include_queue=True,
-        )
-        section_status["device_detail"] = "complete"
-    except (AutomoxAPIError, Exception) as exc:
-        errors.append(f"device_detail: {exc}")
-        section_status["device_detail"] = "failed"
-
-    # 2. Full device inventory
-    inventory: dict[str, Any] = {}
-    try:
-        inventory = await devices.get_device_inventory(
+        ),
+        devices.get_device_inventory(
             client, org_id=org_id, device_id=device_id,
-        )
-        section_status["device_inventory"] = "complete"
-    except (AutomoxAPIError, Exception) as exc:
-        errors.append(f"device_inventory: {exc}")
-        section_status["device_inventory"] = "failed"
-
-    # 3. Package list (capped)
-    full_packages: dict[str, Any] = {}
-    try:
-        full_packages = await packages.list_device_packages(
+        ),
+        packages.list_device_packages(
             client, org_id=org_id, device_id=device_id, limit=max_packages,
-        )
-        section_status["device_packages"] = "complete"
-    except (AutomoxAPIError, Exception) as exc:
-        errors.append(f"device_packages: {exc}")
-        section_status["device_packages"] = "failed"
+        ),
+        return_exceptions=True,
+    )
+
+    (device_info, inventory, full_packages), errors = _settle(raw_results, labels)
+
+    section_status: dict[str, str] = {
+        label: "failed" if isinstance(result, BaseException) else "complete"
+        for result, label in zip(raw_results, labels)
+    }
 
     device_data = device_info.get("data") or {}
     inventory_data = inventory.get("data") or {}

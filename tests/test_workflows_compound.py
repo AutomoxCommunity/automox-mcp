@@ -1,13 +1,15 @@
-"""Tests for compound workflows (get_patch_tuesday_readiness, get_compliance_snapshot)."""
+"""Tests for compound workflows (get_patch_tuesday_readiness, get_compliance_snapshot, get_device_full_profile)."""
 
 import copy
 from typing import Any, cast
+from unittest.mock import AsyncMock
 
 import pytest
 
 from automox_mcp.client import AutomoxAPIError, AutomoxClient
 from automox_mcp.workflows.compound import (
     get_compliance_snapshot,
+    get_device_full_profile,
     get_patch_tuesday_readiness,
 )
 
@@ -375,3 +377,255 @@ async def test_compliance_snapshot_records_errors_on_partial_failure() -> None:
     assert any("noncompliant" in e for e in errors)
     # Policy summary should still be populated
     assert result["data"]["policy_summary"]["total_policies"] > 0
+
+
+# ---------------------------------------------------------------------------
+# Fixtures: get_device_full_profile
+# ---------------------------------------------------------------------------
+
+_DEVICE_DETAIL_RESPONSE: dict[str, Any] = {
+    "data": {
+        "core": {
+            "id": 101,
+            "name": "web-01",
+            "os_family": "Windows",
+            "ip_addrs": ["10.0.0.1"],
+            "connected": True,
+        },
+        "policy_assignments": {
+            "total": 2,
+            "policies": [
+                {"id": 301, "name": "Weekday Patching"},
+                {"id": 302, "name": "Custom Compliance"},
+            ],
+        },
+        "pending_commands": [{"command": "scan", "status": "queued"}],
+        "device_facts": {"os_version": "10.0.19045"},
+    },
+    "metadata": {},
+}
+
+_INVENTORY_RESPONSE: dict[str, Any] = {
+    "data": {
+        "device_id": 101,
+        "device_uuid": "dddddddd-dddd-dddd-dddd-dddddddddddd",
+        "total_categories": 2,
+        "total_items": 5,
+        "categories": {
+            "Hardware": {
+                "name": "Hardware",
+                "sub_categories": {
+                    "Processor": {
+                        "item_count": 2,
+                        "items": [
+                            {"name": "cpu_name", "friendly_name": "CPU Name", "value": "Intel i7", "type": "string", "collected_at": "2026-03-20T00:00:00Z"},
+                            {"name": "cpu_cores", "friendly_name": "CPU Cores", "value": 8, "type": "integer", "collected_at": "2026-03-20T00:00:00Z"},
+                        ],
+                    },
+                },
+            },
+            "Network": {
+                "name": "Network",
+                "sub_categories": {
+                    "Interfaces": {
+                        "item_count": 3,
+                        "items": [
+                            {"name": "mac_address", "friendly_name": "MAC Address", "value": "AA:BB:CC:DD:EE:FF", "type": "string", "collected_at": "2026-03-20T00:00:00Z"},
+                            {"name": "ip_address", "friendly_name": "IP Address", "value": "10.0.0.1", "type": "string", "collected_at": "2026-03-20T00:00:00Z"},
+                            {"name": "connected", "friendly_name": "Connected", "value": True, "type": "boolean", "collected_at": "2026-03-20T00:00:00Z"},
+                        ],
+                    },
+                },
+            },
+        },
+    },
+    "metadata": {},
+}
+
+_PACKAGES_RESPONSE: dict[str, Any] = {
+    "data": {
+        "device_id": 101,
+        "total_packages": 3,
+        "packages": [
+            {"id": 1, "name": "Chrome", "version": "120.0", "severity": "high"},
+            {"id": 2, "name": "Firefox", "version": "121.0", "severity": "medium"},
+            {"id": 3, "name": "curl", "version": "8.0", "severity": "low"},
+        ],
+    },
+    "metadata": {},
+}
+
+
+def _patch_sub_workflows(monkeypatch: pytest.MonkeyPatch, **overrides: Any) -> None:
+    """Monkeypatch the three sub-workflow functions called by get_device_full_profile.
+
+    Accesses the function's __globals__ to find the exact module objects it references,
+    which is necessary because test_tools.py invalidates sys.modules cache mid-suite.
+    """
+    fn_globals = get_device_full_profile.__globals__
+    devices_mod = fn_globals["devices"]
+    packages_mod = fn_globals["packages"]
+
+    monkeypatch.setattr(
+        devices_mod, "describe_device",
+        overrides.get("describe_device", AsyncMock(return_value=copy.deepcopy(_DEVICE_DETAIL_RESPONSE))),
+    )
+    monkeypatch.setattr(
+        devices_mod, "get_device_inventory",
+        overrides.get("get_device_inventory", AsyncMock(return_value=copy.deepcopy(_INVENTORY_RESPONSE))),
+    )
+    monkeypatch.setattr(
+        packages_mod, "list_device_packages",
+        overrides.get("list_device_packages", AsyncMock(return_value=copy.deepcopy(_PACKAGES_RESPONSE))),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Tests: get_device_full_profile
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_full_profile_returns_all_sections(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_sub_workflows(monkeypatch)
+    client = StubClient()
+
+    result = await get_device_full_profile(
+        cast(AutomoxClient, client), org_id=555, device_id=101,
+    )
+
+    data = result["data"]
+    assert data["device"]["name"] == "web-01"
+    assert data["policy_assignments"]["total"] == 2
+    assert len(data["pending_commands"]) == 1
+    assert data["inventory"]["total_categories"] == 2
+    assert data["inventory"]["total_items"] == 5
+    assert data["packages"]["total"] == 3
+    assert result["metadata"]["data_complete"] is True
+    assert result["metadata"]["errors"] is None
+
+
+@pytest.mark.asyncio
+async def test_full_profile_inventory_summarizes_key_values(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Inventory should be summarized with scalar key-values per sub-category."""
+    _patch_sub_workflows(monkeypatch)
+    client = StubClient()
+
+    result = await get_device_full_profile(
+        cast(AutomoxClient, client), org_id=555, device_id=101,
+    )
+
+    hw = result["data"]["inventory"]["categories"]["Hardware"]
+    assert hw["sub_category_count"] == 1
+    proc = hw["sub_categories"]["Processor"]
+    assert proc["item_count"] == 2
+    assert proc["key_values"]["CPU Name"] == "Intel i7"
+    assert proc["key_values"]["CPU Cores"] == 8
+
+
+@pytest.mark.asyncio
+async def test_full_profile_truncates_packages(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When total packages exceed max_packages, the list should be truncated."""
+    many_packages = {
+        "data": {
+            "device_id": 101,
+            "total_packages": 50,
+            "packages": [{"id": i, "name": f"pkg-{i}", "version": "1.0"} for i in range(50)],
+        },
+        "metadata": {},
+    }
+    _patch_sub_workflows(
+        monkeypatch,
+        list_device_packages=AsyncMock(return_value=many_packages),
+    )
+    client = StubClient()
+
+    result = await get_device_full_profile(
+        cast(AutomoxClient, client), org_id=555, device_id=101, max_packages=5,
+    )
+
+    pkg_section = result["data"]["packages"]
+    assert pkg_section["total"] == 50
+    assert pkg_section["returned"] == 5
+    assert pkg_section["truncated"] is True
+    assert "use list_device_packages" in pkg_section["note"]
+
+
+@pytest.mark.asyncio
+async def test_full_profile_no_truncation_when_within_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_sub_workflows(monkeypatch)
+    client = StubClient()
+
+    result = await get_device_full_profile(
+        cast(AutomoxClient, client), org_id=555, device_id=101,
+    )
+
+    pkg_section = result["data"]["packages"]
+    assert pkg_section["truncated"] is False
+    assert pkg_section["note"] is None
+
+
+@pytest.mark.asyncio
+async def test_full_profile_handles_partial_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    """If inventory fails, device detail and packages should still populate."""
+    _patch_sub_workflows(
+        monkeypatch,
+        get_device_inventory=AsyncMock(side_effect=AutomoxAPIError("Not Found", status_code=404)),
+    )
+    client = StubClient()
+
+    result = await get_device_full_profile(
+        cast(AutomoxClient, client), org_id=555, device_id=101,
+    )
+
+    assert result["metadata"]["data_complete"] is False
+    assert result["metadata"]["section_status"]["device_inventory"] == "failed"
+    assert result["metadata"]["section_status"]["device_detail"] == "complete"
+    assert result["metadata"]["section_status"]["device_packages"] == "complete"
+    assert any("device_inventory" in e for e in result["metadata"]["errors"])
+    # Other sections still populated
+    assert result["data"]["device"]["name"] == "web-01"
+    assert result["data"]["packages"]["total"] == 3
+
+
+@pytest.mark.asyncio
+async def test_full_profile_all_sections_fail(monkeypatch: pytest.MonkeyPatch) -> None:
+    """If all sub-workflows fail, result should be empty but structured."""
+    _patch_sub_workflows(
+        monkeypatch,
+        describe_device=AsyncMock(side_effect=AutomoxAPIError("Forbidden", status_code=403)),
+        get_device_inventory=AsyncMock(side_effect=AutomoxAPIError("Forbidden", status_code=403)),
+        list_device_packages=AsyncMock(side_effect=AutomoxAPIError("Forbidden", status_code=403)),
+    )
+    client = StubClient()
+
+    result = await get_device_full_profile(
+        cast(AutomoxClient, client), org_id=555, device_id=101,
+    )
+
+    assert result["metadata"]["data_complete"] is False
+    assert len(result["metadata"]["errors"]) == 3
+    for section in ("device_detail", "device_inventory", "device_packages"):
+        assert result["metadata"]["section_status"][section] == "failed"
+    # Data sections should be empty but present
+    assert result["data"]["device"] == {}
+    assert result["data"]["inventory"]["total_categories"] == 0
+    assert result["data"]["packages"]["total"] == 0
+
+
+@pytest.mark.asyncio
+async def test_full_profile_metadata_counts(monkeypatch: pytest.MonkeyPatch) -> None:
+    _patch_sub_workflows(monkeypatch)
+    client = StubClient()
+
+    result = await get_device_full_profile(
+        cast(AutomoxClient, client), org_id=555, device_id=101,
+    )
+
+    counts = result["metadata"]["counts"]
+    assert counts["inventory_categories"] == 2
+    assert counts["inventory_items"] == 5
+    assert counts["packages_total"] == 3
+    assert counts["packages_returned"] == 3
+    assert counts["policy_assignments"] == 2
+    assert counts["pending_commands"] == 1

@@ -95,6 +95,8 @@ def register(server: FastMCP) -> None:
                     "page": "Page number (0-indexed)",
                 },
             },
+            "source_url": "https://developer.automox.com/openapi/axconsole/operation/getServers/",
+            "last_verified": "2026-03-20",
         }
 
     @server.resource(
@@ -177,6 +179,8 @@ def register(server: FastMCP) -> None:
                     "a name with wildcards: filter_name='Chrome' becomes filters=['*Chrome*']"
                 ),
             },
+            "source_url": "https://developer.automox.com/openapi/axconsole/operation/createPolicy/",
+            "last_verified": "2026-03-20",
         }
 
     @server.resource(

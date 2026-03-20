@@ -32,6 +32,7 @@ automox-mcp = "automox_mcp:main"
 dev = [
   "pytest>=8.2",
   "pytest-asyncio>=0.23",
+  "pytest-cov>=6.0",
   "ruff>=0.4",
   "mypy>=1.9",
   "build>=1.2.2",
@@ -68,3 +69,10 @@ packages = ["automox_mcp"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["automox_mcp"]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true

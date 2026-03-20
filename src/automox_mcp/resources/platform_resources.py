@@ -146,14 +146,23 @@ def register(server: FastMCP) -> None:
                     "custom": "Custom patch selection logic",
                 },
             },
-            "package_statuses": {
-                "description": "Possible status values for software packages on a device",
-                "statuses": {
-                    "installed": "Package is installed and up to date",
-                    "available": "A newer version is available but not yet installed",
-                    "missing": "Package is required but not installed",
-                    "pending": "Package installation is queued or in progress",
+            "package_fields": {
+                "description": "Key fields returned for software packages on a device via list_device_packages",
+                "fields": {
+                    "installed": {
+                        "type": "boolean",
+                        "description": "true if the package is installed, false if available but not installed",
+                    },
+                    "is_managed": {
+                        "type": "boolean",
+                        "description": "true if the package is managed by an Automox policy",
+                    },
+                    "repo": {
+                        "type": "string",
+                        "description": "Source repository (e.g., 'Apple-System', 'homebrew', 'Microsoft')",
+                    },
                 },
+                "note": "Use search_devices with patch_status='missing' to find devices with uninstalled patches",
             },
             "filter_pattern_syntax": {
                 "description": "Wildcard patterns used in configuration.filters for patch policies",
@@ -184,44 +193,64 @@ def register(server: FastMCP) -> None:
             "os_families": {
                 "Windows": {
                     "agent_supported": True,
-                    "versions": [
-                        "Windows 11 (23H2, 22H2)",
-                        "Windows 10 (22H2, 21H2)",
-                        "Windows Server 2022",
-                        "Windows Server 2019",
-                        "Windows Server 2016",
-                        "Windows Server 2012 R2",
-                    ],
-                    "shell_types": ["PowerShell", "Cmd"],
+                    "versions": {
+                        "desktop": [
+                            "Windows 11 (x86-64, ARM64)",
+                            "Windows 10 (x86-32, x86-64)",
+                            "Windows 10 S (x86-64)",
+                        ],
+                        "server": [
+                            "Windows Server 2025 (x86-64)",
+                            "Windows Server 2025 Core (x86-64)",
+                            "Windows Server 2022 (x86-64)",
+                            "Windows Server 2019 (x86-64)",
+                            "Windows Server 2016 (x86-64)",
+                            "Windows Server 2012 R2 (x86-64)",
+                        ],
+                    },
+                    "source": "https://docs.automox.com/product/Product_Documentation/Agents/Agent_Requirements/Supported_Operating_Systems.htm",
+                    "shell_types": ["PowerShell"],
                     "worklet_support": True,
                 },
                 "Mac": {
                     "agent_supported": True,
                     "versions": [
-                        "macOS 15 (Sequoia)",
-                        "macOS 14 (Sonoma)",
-                        "macOS 13 (Ventura)",
-                        "macOS 12 (Monterey)",
+                        "macOS 26 (Tahoe) — x86-64, ARM64",
+                        "macOS 15 (Sequoia) — x86-64, ARM64",
+                        "macOS 14 (Sonoma) — x86-64, ARM64",
+                        "macOS 13 (Ventura) — x86-64, ARM64",
                     ],
-                    "shell_types": ["Bash", "Zsh"],
+                    "note": "Automox cannot guarantee patching after an OS reaches end-of-life. macOS 12 (Monterey) and earlier no longer receive testing support.",
+                    "source": "https://docs.automox.com/product/Product_Documentation/Agents/Agent_Requirements/Supported_Operating_Systems.htm",
+                    "shell_types": ["Bash"],
                     "worklet_support": True,
                 },
                 "Linux": {
                     "agent_supported": True,
-                    "distributions": [
-                        "Ubuntu 20.04, 22.04, 24.04",
-                        "CentOS 7, 8, 9 Stream",
-                        "Red Hat Enterprise Linux 7, 8, 9",
-                        "Amazon Linux 2, 2023",
-                        "Debian 10, 11, 12",
-                        "Fedora (latest two releases)",
-                        "Oracle Linux 7, 8, 9",
-                        "SUSE Linux Enterprise 12, 15",
-                        "openSUSE Leap 15",
-                        "Rocky Linux 8, 9",
-                        "Alma Linux 8, 9",
-                    ],
-                    "shell_types": ["Bash", "Zsh"],
+                    "distributions": {
+                        "rpm_based": [
+                            "Fedora 40, 41, 42, 43",
+                            "Red Hat Enterprise Linux (RHEL) 8, 9, 10",
+                            "CentOS Stream 8, 9, 10",
+                            "Rocky Linux 8, 9, 10",
+                            "AlmaLinux OS 8, 9, 10",
+                            "Oracle Linux 8, 9",
+                            "CloudLinux 9",
+                            "Amazon Linux 2, 2023",
+                        ],
+                        "deb_based": [
+                            "Debian 11, 12, 13",
+                            "Ubuntu 16, 18, 20, 22, 24",
+                            "Elementary OS 7",
+                            "Peppermint OS 11",
+                            "Zorin OS 16",
+                        ],
+                        "suse_based": [
+                            "SUSE Linux Enterprise Server (SLES) 15.5",
+                        ],
+                    },
+                    "source": "https://docs.automox.com/product/Product_Documentation/Agents/Agent_Requirements/Supported_Operating_Systems.htm",
+                    "shell_types": ["Bash"],
                     "worklet_support": True,
                 },
             },
@@ -230,6 +259,8 @@ def register(server: FastMCP) -> None:
                 "The os_name field on devices contains the full OS name (e.g., 'Microsoft Windows 11 Enterprise')",
                 "Use search_devices to find devices by platform",
             ],
+            "last_verified": "2026-03-20",
+            "note": "No Automox API endpoint exists for supported OS. This data is sourced from static documentation and may go stale. Re-verify periodically.",
         }
 
     @server.resource(

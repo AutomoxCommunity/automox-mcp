@@ -113,7 +113,7 @@ class AutomoxClient:
         self,
         path: str,
         *,
-        params: Mapping[str, Any] | None = None,
+        params: Mapping[str, Any] | Sequence[tuple[str, Any]] | None = None,
         headers: Mapping[str, str] | None = None,
     ) -> AutomoxResponse:
         return await self._request(
@@ -190,7 +190,7 @@ class AutomoxClient:
         method: str,
         path: str,
         *,
-        params: Mapping[str, Any] | None = None,
+        params: Mapping[str, Any] | Sequence[tuple[str, Any]] | None = None,
         json_data: Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
     ) -> AutomoxResponse:

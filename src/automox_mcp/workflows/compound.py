@@ -185,8 +185,8 @@ async def get_compliance_snapshot(
                 "devices": noncompliant_data.get("devices", []),
             },
             "device_health": {
-                "status_breakdown": health_data.get("status_breakdown", {}),
-                "check_in_recency": health_data.get("check_in_recency", {}),
+                "status_breakdown": health_data.get("device_status_breakdown", {}),
+                "check_in_recency": health_data.get("check_in_recency_breakdown", {}),
                 "stale_devices": health_data.get("stale_devices", []),
             },
             "policy_summary": policy_summary,

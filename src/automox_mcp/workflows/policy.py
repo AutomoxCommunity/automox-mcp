@@ -1016,6 +1016,8 @@ async def summarize_policies(
             policy_type = (
                 policy_item.get("policy_type_name") or policy_item.get("policy_type") or policy_item.get("type") or "unknown"
             ).lower()
+            if policy_type == "custom":
+                policy_type = "worklet"
             type_counts[policy_type] += 1
             status = _normalize_status(
                 policy_item.get("status") or ("active" if is_active else "inactive")
@@ -1030,7 +1032,7 @@ async def summarize_policies(
                         "policy_id": policy_item.get("id"),
                         "policy_uuid": policy_item.get("guid") or policy_item.get("uuid"),
                         "name": policy_item.get("name"),
-                        "type": policy_item.get("policy_type_name") or policy_item.get("policy_type") or policy_item.get("type"),
+                        "type": policy_type,
                         "status": policy_item.get("status"),
                         "targets": policy_item.get("target"),
                         "server_groups": policy_item.get("server_groups"),

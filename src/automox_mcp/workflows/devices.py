@@ -856,7 +856,20 @@ async def search_devices(
         params["patchStatus"] = patch_status
     severity_values: list[str] = []
     if isinstance(severity, str):
-        severity_values = [severity]
+        # Handle JSON-encoded arrays like '["critical", "high"]'
+        stripped = severity.strip()
+        if stripped.startswith("["):
+            import json
+            try:
+                parsed = json.loads(stripped)
+                if isinstance(parsed, list):
+                    severity_values = [str(v) for v in parsed]
+                else:
+                    severity_values = [severity]
+            except (json.JSONDecodeError, ValueError):
+                severity_values = [severity]
+        else:
+            severity_values = [severity]
     elif isinstance(severity, Sequence) and not isinstance(severity, (str, bytes, bytearray)):
         severity_values = [str(value) for value in severity]
     if severity_values:
@@ -864,12 +877,16 @@ async def search_devices(
             value.strip().lower() for value in severity_values if str(value).strip()
         ]
         if normalized_severity:
-            params["filters[severity][]"] = normalized_severity
             severity_values = normalized_severity
         else:
             severity_values = []
 
-    devices = await client.get("/servers", params=params)
+    # Build params as list of tuples so httpx repeats the severity key correctly
+    param_tuples = list(params.items())
+    for sev in severity_values:
+        param_tuples.append(("filters[severity][]", sev))
+
+    devices = await client.get("/servers", params=dict(params) if not severity_values else param_tuples)
     devices = devices if isinstance(devices, Sequence) else []
 
     filtered = []

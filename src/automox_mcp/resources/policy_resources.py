@@ -195,7 +195,7 @@ def register_policy_resources(server: FastMCP) -> None:
         return {
             "overview": {
                 "description": (
-                    "Automox supports three policy types: patch, custom, and required_software"
+                    "Automox supports three policy types: patch, worklet (custom), and required_software"
                 ),
                 "supported_types": ["patch", "custom", "required_software"],
                 "operations": ["create", "update"],
@@ -420,9 +420,9 @@ def register_policy_resources(server: FastMCP) -> None:
                         "shell_type": "str - Shell to use (depends on os_family)",
                     },
                     "shell_types_by_os": {
-                        "Windows": ["PowerShell", "Cmd"],
-                        "Mac": ["Bash", "Zsh"],
-                        "Linux": ["Bash", "Zsh"],
+                        "Windows": ["PowerShell"],
+                        "Mac": ["Bash"],
+                        "Linux": ["Bash"],
                     },
                     "examples": {
                         "check_service": {

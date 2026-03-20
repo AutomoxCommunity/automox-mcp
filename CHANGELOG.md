@@ -9,7 +9,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-#### New Tool Domains (18 new tools)
+#### Phase 2: Compound Tools, Inventory & Resources (8 new tools, 4 new resources)
+
+- **Compound Workflows** (3 tools)
+  - `get_patch_tuesday_readiness` — Combined pre-patch report + pending approvals + patch policy schedules with per-device severity classification
+  - `get_compliance_snapshot` — Combined non-compliant report + device health metrics + policy stats with computed compliance rate
+  - `get_device_full_profile` — Device detail + inventory summary + packages + policy assignments in one call with section status tracking and data completeness verification
+
+- **Device Inventory** (2 tools)
+  - `get_device_inventory` — Retrieve device inventory via Console API (`/device-details/orgs/{uuid}/devices/{uuid}/inventory`) with category filtering (Hardware, Health, Network, Security, Services, Summary, System, Users)
+  - `get_device_inventory_categories` — List available inventory categories for a device (dynamic per device)
+
+- **Policy CRUD** (3 tools)
+  - `clone_policy` — Clone an existing policy with optional name and server group overrides; includes fallback ID lookup when API returns empty body
+  - `delete_policy` — Permanently delete a policy by ID
+  - `policy_compliance_stats` — Per-policy compliance rates from `/policystats` endpoint
+
+- **MCP Resources** (4 new, 9 total)
+  - `resource://filters/syntax` — Device filtering reference for search_devices, policy device_filters, and list_devices
+  - `resource://patches/categories` — Severity levels, patch_rule options, package fields, and filter pattern syntax
+  - `resource://platform/supported-os` — Supported OS matrix (Windows, Mac, Linux) with versions, architectures, shell types, and Linux distros — verified against official Automox docs with source URLs
+  - `resource://api/rate-limits` — MCP server rate limiter config, Automox API throttling guidance, and efficiency tips
+
+### Changed
+
+- `summarize_policies` — Policy type detection now checks `policy_type_name` field first; maps `custom` to `worklet` in catalog output
+- `summarize_policies` — Inactive policy filtering now uses `status` field when `active`/`enabled`/`is_active` flags are absent
+- `summarize_policies` — Preview dict now includes `server_groups`, `schedule_days`, and `schedule_time` fields
+- `get_prepatch_report` — Now paginates automatically to fetch all devices; computes per-device severity from CVE data; distinguishes `total_org_devices` from `devices_needing_patches`
+- `get_compliance_snapshot` — Health field mappings corrected (`device_status_breakdown`, `check_in_recency_breakdown`)
+- `describe_device` — Inventory call now uses proper org UUID resolution instead of relying on device response containing org_uuid
+- `search_devices` — Multi-severity filtering now works (parses JSON string arrays); uses list-of-tuples for repeated query params
+- `policy_resources.py` — Shell types corrected to Bash only for Mac/Linux, PowerShell only for Windows; added worklet terminology
+- `platform_resources.py` — OS lists updated from official Automox docs; package statuses replaced with actual API fields; added source URLs and last_verified dates
+- `README.md` — Updated to document all 44 tools, 9 resources, 10 modules, and new compound/inventory capabilities
+- API client `get()` method now accepts `Sequence[tuple[str, Any]]` params for repeated query keys
+
+### Fixed
+
+- Policy type detection: `policy_type_name` not checked, causing patch policies to be unrecognized in compound tools
+- Inactive policy filtering: `status: "inactive"` policies not filtered when `active`/`enabled` fields absent from API response
+- Prepatch report severity: API summary didn't account for all devices; now computed per-device from CVE data
+- Prepatch report total: `total` field from API means org device count, not devices needing patches
+- Compound tool field mappings: `id` vs `policy_id`, missing schedule/server_groups fields in patch tuesday readiness
+- Compliance snapshot: `status_breakdown` and `check_in_recency` empty due to field name mismatch with device health workflow
+- Clone policy: API returns empty body; added fallback name-based lookup for new policy ID
+- Clone policy: 500 errors from sending read-only fields; expanded `_READ_ONLY_POLICY_FIELDS` set
+- Multi-severity search: JSON string array `'["critical", "high"]'` not parsed; added JSON deserialization
+
+#### Phase 1: Core Gaps (18 new tools)
 
 - **Package Management** (2 tools)
   - `list_device_packages` — List software packages installed on a specific device with version, patch status, and severity
@@ -45,8 +93,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### Configuration
 
-- **Read-Only Mode** (`AUTOMOX_MCP_READ_ONLY`) — When set to `true`, all 14 destructive tools are excluded at registration time, leaving 22 read-only tools. Useful for audit, reporting, and monitoring use cases.
-- **Modular Architecture** (`AUTOMOX_MCP_MODULES`) — Comma-separated list of module names to selectively load. Available modules: `audit`, `devices`, `policies`, `users`, `groups`, `events`, `reports`, `packages`, `webhooks`. Unset loads all modules.
+- **Read-Only Mode** (`AUTOMOX_MCP_READ_ONLY`) — When set to `true`, all 16 destructive tools are excluded at registration time, leaving 28 read-only tools. Useful for audit, reporting, and monitoring use cases.
+- **Modular Architecture** (`AUTOMOX_MCP_MODULES`) — Comma-separated list of module names to selectively load. Available modules: `audit`, `devices`, `policies`, `users`, `groups`, `events`, `reports`, `packages`, `webhooks`, `compound`. Unset loads all modules.
 
 #### Infrastructure
 
@@ -66,7 +114,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `workflows/__init__.py` — Exports all new workflow functions; `__all__` alphabetically sorted
 - `resources/__init__.py` — Registers webhook resources
 - `server.py` — Updated server instructions to document new capabilities, resources, and webhook guidance; added startup validation for `AUTOMOX_ORG_ID`
-- `README.md` — Updated to document all 36 tools, 5 MCP resources, read-only mode, modular architecture, and new configuration options
+- `README.md` — Updated to document all 44 tools, 9 MCP resources, read-only mode, modular architecture, and new configuration options
 
 ### Fixed
 

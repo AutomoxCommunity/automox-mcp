@@ -21,11 +21,12 @@ common operational scenarios.
 ## Table of Contents
 
 - [Available Tools](#available-tools)
-  - [Device Management (6 tools)](#device-management-6-tools)
-  - [Policy Management (9 tools)](#policy-management-9-tools)
+  - [Device Management (8 tools)](#device-management-8-tools)
+  - [Policy Management (12 tools)](#policy-management-12-tools)
   - [Package Management (2 tools)](#package-management-2-tools)
   - [Group Management (5 tools)](#group-management-5-tools)
   - [Webhook Management (8 tools)](#webhook-management-8-tools)
+  - [Compound Workflows (3 tools)](#compound-workflows-3-tools)
   - [Events (1 tool)](#events-1-tool)
   - [Reports (2 tools)](#reports-2-tools)
   - [Account Management (2 tools)](#account-management-2-tools)
@@ -58,26 +59,31 @@ common operational scenarios.
 
 ## Available Tools
 
-The MCP server exposes 36 workflow tools designed for common Automox management tasks:
+The MCP server exposes 44 workflow tools designed for common Automox management tasks:
 
-### Device Management (6 tools)
+### Device Management (8 tools)
 - **`list_devices`** - Summarize device inventory and policy status across the organization. Includes unmanaged devices by default and supports `policy_status`/`managed` filters so you can zero in on, for example, non-compliant managed endpoints.
 - **`device_detail`** - Return curated device context (recent policy status, assignments, queued commands, key facts). Pass `include_raw_details=true` only when you explicitly need a sanitized slice of the raw Automox payload.
 - **`devices_needing_attention`** - Surface Automox devices flagged for immediate action.
-- **`search_devices`** - Search Automox devices by hostname, IP, tag, status, or severity of missing patches.
+- **`search_devices`** - Search Automox devices by hostname, IP, tag, status, or severity of missing patches. Supports multi-severity filtering (e.g., `["critical", "high"]`).
 - **`device_health_metrics`** - Aggregate device health metrics for the organization. Supply `limit` to sample fewer devices (default 500) and `max_stale_devices` to cap the stale-device list for token-friendly responses.
+- **`get_device_inventory`** - Retrieve detailed device inventory data (hardware, network, security, services, system, users) via the Console API device-details endpoint. Optionally filter by category.
+- **`get_device_inventory_categories`** - List available inventory categories for a device. Categories are dynamic per device.
 - **`execute_device_command`** - Issue an immediate command to a device (scan, patch_all, patch_specific, reboot).
 
-### Policy Management (9 tools)
+### Policy Management (12 tools)
 - **`policy_health_overview`** - Summarize recent Automox policy activity. Omit `org_uuid` to let the server resolve it from `AUTOMOX_ORG_ID` / `AUTOMOX_ORG_UUID`.
 - **`policy_execution_timeline`** - Review recent executions for a policy.
 - **`policy_run_results`** - Fetch per-device results (stdout, stderr, exit codes) for a specific execution token returned by `policy_execution_timeline`.
 - **`policy_catalog`** - List Automox policies with type and status summaries. Supports `page` (0-indexed) and `limit` pagination; inspect `metadata.pagination.has_more`, read `metadata.notes`, and follow the optional `metadata.suggested_next_call` hint to keep fetching additional slices when needed.
 - **`policy_detail`** - Retrieve configuration and recent history for a policy.
-- **`apply_policy_changes`** - Preview or submit structured policy create/update operations. Automatically normalizes helper fields (`filter_name`, `filter_names`) and friendly schedule blocks into Automox’s expected payloads, ensuring required fields (e.g., `schedule_days`, `schedule_time`) are present before submission.
+- **`policy_compliance_stats`** - Retrieve per-policy compliance statistics showing compliant vs. non-compliant device counts and compliance rates.
+- **`apply_policy_changes`** - Preview or submit structured policy create/update operations. Automatically normalizes helper fields (`filter_name`, `filter_names`) and friendly schedule blocks into Automox's expected payloads, ensuring required fields (e.g., `schedule_days`, `schedule_time`) are present before submission.
 - **`patch_approvals_summary`** - Summarize pending patch approvals and their severity.
 - **`decide_patch_approval`** - Approve or reject an Automox patch approval request.
 - **`execute_policy_now`** - Execute a policy immediately for remediation (all devices or specific device).
+- **`clone_policy`** - Clone an existing policy with optional name and server group overrides.
+- **`delete_policy`** - Permanently delete a policy by ID.
 
 ### Package Management (2 tools)
 - **`list_device_packages`** - List software packages installed on a specific device. Returns package names, versions, patch status, and severity.
@@ -94,11 +100,16 @@ The MCP server exposes 36 workflow tools designed for common Automox management 
 - **`list_webhook_event_types`** - List all available webhook event types with descriptions. Use this to discover which events can trigger webhook deliveries.
 - **`list_webhooks`** - List all webhook subscriptions for the organization. Supports cursor-based pagination.
 - **`get_webhook`** - Retrieve details for a specific webhook subscription.
-- **`create_webhook`** - Create a new webhook subscription. The response includes a signing secret that is **only shown once** — save it immediately. Max 5 webhooks per organization; URL must be HTTPS.
+- **`create_webhook`** - Create a new webhook subscription. The response includes a signing secret that is **only shown once** -- save it immediately. Max 5 webhooks per organization; URL must be HTTPS.
 - **`update_webhook`** - Update an existing webhook (partial update). Can change name, URL, enabled status, or event types.
 - **`delete_webhook`** - Delete a webhook subscription permanently.
 - **`test_webhook`** - Send a test delivery to a webhook endpoint. Returns success status, HTTP status code, and response time.
-- **`rotate_webhook_secret`** - Rotate the signing secret for a webhook. The old secret is immediately invalidated. Save the new secret — it is only shown once.
+- **`rotate_webhook_secret`** - Rotate the signing secret for a webhook. The old secret is immediately invalidated. Save the new secret -- it is only shown once.
+
+### Compound Workflows (3 tools)
+- **`get_patch_tuesday_readiness`** - Combined view of pre-patch report, pending approvals, and patch policy schedules. Answers "Are we ready for Patch Tuesday?" in a single call. Includes per-device severity classification computed from CVE data.
+- **`get_compliance_snapshot`** - Combined view of non-compliant devices, fleet health metrics, and policy statistics. Answers "What is our compliance posture?" in a single call. Includes compliance rate, device health breakdown, and stale device detection.
+- **`get_device_full_profile`** - Complete device profile combining device detail, inventory summary, packages, and policy assignments in a single call. Inventory is summarized with key values per category; packages capped at 25 by default. Metadata includes per-section status, data completeness flag, and item counts for verification.
 
 ### Events (1 tool)
 - **`list_events`** - List organization events with optional filters by policy, device, user, event name, or date range.
@@ -116,7 +127,7 @@ The MCP server exposes 36 workflow tools designed for common Automox management 
 
 ### MCP Resources
 
-The server also exposes 5 MCP resources that provide reference data and schemas:
+The server also exposes 9 MCP resources that provide reference data and schemas:
 
 | Resource URI | Description |
 |---|---|
@@ -125,10 +136,58 @@ The server also exposes 5 MCP resources that provide reference data and schemas:
 | `resource://policies/schedule-syntax` | Schedule bitmask syntax reference |
 | `resource://servergroups/list` | Live server group ID-to-name mapping |
 | `resource://webhooks/event-types` | All 39 webhook event types with categories, descriptions, and delivery limits |
+| `resource://filters/syntax` | Device filtering reference (search_devices params, policy device_filters, list_devices filters) |
+| `resource://patches/categories` | Severity levels, patch_rule options, package fields, and filter pattern syntax |
+| `resource://platform/supported-os` | Supported OS matrix (Windows, Mac, Linux) with versions, architectures, shell types, and Linux distros -- verified against official Automox docs |
+| `resource://api/rate-limits` | MCP server rate limiter config, Automox API throttling guidance, and efficiency tips |
 
 ### Example Workflows
 
 Below are some real-world examples of how you can utilize the MCP server with your AI assistant.
+
+#### Patch Tuesday Readiness
+
+Check if your organization is ready for Patch Tuesday:
+
+```
+Ask: "Are we ready for Patch Tuesday?"
+```
+
+The MCP server will return a combined view including:
+- Devices needing patches with per-device severity (critical, high, medium, etc.)
+- Pending patch approvals
+- Active patch policy schedules with days, times, and target groups
+- A readiness summary with accurate counts
+
+#### Full Device Profile
+
+Get a complete picture of any device:
+
+```
+Ask: "Give me the full profile for the Caldera server"
+```
+
+The MCP server will return in a single call:
+- Device details (OS, agent version, status, IP, group)
+- Hardware/software inventory summarized by category (hardware, network, security, etc.)
+- Installed packages
+- Policy assignments and compliance status
+- Pending commands and device facts
+
+#### Compliance Snapshot
+
+Understand your organization's compliance posture:
+
+```
+Ask: "What is our compliance posture?"
+```
+
+The MCP server will return:
+- Compliance rate (compliant vs. non-compliant devices)
+- Non-compliant devices with failing policies identified
+- Device health breakdown (status, check-in recency)
+- Stale devices that haven't checked in recently
+- Policy summary by type (worklet, patch, required software)
 
 #### Device Health Summary
 
@@ -218,14 +277,15 @@ The AI can:
 ### Tool Parameters
 
 Most tools accept optional parameters for filtering and pagination:
-- **Device tools**: `group_id`, `limit`, `include_unmanaged`, `device_id`
+- **Device tools**: `group_id`, `limit`, `include_unmanaged`, `device_id`, `category`
 - **Policy tools**: `org_uuid` (optional; auto-resolved from configured Automox org), `window_days`, `report_days`, `policy_id`
-- **Search tools**: `hostname_contains`, `ip_address`, `tag`, `patch_status`
+- **Search tools**: `hostname_contains`, `ip_address`, `tag`, `patch_status`, `severity` (string or list)
 - **Package tools**: `device_id`, `include_unmanaged`, `awaiting`, `page`, `limit`
 - **Group tools**: `group_id`, `name`, `refresh_interval`, `parent_server_group_id`, `policies`, `page`, `limit`
 - **Webhook tools**: `org_uuid` (optional; auto-resolved), `webhook_id`, `name`, `url`, `event_types`, `enabled`, `cursor`, `limit`
 - **Event tools**: `policy_id`, `server_id`, `user_id`, `event_name`, `start_date`, `end_date`, `page`, `limit`
 - **Report tools**: `group_id`, `limit`, `offset`
+- **Compound tools**: `group_id`, `device_id`, `max_packages`
 - **Audit tools**: `date`, `actor_email`, `actor_uuid`, `cursor`, `limit`, `include_raw_events`, `org_uuid` (optional)
 - **Execution tools**:
   - `execute_policy_now`: `policy_id` (required), `action` (remediateAll or remediateDevice), `device_id` (optional, required for remediateDevice)
@@ -237,7 +297,7 @@ Most tools accept optional parameters for filtering and pagination:
 
 ### Read-Only Mode
 
-Set `AUTOMOX_MCP_READ_ONLY=true` to disable all write operations. In this mode, only read-only tools are registered (22 of 36 tools). Destructive tools like `execute_device_command`, `apply_policy_changes`, `create_webhook`, `delete_server_group`, etc. will not be available.
+Set `AUTOMOX_MCP_READ_ONLY=true` to disable all write operations. In this mode, only read-only tools are registered (28 of 44 tools). Destructive tools like `execute_device_command`, `apply_policy_changes`, `create_webhook`, `delete_server_group`, `clone_policy`, `delete_policy`, etc. will not be available.
 
 This is useful for auditing, reporting, and monitoring use cases where you want to prevent accidental modifications.
 
@@ -249,7 +309,7 @@ AUTOMOX_MCP_READ_ONLY=true
 
 Set `AUTOMOX_MCP_MODULES` to a comma-separated list of module names to load only the tools you need. This reduces the tool surface area for focused use cases and improves token efficiency.
 
-Available modules: `audit`, `devices`, `policies`, `users`, `groups`, `events`, `reports`, `packages`, `webhooks`
+Available modules: `audit`, `devices`, `policies`, `users`, `groups`, `events`, `reports`, `packages`, `webhooks`, `compound`
 
 ```bash
 # Only load device and policy tools
@@ -257,6 +317,9 @@ AUTOMOX_MCP_MODULES=devices,policies
 
 # Only load webhook management
 AUTOMOX_MCP_MODULES=webhooks
+
+# Load compound tools for high-level workflows
+AUTOMOX_MCP_MODULES=compound
 
 # Load everything (default when variable is unset)
 # AUTOMOX_MCP_MODULES=
@@ -284,9 +347,9 @@ AUTOMOX_MCP_MODULES=devices,policies
 
 #### Finding the values in your console
 
-- **API Key**: Log in to Automox Console → Ellipsis (Top Right) → Secrets & Keys → Add API Key ([Docs](https://docs.automox.com/product/Product_Documentation/Settings/Managing_Keys.htm)). Both global and org-scoped keys are supported.
+- **API Key**: Log in to Automox Console -> Ellipsis (Top Right) -> Secrets & Keys -> Add API Key ([Docs](https://docs.automox.com/product/Product_Documentation/Settings/Managing_Keys.htm)). Both global and org-scoped keys are supported.
 - **Account UUID**: Also found in Secrets & Keys section.
-- **Org ID**: Your organization's numeric identifier — you can usually find this in the URL when managing your organization in the Automox Console. This is required even when using a global API key, as it tells the server which organization to operate against.
+- **Org ID**: Your organization's numeric identifier -- you can usually find this in the URL when managing your organization in the Automox Console. This is required even when using a global API key, as it tells the server which organization to operate against.
 
 ### Environment Configuration
 
@@ -470,6 +533,6 @@ When preparing a release:
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
 
 ## Support
-This is a community-driven project, actively maintained but not officially supported by Automox. 
+This is a community-driven project, actively maintained but not officially supported by Automox.
 
 To request assistance, please open a GitHub Issue. This is the appropriate channel for questions, bug reports, feature requests, enhancement suggestions, and documentation updates.

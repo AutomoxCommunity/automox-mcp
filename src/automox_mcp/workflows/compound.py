@@ -202,12 +202,19 @@ async def get_device_full_profile(
     *,
     org_id: int,
     device_id: int,
+    max_packages: int = 25,
 ) -> dict[str, Any]:
     """Combine device detail, packages, inventory, and policy status into one view.
 
     Answers: "Give me the full profile for [device]."
+
+    Inventory is summarized (counts + key values per category) to keep
+    the response readable.  Packages are capped at *max_packages* with a
+    note indicating how many were omitted.  Use get_device_inventory or
+    list_device_packages for full data.
     """
     errors: list[str] = []
+    section_status: dict[str, str] = {}
 
     # 1. Device detail (includes policy status, queue)
     device_info: dict[str, Any] = {}
@@ -220,8 +227,10 @@ async def get_device_full_profile(
             include_inventory=False,  # We'll get full inventory separately
             include_queue=True,
         )
+        section_status["device_detail"] = "complete"
     except (AutomoxAPIError, Exception) as exc:
         errors.append(f"device_detail: {exc}")
+        section_status["device_detail"] = "failed"
 
     # 2. Full device inventory
     inventory: dict[str, Any] = {}
@@ -229,39 +238,100 @@ async def get_device_full_profile(
         inventory = await devices.get_device_inventory(
             client, org_id=org_id, device_id=device_id,
         )
+        section_status["device_inventory"] = "complete"
     except (AutomoxAPIError, Exception) as exc:
         errors.append(f"device_inventory: {exc}")
+        section_status["device_inventory"] = "failed"
 
-    # 3. Full package list
+    # 3. Package list (capped)
     full_packages: dict[str, Any] = {}
     try:
         full_packages = await packages.list_device_packages(
-            client, org_id=org_id, device_id=device_id, limit=500,
+            client, org_id=org_id, device_id=device_id, limit=max_packages,
         )
+        section_status["device_packages"] = "complete"
     except (AutomoxAPIError, Exception) as exc:
         errors.append(f"device_packages: {exc}")
+        section_status["device_packages"] = "failed"
 
     device_data = device_info.get("data") or {}
     inventory_data = inventory.get("data") or {}
     packages_data = full_packages.get("data") or {}
 
+    # Summarize inventory: counts + key values per category (not full data)
+    raw_categories = inventory_data.get("categories") or {}
+    inventory_summary: dict[str, Any] = {}
+    for cat_name, cat_content in raw_categories.items():
+        sub_cats = cat_content.get("sub_categories", {})
+        sub_summaries: dict[str, Any] = {}
+        for sub_name, sub_content in sub_cats.items():
+            items = sub_content.get("items", [])
+            # Extract key-value pairs for simple scalar items
+            key_values: dict[str, Any] = {}
+            for item in items:
+                val = item.get("value")
+                friendly = item.get("friendly_name") or item.get("name")
+                # Only include scalar values (skip large nested structures)
+                if isinstance(val, (str, int, float, bool)) and val != "":
+                    key_values[friendly] = val
+            sub_summaries[sub_name] = {
+                "item_count": sub_content.get("item_count", 0),
+                "key_values": key_values if key_values else None,
+            }
+        inventory_summary[cat_name] = {
+            "sub_category_count": len(sub_cats),
+            "item_count": sum(
+                s.get("item_count", 0) for s in sub_cats.values()
+            ),
+            "sub_categories": sub_summaries,
+        }
+
+    total_inventory_items = inventory_data.get("total_items", 0)
+
+    # Cap packages
+    all_packages = packages_data.get("packages", [])
+    total_packages = packages_data.get("total_packages", 0)
+    packages_preview = all_packages[:max_packages]
+    packages_truncated = total_packages > len(packages_preview)
+
+    # Policy assignments
+    policy_assignments = device_data.get("policy_assignments", {})
+    total_policies = policy_assignments.get("total", 0)
+
     return {
         "data": {
             "device": device_data.get("core", {}),
-            "policy_assignments": device_data.get("policy_assignments", {}),
+            "policy_assignments": policy_assignments,
             "pending_commands": device_data.get("pending_commands", []),
             "device_facts": device_data.get("device_facts"),
             "inventory": {
-                "total_categories": inventory_data.get("total_categories", 0),
-                "total_items": inventory_data.get("total_items", 0),
-                "categories": inventory_data.get("categories", {}),
+                "total_categories": len(inventory_summary),
+                "total_items": total_inventory_items,
+                "categories": inventory_summary,
+                "note": "Summarized view — use get_device_inventory for full data",
             },
             "packages": {
-                "total": packages_data.get("total_packages", 0),
-                "packages": packages_data.get("packages", []),
+                "total": total_packages,
+                "returned": len(packages_preview),
+                "truncated": packages_truncated,
+                "packages": packages_preview,
+                "note": (
+                    f"Showing {len(packages_preview)} of {total_packages} packages — "
+                    "use list_device_packages for full list"
+                ) if packages_truncated else None,
             },
         },
         "metadata": {
             "errors": errors if errors else None,
+            "section_status": section_status,
+            "data_complete": not errors,
+            "counts": {
+                "inventory_categories": len(inventory_summary),
+                "inventory_items": total_inventory_items,
+                "packages_total": total_packages,
+                "packages_returned": len(packages_preview),
+                "policy_assignments": total_policies,
+                "pending_commands": len(device_data.get("pending_commands", [])),
+            },
         },
     }

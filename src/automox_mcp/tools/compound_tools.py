@@ -121,15 +121,18 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
     @server.tool(
         name="get_device_full_profile",
         description=(
-            "Complete device profile combining device detail, full package list, "
-            "hardware/software inventory, and policy assignments in a single call. "
-            "Answers 'Give me the full profile for this device.'"
+            "Complete device profile combining device detail, inventory summary, "
+            "packages, and policy assignments in a single call. Inventory is "
+            "summarized with key values per category. Packages capped at "
+            "max_packages (default 25). Use get_device_inventory or "
+            "list_device_packages for full data."
         ),
     )
     async def get_device_full_profile(
         device_id: int,
+        max_packages: int = 25,
     ) -> dict[str, Any]:
-        params: dict[str, Any] = {"device_id": device_id}
+        params: dict[str, Any] = {"device_id": device_id, "max_packages": max_packages}
         return await _call(
             workflows.compound.get_device_full_profile, params,
         )

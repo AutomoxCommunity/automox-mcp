@@ -52,6 +52,10 @@ _READ_ONLY_POLICY_FIELDS = {
     "next_remediation",
     "policy_uuid",
     "account_id",
+    "community_worklet_id",
+    "community_worklet_uuid",
+    "policy_template_id",
+    "policy_template_uuid",
 }
 _OPERATION_CORE_KEYS = {"action", "policy", "policy_id", "merge_existing"}
 _DAY_NAME_TO_BITMASK = {
@@ -1826,6 +1830,8 @@ async def clone_policy(
 
     if server_groups is not None:
         payload["server_groups"] = server_groups
+    elif payload.get("server_groups") is None:
+        payload["server_groups"] = []
 
     response = await client.post("/policies", json_data=payload, params=params)
 
@@ -1834,6 +1840,19 @@ async def clone_policy(
         if isinstance(response, Mapping)
         else None
     )
+
+    # API may return empty body — search for the clone by name to get the ID
+    if new_policy_id is None:
+        clone_name = payload.get("name")
+        try:
+            all_policies = await client.get("/policies", params={"o": resolved_org_id})
+            if isinstance(all_policies, Sequence):
+                for p in reversed(list(all_policies)):
+                    if isinstance(p, Mapping) and p.get("name") == clone_name:
+                        new_policy_id = p.get("id")
+                        break
+        except Exception:
+            pass  # Best-effort — return None if lookup fails
 
     return {
         "data": {

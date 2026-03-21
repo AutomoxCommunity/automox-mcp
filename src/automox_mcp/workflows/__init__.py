@@ -2,14 +2,28 @@
 
 from __future__ import annotations
 
-from . import account, audit, compound, devices, events, groups, packages, policy, reports, webhooks
+from . import (
+    account,
+    audit,
+    compound,
+    device_commands,
+    device_inventory,
+    devices,
+    events,
+    groups,
+    packages,
+    policy,
+    policy_crud,
+    reports,
+    webhooks,
+)
 from .account import invite_user_to_account, remove_user_from_account
 from .audit import audit_trail_user_activity
+from .compound import get_compliance_snapshot, get_device_full_profile, get_patch_tuesday_readiness
+from .device_commands import issue_device_command
+from .device_inventory import get_device_inventory, get_device_inventory_categories
 from .devices import (
     describe_device,
-    get_device_inventory,
-    get_device_inventory_categories,
-    issue_device_command,
     list_device_inventory,
     list_devices_needing_attention,
     search_devices,
@@ -25,21 +39,22 @@ from .groups import (
 )
 from .packages import list_device_packages, search_org_packages
 from .policy import (
-    apply_policy_changes,
-    clone_policy,
-    delete_policy,
     describe_policy,
     describe_policy_run_result,
-    execute_policy,
     get_policy_compliance_stats,
-    normalize_policy_operations_input,
-    resolve_patch_approval,
     summarize_patch_approvals,
     summarize_policies,
     summarize_policy_activity,
     summarize_policy_execution_history,
 )
-from .compound import get_compliance_snapshot, get_device_full_profile, get_patch_tuesday_readiness
+from .policy_crud import (
+    apply_policy_changes,
+    clone_policy,
+    delete_policy,
+    execute_policy,
+    normalize_policy_operations_input,
+    resolve_patch_approval,
+)
 from .reports import get_noncompliant_report, get_prepatch_report
 from .webhooks import (
     create_webhook,
@@ -56,9 +71,12 @@ __all__ = [
     "account",
     "audit",
     "compound",
+    "device_commands",
+    "device_inventory",
     "devices",
     "events",
     "groups",
+    "policy_crud",
     "packages",
     "policy",
     "reports",

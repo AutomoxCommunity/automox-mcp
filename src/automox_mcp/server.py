@@ -24,7 +24,7 @@ else:
     _load_dotenv_fn = _dotenv_loader
 
 
-def _patch_stdio_transport() -> None:
+def _patch_stdio_transport() -> None:  # pragma: no cover - patches MCP internals
     """Ensure stdio transport shuts down gracefully when pipes close."""
     try:
         from mcp.server import stdio as stdio_module
@@ -138,10 +138,10 @@ def _validate_env() -> None:
     if org_id_raw is not None:
         try:
             org_id_int = int(org_id_raw)
-        except ValueError:
+        except ValueError as exc:
             raise RuntimeError(
                 f"AUTOMOX_ORG_ID must be a positive integer, got: {org_id_raw!r}"
-            )
+            ) from exc
         if org_id_int <= 0:
             raise RuntimeError(
                 f"AUTOMOX_ORG_ID must be a positive integer, got: {org_id_int}"
@@ -161,8 +161,19 @@ def create_server() -> FastMCP:
     _patch_stdio_transport()
     _load_env_file()
     _validate_env()
+
+    from contextlib import asynccontextmanager
+
+    client = AutomoxClient()
+
+    @asynccontextmanager
+    async def _lifespan(app):
+        yield
+        await client.aclose()
+
     server: FastMCP = FastMCP(
         name="Automox MCP",
+        lifespan=_lifespan,
         instructions=(
             "Curated Automox workflows for policy health, device insights, remediation, "
             "account management, server group management, package/patch visibility, "
@@ -212,9 +223,6 @@ def create_server() -> FastMCP:
         ),
     )
 
-    # Shared client — reused across all tool calls to avoid per-call TCP/TLS overhead
-    client = AutomoxClient()
-
     # Register tools and resources
     register_tools(server, client=client)
     register_resources(server, client=client)
@@ -225,7 +233,7 @@ def create_server() -> FastMCP:
 __all__ = ["create_server"]
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     server: FastMCP = create_server()
     run = getattr(server, "run", None)
     if callable(run):

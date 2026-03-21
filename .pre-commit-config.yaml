@@ -9,3 +9,9 @@ repos:
     rev: v1.18.2
     hooks:
       - id: mypy
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.8.3
+    hooks:
+      - id: bandit
+        args: ["-r", "src/", "-c", "pyproject.toml"]
+        pass_filenames: false

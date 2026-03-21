@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 from collections.abc import Sequence
 
 from fastmcp import FastMCP
 
 from .server import create_server
+
+logger = logging.getLogger(__name__)
 
 
 class _LazyServer:
@@ -126,6 +129,17 @@ def main(argv: Sequence[str] | None = None) -> None:
             # Provide sensible defaults that mirror the FastMCP CLI.
             transport_kwargs.setdefault("host", "127.0.0.1")
             transport_kwargs.setdefault("port", 8000)
+
+        resolved_host = str(transport_kwargs.get("host", "127.0.0.1"))
+        _LOOPBACK = {"127.0.0.1", "::1", "localhost"}
+        if resolved_host not in _LOOPBACK:
+            logger.warning(
+                "Binding %s transport to non-loopback address %s — the MCP server "
+                "has NO built-in authentication. Use an authenticating reverse proxy "
+                "or firewall rules to restrict access.",
+                transport,
+                resolved_host,
+            )
 
     mcp.run(transport=transport, show_banner=args.show_banner, **transport_kwargs)
 

@@ -7,12 +7,15 @@ from typing import Any
 
 from fastmcp import FastMCP
 
-
 # Static reference data from the Automox Webhooks API v1.0.0 spec.
 _WEBHOOK_EVENT_TYPES: list[dict[str, Any]] = [
     # Device events
     {"name": "device.created", "category": "device", "description": "A new device was registered."},
-    {"name": "device.updated", "category": "device", "description": "Device metadata was modified."},
+    {
+        "name": "device.updated",
+        "category": "device",
+        "description": "Device metadata was modified.",
+    },
     {"name": "device.deleted", "category": "device", "description": "A device was removed."},
     {
         "name": "device.detail_updated",
@@ -38,8 +41,16 @@ _WEBHOOK_EVENT_TYPES: list[dict[str, Any]] = [
     {"name": "policy.created", "category": "policy", "description": "A new policy was created."},
     {"name": "policy.updated", "category": "policy", "description": "A policy was modified."},
     {"name": "policy.deleted", "category": "policy", "description": "A policy was deleted."},
-    {"name": "policy.evaluated", "category": "policy", "description": "A policy was evaluated against devices."},
-    {"name": "policy.compliant", "category": "policy", "description": "A device became compliant with a policy."},
+    {
+        "name": "policy.evaluated",
+        "category": "policy",
+        "description": "A policy was evaluated against devices.",
+    },
+    {
+        "name": "policy.compliant",
+        "category": "policy",
+        "description": "A device became compliant with a policy.",
+    },
     {
         "name": "policy.non_compliant",
         "category": "policy",
@@ -66,7 +77,11 @@ _WEBHOOK_EVENT_TYPES: list[dict[str, Any]] = [
         "category": "worklet",
         "description": "A worklet completed successfully.",
     },
-    {"name": "worklet.failure", "category": "worklet", "description": "A worklet execution failed."},
+    {
+        "name": "worklet.failure",
+        "category": "worklet",
+        "description": "A worklet execution failed.",
+    },
     {
         "name": "worklet.execution_started",
         "category": "worklet",
@@ -98,11 +113,23 @@ _WEBHOOK_EVENT_TYPES: list[dict[str, Any]] = [
     {"name": "audit.user_logged_in", "category": "audit", "description": "A user logged in."},
     {"name": "audit.user_created", "category": "audit", "description": "A new user was created."},
     {"name": "audit.user_removed", "category": "audit", "description": "A user was removed."},
-    {"name": "audit.role_created", "category": "audit", "description": "A new RBAC role was created."},
+    {
+        "name": "audit.role_created",
+        "category": "audit",
+        "description": "A new RBAC role was created.",
+    },
     {"name": "audit.role_updated", "category": "audit", "description": "An RBAC role was updated."},
     {"name": "audit.role_deleted", "category": "audit", "description": "An RBAC role was deleted."},
-    {"name": "audit.role_revoked", "category": "audit", "description": "An RBAC role was revoked from a user."},
-    {"name": "audit.role_assigned", "category": "audit", "description": "An RBAC role was assigned to a user."},
+    {
+        "name": "audit.role_revoked",
+        "category": "audit",
+        "description": "An RBAC role was revoked from a user.",
+    },
+    {
+        "name": "audit.role_assigned",
+        "category": "audit",
+        "description": "An RBAC role was assigned to a user.",
+    },
     {
         "name": "audit.agent_auto_update_disabled",
         "category": "audit",
@@ -120,7 +147,11 @@ _WEBHOOK_EVENT_TYPES: list[dict[str, Any]] = [
     },
     {"name": "audit.saml_disabled", "category": "audit", "description": "SAML SSO was disabled."},
     {"name": "audit.saml_enabled", "category": "audit", "description": "SAML SSO was enabled."},
-    {"name": "audit.api_key_deleted", "category": "audit", "description": "An API key was deleted."},
+    {
+        "name": "audit.api_key_deleted",
+        "category": "audit",
+        "description": "An API key was deleted.",
+    },
     {
         "name": "audit.device_scan_requested",
         "category": "audit",

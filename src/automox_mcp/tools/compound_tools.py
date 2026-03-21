@@ -7,11 +7,10 @@ from typing import Any
 
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
-from pydantic import BaseModel, ValidationError
+from pydantic import ValidationError
 
 from .. import workflows
 from ..client import AutomoxAPIError, AutomoxClient
-from ..schemas import OrgIdContextMixin, OrgIdRequiredMixin
 from ..utils import resolve_org_uuid
 from ..utils.tooling import (
     RateLimitError,

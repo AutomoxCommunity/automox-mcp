@@ -73,7 +73,9 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
 
     @server.tool(
         name="list_server_groups",
-        description="List all Automox server groups with their device counts and assigned policies.",
+        description=(
+            "List all Automox server groups with their device counts and assigned policies."
+        ),
     )
     async def list_server_groups(
         page: int | None = None,

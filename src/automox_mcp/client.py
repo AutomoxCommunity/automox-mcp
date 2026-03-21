@@ -58,7 +58,7 @@ class AutomoxClient:
     ) -> None:
         # Read from environment if not provided
         try:
-            self.api_key = api_key or os.environ["AUTOMOX_API_KEY"]
+            self._api_key = api_key or os.environ["AUTOMOX_API_KEY"]
         except KeyError as exc:
             raise ValueError(
                 "AUTOMOX_API_KEY environment variable is required. "
@@ -82,11 +82,12 @@ class AutomoxClient:
         self.org_uuid = (org_uuid or env_org_uuid or "").strip() or None
 
         logger.debug(
-            f"AutomoxClient initialized with org_id={self.org_id} org_uuid={self.org_uuid}"
+            "AutomoxClient initialized with org_id=%s org_uuid=%s",
+            self.org_id,
+            self.org_uuid,
         )
 
         headers = {
-            "Authorization": f"Bearer {self.api_key}",
             "User-Agent": USER_AGENT,
             "Accept": "application/json",
             "Content-Type": "application/json",
@@ -98,7 +99,13 @@ class AutomoxClient:
             base_url="https://console.automox.com/api",
             headers=headers,
             timeout=timeout,
+            auth=self._bearer_auth,
         )
+
+    def _bearer_auth(self, request: httpx.Request) -> httpx.Request:
+        """Inject the Bearer token per-request to avoid storing it in shared headers."""
+        request.headers["Authorization"] = f"Bearer {self._api_key}"
+        return request
 
     async def __aenter__(self) -> AutomoxClient:
         return self

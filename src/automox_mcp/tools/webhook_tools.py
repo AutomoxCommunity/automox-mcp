@@ -21,7 +21,6 @@ from ..utils.tooling import (
     format_error,
 )
 
-
 # -----------------------------------------------------------------
 # Webhook-specific Pydantic schemas (not pre-existing in schemas.py)
 # -----------------------------------------------------------------

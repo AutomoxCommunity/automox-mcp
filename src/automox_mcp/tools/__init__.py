@@ -44,7 +44,7 @@ def register_tools(server: FastMCP, *, client: AutomoxClient) -> None:
 
         try:
             mod = importlib.import_module(f".{tool_module_name}", __package__)
-            register_fn = getattr(mod, "register")
+            register_fn = mod.register
             register_fn(server, read_only=read_only, client=client)
         except ImportError:
             logger.warning("Tool module %s not found, skipping", tool_module_name)

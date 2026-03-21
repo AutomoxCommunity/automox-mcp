@@ -23,7 +23,9 @@ class StubServer:
 class FakeClient:
     """Minimal client stub for tool registration tests."""
 
-    def __init__(self, *, org_id=42, org_uuid=None, account_uuid="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"):
+    def __init__(
+        self, *, org_id=42, org_uuid=None, account_uuid="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+    ):
         self.org_id = org_id
         self.org_uuid = org_uuid
         self.account_uuid = account_uuid
@@ -56,8 +58,6 @@ async def test_policy_tool_creates_client(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_policy_tool_resolves_org_uuid(monkeypatch):
-    resolved_uuid = UUID("cccccccc-cccc-cccc-cccc-cccccccccccc")
-
     recorded = {"calls": []}
 
     async def fake_workflow(client, **kwargs):

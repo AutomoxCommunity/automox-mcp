@@ -6,7 +6,7 @@ import asyncio
 from collections.abc import Mapping
 from typing import Any
 
-from ..client import AutomoxAPIError, AutomoxClient
+from ..client import AutomoxClient
 from . import devices, packages, policy, reports
 
 
@@ -17,7 +17,7 @@ def _settle(
     """Separate gather(return_exceptions=True) results into values and errors."""
     values: list[Any] = []
     errors: list[str] = []
-    for result, label in zip(results, labels):
+    for result, label in zip(results, labels, strict=True):
         if isinstance(result, BaseException):
             errors.append(f"{label}: {result}")
             values.append({})
@@ -228,7 +228,7 @@ async def get_device_full_profile(
 
     section_status: dict[str, str] = {
         label: "failed" if isinstance(result, BaseException) else "complete"
-        for result, label in zip(raw_results, labels)
+        for result, label in zip(raw_results, labels, strict=True)
     }
 
     device_data = device_info.get("data") or {}

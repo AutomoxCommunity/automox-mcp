@@ -14,7 +14,6 @@ from automox_mcp.workflows.groups import (
     update_server_group,
 )
 
-
 # ---------------------------------------------------------------------------
 # Stub client
 # ---------------------------------------------------------------------------
@@ -259,3 +258,110 @@ async def test_delete_group_returns_confirmation() -> None:
     assert result["data"]["deleted"] is True
     assert result["data"]["group_id"] == 10
     assert client.calls[0] == ("DELETE", "/servergroups/10", {"o": 555})
+
+
+# ---------------------------------------------------------------------------
+# Non-Mapping API responses (else branches)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_server_group_non_mapping_response() -> None:
+    """When API returns a non-Mapping, fallback raw data is used."""
+    client = StubClient(get_responses={"/servergroups/99": [None]})
+    result = await get_server_group(cast(AutomoxClient, client), org_id=1, group_id=99)
+    assert result["data"]["group_id"] == 99
+    assert result["data"]["raw"] is None
+
+
+@pytest.mark.asyncio
+async def test_create_server_group_non_mapping_response() -> None:
+    """When create API returns a non-Mapping, fallback includes name and created=True."""
+    client = StubClient(post_responses={"/servergroups": ["created-ok"]})
+    result = await create_server_group(
+        cast(AutomoxClient, client),
+        org_id=1,
+        name="My Group",
+        refresh_interval=360,
+    )
+    assert result["data"]["name"] == "My Group"
+    assert result["data"]["created"] is True
+
+
+@pytest.mark.asyncio
+async def test_update_server_group_non_mapping_response() -> None:
+    """When update API returns a non-Mapping, fallback includes group_id and updated=True."""
+    client = StubClient(put_responses={"/servergroups/5": ["ok"]})
+    result = await update_server_group(
+        cast(AutomoxClient, client),
+        org_id=1,
+        group_id=5,
+        name="Updated",
+        refresh_interval=720,
+    )
+    assert result["data"]["group_id"] == 5
+    assert result["data"]["updated"] is True
+
+
+@pytest.mark.asyncio
+async def test_create_server_group_with_optional_fields() -> None:
+    """Optional fields (ui_color, notes, policies) are included in body when set."""
+    client = StubClient(
+        post_responses={
+            "/servergroups": [
+                {
+                    "id": 20,
+                    "name": "Colored Group",
+                    "organization_id": 1,
+                    "server_count": 0,
+                    "policies": [1, 2],
+                }
+            ]
+        }
+    )
+    result = await create_server_group(
+        cast(AutomoxClient, client),
+        org_id=1,
+        name="Colored Group",
+        refresh_interval=360,
+        ui_color="#FF0000",
+        notes="test notes",
+        policies=[1, 2],
+    )
+    body = client.calls[0][2]
+    assert body["ui_color"] == "#FF0000"
+    assert body["notes"] == "test notes"
+    assert body["policies"] == [1, 2]
+    assert result["data"]["name"] == "Colored Group"
+
+
+@pytest.mark.asyncio
+async def test_update_server_group_with_optional_fields() -> None:
+    """Optional fields are included in update body when set."""
+    client = StubClient(
+        put_responses={
+            "/servergroups/10": [
+                {
+                    "id": 10,
+                    "name": "Updated",
+                    "organization_id": 1,
+                    "server_count": 2,
+                    "policies": [],
+                }
+            ]
+        }
+    )
+    result = await update_server_group(
+        cast(AutomoxClient, client),
+        org_id=1,
+        group_id=10,
+        name="Updated",
+        refresh_interval=720,
+        ui_color="#00FF00",
+        notes="updated",
+        policies=[],
+    )
+    body = client.calls[0][2]
+    assert body["ui_color"] == "#00FF00"
+    assert body["notes"] == "updated"
+    assert result["data"]["updated"] is True

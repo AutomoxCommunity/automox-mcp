@@ -1,4 +1,5 @@
-"""Tests for compound workflows (get_patch_tuesday_readiness, get_compliance_snapshot, get_device_full_profile)."""
+"""Tests for compound workflows (get_patch_tuesday_readiness, get_compliance_snapshot,
+get_device_full_profile)."""
 
 import copy
 from typing import Any, cast
@@ -217,7 +218,7 @@ async def test_patch_tuesday_readiness_returns_all_sections() -> None:
 @pytest.mark.asyncio
 async def test_patch_tuesday_readiness_with_group_filter() -> None:
     client = _build_readiness_client()
-    result = await get_patch_tuesday_readiness(
+    await get_patch_tuesday_readiness(
         cast(AutomoxClient, client),
         org_id=555,
         org_uuid="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
@@ -360,7 +361,14 @@ async def test_compliance_snapshot_records_errors_on_partial_failure() -> None:
     client = FailingNoncompliantClient(
         get_responses={
             "/servers": [
-                [{"id": 1, "managed": True, "status": {"policy_status": "success"}, "last_check_in": "2025-03-18T12:00:00Z"}]
+                [
+                    {
+                        "id": 1,
+                        "managed": True,
+                        "status": {"policy_status": "success"},
+                        "last_check_in": "2025-03-18T12:00:00Z",
+                    }
+                ]
             ],
             "/policies": [_POLICIES_RESPONSE],
             "/policystats": [_POLICYSTATS_RESPONSE],
@@ -418,8 +426,20 @@ _INVENTORY_RESPONSE: dict[str, Any] = {
                     "Processor": {
                         "item_count": 2,
                         "items": [
-                            {"name": "cpu_name", "friendly_name": "CPU Name", "value": "Intel i7", "type": "string", "collected_at": "2026-03-20T00:00:00Z"},
-                            {"name": "cpu_cores", "friendly_name": "CPU Cores", "value": 8, "type": "integer", "collected_at": "2026-03-20T00:00:00Z"},
+                            {
+                                "name": "cpu_name",
+                                "friendly_name": "CPU Name",
+                                "value": "Intel i7",
+                                "type": "string",
+                                "collected_at": "2026-03-20T00:00:00Z",
+                            },
+                            {
+                                "name": "cpu_cores",
+                                "friendly_name": "CPU Cores",
+                                "value": 8,
+                                "type": "integer",
+                                "collected_at": "2026-03-20T00:00:00Z",
+                            },
                         ],
                     },
                 },
@@ -430,9 +450,27 @@ _INVENTORY_RESPONSE: dict[str, Any] = {
                     "Interfaces": {
                         "item_count": 3,
                         "items": [
-                            {"name": "mac_address", "friendly_name": "MAC Address", "value": "AA:BB:CC:DD:EE:FF", "type": "string", "collected_at": "2026-03-20T00:00:00Z"},
-                            {"name": "ip_address", "friendly_name": "IP Address", "value": "10.0.0.1", "type": "string", "collected_at": "2026-03-20T00:00:00Z"},
-                            {"name": "connected", "friendly_name": "Connected", "value": True, "type": "boolean", "collected_at": "2026-03-20T00:00:00Z"},
+                            {
+                                "name": "mac_address",
+                                "friendly_name": "MAC Address",
+                                "value": "AA:BB:CC:DD:EE:FF",
+                                "type": "string",
+                                "collected_at": "2026-03-20T00:00:00Z",
+                            },
+                            {
+                                "name": "ip_address",
+                                "friendly_name": "IP Address",
+                                "value": "10.0.0.1",
+                                "type": "string",
+                                "collected_at": "2026-03-20T00:00:00Z",
+                            },
+                            {
+                                "name": "connected",
+                                "friendly_name": "Connected",
+                                "value": True,
+                                "type": "boolean",
+                                "collected_at": "2026-03-20T00:00:00Z",
+                            },
                         ],
                     },
                 },
@@ -467,16 +505,25 @@ def _patch_sub_workflows(monkeypatch: pytest.MonkeyPatch, **overrides: Any) -> N
     packages_mod = fn_globals["packages"]
 
     monkeypatch.setattr(
-        devices_mod, "describe_device",
-        overrides.get("describe_device", AsyncMock(return_value=copy.deepcopy(_DEVICE_DETAIL_RESPONSE))),
+        devices_mod,
+        "describe_device",
+        overrides.get(
+            "describe_device", AsyncMock(return_value=copy.deepcopy(_DEVICE_DETAIL_RESPONSE))
+        ),
     )
     monkeypatch.setattr(
-        devices_mod, "get_device_inventory",
-        overrides.get("get_device_inventory", AsyncMock(return_value=copy.deepcopy(_INVENTORY_RESPONSE))),
+        devices_mod,
+        "get_device_inventory",
+        overrides.get(
+            "get_device_inventory", AsyncMock(return_value=copy.deepcopy(_INVENTORY_RESPONSE))
+        ),
     )
     monkeypatch.setattr(
-        packages_mod, "list_device_packages",
-        overrides.get("list_device_packages", AsyncMock(return_value=copy.deepcopy(_PACKAGES_RESPONSE))),
+        packages_mod,
+        "list_device_packages",
+        overrides.get(
+            "list_device_packages", AsyncMock(return_value=copy.deepcopy(_PACKAGES_RESPONSE))
+        ),
     )
 
 
@@ -506,7 +553,9 @@ async def test_full_profile_returns_all_sections(monkeypatch: pytest.MonkeyPatch
 
 
 @pytest.mark.asyncio
-async def test_full_profile_inventory_summarizes_key_values(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_full_profile_inventory_summarizes_key_values(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Inventory should be summarized with scalar key-values per sub-category."""
     _patch_sub_workflows(monkeypatch)
     client = StubClient()
@@ -530,7 +579,13 @@ async def test_full_profile_skips_unnamed_inventory_items(monkeypatch: pytest.Mo
     inv_with_unnamed = copy.deepcopy(_INVENTORY_RESPONSE)
     # Add an item with no name fields
     inv_with_unnamed["data"]["categories"]["Hardware"]["sub_categories"]["Processor"]["items"].append(
-        {"name": None, "friendly_name": None, "value": "mystery", "type": "string", "collected_at": None},
+        {
+            "name": None,
+            "friendly_name": None,
+            "value": "mystery",
+            "type": "string",
+            "collected_at": None,
+        },
     )
     _patch_sub_workflows(
         monkeypatch,
@@ -576,7 +631,9 @@ async def test_full_profile_truncates_packages(monkeypatch: pytest.MonkeyPatch) 
 
 
 @pytest.mark.asyncio
-async def test_full_profile_no_truncation_when_within_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_full_profile_no_truncation_when_within_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     _patch_sub_workflows(monkeypatch)
     client = StubClient()
 

@@ -1,7 +1,5 @@
 """Tests for MCP resource registration and content."""
 
-import sys
-from pathlib import Path
 
 import pytest
 
@@ -15,7 +13,9 @@ class StubServer:
     def __init__(self) -> None:
         self.resources: dict[str, dict] = {}
 
-    def resource(self, uri: str, *, name: str, description: str, mime_type: str = "application/json"):
+    def resource(
+        self, uri: str, *, name: str, description: str, mime_type: str = "application/json"
+    ):
         def decorator(func):
             self.resources[uri] = {
                 "name": name,

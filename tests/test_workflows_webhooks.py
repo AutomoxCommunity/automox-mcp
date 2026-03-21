@@ -13,10 +13,11 @@ from automox_mcp.workflows.webhooks import (
     list_webhook_event_types,
     list_webhooks,
     rotate_webhook_secret,
-    test_webhook as send_test_webhook,
     update_webhook,
 )
-
+from automox_mcp.workflows.webhooks import (
+    test_webhook as send_test_webhook,
+)
 
 # ---------------------------------------------------------------------------
 # Stub client

@@ -44,8 +44,8 @@ jobs:
       - name: Type check
         run: uv run mypy .
 
-      - name: Run tests
-        run: uv run pytest
+      - name: Run tests with coverage
+        run: uv run pytest --cov=automox_mcp --cov-fail-under=90 --cov-report=term-missing
 
       - name: Build distribution artifacts
         run: uv run python -m build

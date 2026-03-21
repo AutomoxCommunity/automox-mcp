@@ -584,14 +584,14 @@ class UpdateDeviceParams(ForbidExtraModel):
     device_id: int = Field(description="Device ID")
     server_group_id: int = Field(description="Server group ID to assign device to")
     exception: bool = Field(description="Mark device as exception")
-    ip_addrs: list | None = Field(None, description="IP addresses")
-    tags: list | None = Field(None, description="Device tags")
+    ip_addrs: list[str] | None = Field(None, description="IP addresses")
+    tags: list[str] | None = Field(None, description="Device tags")
     custom_name: str | None = Field(None, description="Custom device name")
 
 
 class BatchUpdateDevicesParams(ForbidExtraModel):
-    devices: list = Field(description="List of device IDs")
-    actions: list = Field(description="List of actions to perform")
+    devices: list[int] = Field(description="List of device IDs")
+    actions: list[dict[str, Any]] = Field(description="List of actions to perform")
 
 
 class ExecutePolicyParams(OrgIdContextMixin, ForbidExtraModel):
@@ -616,7 +616,9 @@ class IssueDeviceCommandParams(OrgIdContextMixin, ForbidExtraModel):
 
 class ClonePolicyParams(ForbidExtraModel):
     policy_id: int = Field(description="Policy ID to clone")
-    name: str | None = Field(None, description="Name for the cloned policy (defaults to '<source> (Clone)')")
+    name: str | None = Field(
+        None, description="Name for the cloned policy (defaults to '<source> (Clone)')"
+    )
     server_groups: list[int] | None = Field(None, description="Server group IDs for the clone")
 
 
@@ -625,8 +627,8 @@ class DeletePolicyToolParams(OrgIdContextMixin, ForbidExtraModel):
 
 
 class PreviewPolicyDeviceFiltersParams(ForbidExtraModel):
-    device_filters: list | None = Field(None, description="Device filter criteria")
-    server_groups: list | None = Field(None, description="Server group IDs")
+    device_filters: list[dict[str, Any]] | None = Field(None, description="Device filter criteria")
+    server_groups: list[int] | None = Field(None, description="Server group IDs")
     page: int | None = Field(None, ge=0, description="Page number")
     limit: int | None = Field(None, ge=1, le=500, description="Results per page")
 
@@ -737,7 +739,7 @@ class DeleteActionSetParams(OrgIdRequiredMixin, ForbidExtraModel):
 
 
 class BulkDeleteActionSetsParams(OrgIdRequiredMixin, ForbidExtraModel):
-    action_set_ids: list = Field(description="List of action set IDs to delete")
+    action_set_ids: list[int] = Field(description="List of action set IDs to delete")
 
 
 class DeleteGlobalApiKeyParams(ForbidExtraModel):
@@ -833,15 +835,15 @@ class GetWisItemParams(OrgIdRequiredMixin, ForbidExtraModel):
 
 
 class CreateZoneParams(AccountIdMixin, ForbidExtraModel):
-    zone_data: dict = Field(description="Zone configuration data")
+    zone_data: dict[str, Any] = Field(description="Zone configuration data")
 
 
 class CreateDataExtractParams(OrgIdRequiredMixin, ForbidExtraModel):
-    extract_data: dict = Field(description="Data extract configuration")
+    extract_data: dict[str, Any] = Field(description="Data extract configuration")
 
 
 class CreateGlobalApiKeyParams(ForbidExtraModel):
-    key_data: dict = Field(description="API key configuration")
+    key_data: dict[str, Any] = Field(description="API key configuration")
 
 
 class DecryptGlobalApiKeyParams(ForbidExtraModel):
@@ -849,27 +851,27 @@ class DecryptGlobalApiKeyParams(ForbidExtraModel):
 
 
 class UploadActionSetParams(OrgIdRequiredMixin, ForbidExtraModel):
-    action_set_data: dict = Field(description="Action set upload data")
+    action_set_data: dict[str, Any] = Field(description="Action set upload data")
 
 
 class AddActionToActionSetParams(OrgIdRequiredMixin, ForbidExtraModel):
     action_set_id: int = Field(description="Action set ID")
-    action_data: dict = Field(description="Action configuration")
+    action_data: dict[str, Any] = Field(description="Action configuration")
 
 
 class UploadPolicyFilesParams(OrgIdRequiredMixin, ForbidExtraModel):
     policy_id: int = Field(description="Policy ID")
-    file_data: dict = Field(description="File upload data")
+    file_data: dict[str, Any] = Field(description="File upload data")
 
 
 class AddDeviceQueueCommandParams(OrgIdRequiredMixin, ForbidExtraModel):
     device_id: int = Field(description="Device ID")
-    command_data: dict = Field(description="Command configuration")
+    command_data: dict[str, Any] = Field(description="Command configuration")
 
 
 class CreateUserApiKeyParams(ForbidExtraModel):
     user_id: int = Field(description="User ID")
-    key_data: dict = Field(description="API key configuration")
+    key_data: dict[str, Any] = Field(description="API key configuration")
 
 
 class DecryptUserApiKeyParams(ForbidExtraModel):
@@ -884,18 +886,18 @@ class DecryptUserApiKeyParams(ForbidExtraModel):
 
 class UpdateGlobalApiKeyParams(ForbidExtraModel):
     key_id: str = Field(description="Global API key ID")
-    key_data: dict = Field(description="Updated API key configuration")
+    key_data: dict[str, Any] = Field(description="Updated API key configuration")
 
 
 class PatchUserParams(OrgIdRequiredMixin, ForbidExtraModel):
     user_id: int = Field(description="User ID")
-    user_data: dict = Field(description="Partial user update data")
+    user_data: dict[str, Any] = Field(description="Partial user update data")
 
 
 class UpdateUserApiKeyParams(ForbidExtraModel):
     user_id: int = Field(description="User ID")
     api_key_id: int = Field(description="API key ID")
-    key_data: dict = Field(description="Updated API key configuration")
+    key_data: dict[str, Any] = Field(description="Updated API key configuration")
 
 
 class MCPError(BaseModel):

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from fastmcp import FastMCP
@@ -29,7 +28,9 @@ def register(server: FastMCP) -> None:
                 "fields": {
                     "hostname_contains": {
                         "type": "string",
-                        "description": "Match devices whose hostname or custom name contains this text",
+                        "description": (
+                            "Match devices whose hostname or custom name contains this text"
+                        ),
                         "example": "web-prod",
                     },
                     "ip_address": {
@@ -115,7 +116,10 @@ def register(server: FastMCP) -> None:
                 "levels": [
                     {
                         "name": "critical",
-                        "description": "Highest severity — vulnerabilities actively exploited or trivially exploitable",
+                        "description": (
+                            "Highest severity — vulnerabilities actively exploited"
+                            " or trivially exploitable"
+                        ),
                     },
                     {
                         "name": "high",
@@ -143,17 +147,25 @@ def register(server: FastMCP) -> None:
                 "description": "Values for the configuration.patch_rule field in patch policies",
                 "options": {
                     "all": "Patch all available software — no filtering",
-                    "filter": "Patch specific software matching name patterns in configuration.filters",
-                    "severity": "Patch only packages matching the severity in configuration.severity",
+                    "filter": (
+                        "Patch specific software matching name patterns in configuration.filters"
+                    ),
+                    "severity": (
+                        "Patch only packages matching the severity in configuration.severity"
+                    ),
                     "custom": "Custom patch selection logic",
                 },
             },
             "package_fields": {
-                "description": "Key fields returned for software packages on a device via list_device_packages",
+                "description": (
+                    "Key fields returned for software packages on a device via list_device_packages"
+                ),
                 "fields": {
                     "installed": {
                         "type": "boolean",
-                        "description": "true if the package is installed, false if available but not installed",
+                        "description": (
+                            "true if the package is installed, false if available but not installed"
+                        ),
                     },
                     "is_managed": {
                         "type": "boolean",
@@ -161,16 +173,24 @@ def register(server: FastMCP) -> None:
                     },
                     "repo": {
                         "type": "string",
-                        "description": "Source repository (e.g., 'Apple-System', 'homebrew', 'Microsoft')",
+                        "description": (
+                            "Source repository (e.g., 'Apple-System', 'homebrew', 'Microsoft')"
+                        ),
                     },
                 },
-                "note": "Use search_devices with patch_status='missing' to find devices with uninstalled patches",
+                "note": (
+                    "Use search_devices with patch_status='missing' to find devices"
+                    " with uninstalled patches"
+                ),
             },
             "filter_pattern_syntax": {
                 "description": "Wildcard patterns used in configuration.filters for patch policies",
                 "syntax": "Use * as wildcard. Patterns are case-insensitive.",
                 "examples": [
-                    {"pattern": "*Google Chrome*", "matches": "Any package containing 'Google Chrome'"},
+                    {
+                        "pattern": "*Google Chrome*",
+                        "matches": "Any package containing 'Google Chrome'",
+                    },
                     {"pattern": "*Firefox*", "matches": "Any package containing 'Firefox'"},
                     {"pattern": "Microsoft*", "matches": "Any package starting with 'Microsoft'"},
                 ],
@@ -212,7 +232,10 @@ def register(server: FastMCP) -> None:
                             "Windows Server 2012 R2 (x86-64)",
                         ],
                     },
-                    "source": "https://docs.automox.com/product/Product_Documentation/Agents/Agent_Requirements/Supported_Operating_Systems.htm",
+                    "source": (
+                        "https://docs.automox.com/product/Product_Documentation"
+                        "/Agents/Agent_Requirements/Supported_Operating_Systems.htm"
+                    ),
                     "shell_types": ["PowerShell"],
                     "worklet_support": True,
                 },
@@ -224,8 +247,14 @@ def register(server: FastMCP) -> None:
                         "macOS 14 (Sonoma) — x86-64, ARM64",
                         "macOS 13 (Ventura) — x86-64, ARM64",
                     ],
-                    "note": "Automox cannot guarantee patching after an OS reaches end-of-life. macOS 12 (Monterey) and earlier no longer receive testing support.",
-                    "source": "https://docs.automox.com/product/Product_Documentation/Agents/Agent_Requirements/Supported_Operating_Systems.htm",
+                    "note": (
+                        "Automox cannot guarantee patching after an OS reaches end-of-life."
+                        " macOS 12 (Monterey) and earlier no longer receive testing support."
+                    ),
+                    "source": (
+                        "https://docs.automox.com/product/Product_Documentation"
+                        "/Agents/Agent_Requirements/Supported_Operating_Systems.htm"
+                    ),
                     "shell_types": ["Bash"],
                     "worklet_support": True,
                 },
@@ -253,18 +282,27 @@ def register(server: FastMCP) -> None:
                             "SUSE Linux Enterprise Server (SLES) 15.5",
                         ],
                     },
-                    "source": "https://docs.automox.com/product/Product_Documentation/Agents/Agent_Requirements/Supported_Operating_Systems.htm",
+                    "source": (
+                        "https://docs.automox.com/product/Product_Documentation"
+                        "/Agents/Agent_Requirements/Supported_Operating_Systems.htm"
+                    ),
                     "shell_types": ["Bash"],
                     "worklet_support": True,
                 },
             },
             "usage_notes": [
                 "Use os_family='Windows', 'Mac', or 'Linux' in policy configuration",
-                "The os_name field on devices contains the full OS name (e.g., 'Microsoft Windows 11 Enterprise')",
+                (
+                    "The os_name field on devices contains the full OS name"
+                    " (e.g., 'Microsoft Windows 11 Enterprise')"
+                ),
                 "Use search_devices to find devices by platform",
             ],
             "last_verified": "2026-03-20",
-            "note": "No Automox API endpoint exists for supported OS. This data is sourced from static documentation and may go stale. Re-verify periodically.",
+            "note": (
+                "No Automox API endpoint exists for supported OS. This data is sourced from"
+                " static documentation and may go stale. Re-verify periodically."
+            ),
         }
 
     @server.resource(
@@ -303,8 +341,14 @@ def register(server: FastMCP) -> None:
             "tips_for_efficient_usage": [
                 "Start with compound tools for common questions — they combine multiple API calls",
                 "Use device_health_metrics for fleet-wide stats instead of listing all devices",
-                "Use MCP Resources (like this one) for reference data — they don't count as API calls",
-                "Filter results at the API level (group_id, severity, etc.) rather than fetching everything",
+                (
+                    "Use MCP Resources (like this one) for reference data"
+                    " — they don't count as API calls"
+                ),
+                (
+                    "Filter results at the API level (group_id, severity, etc.)"
+                    " rather than fetching everything"
+                ),
             ],
         }
 

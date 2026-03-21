@@ -70,6 +70,10 @@ packages = ["automox_mcp"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
+[tool.bandit]
+targets = ["src/"]
+exclude_dirs = ["tests", ".venv"]
+
 [tool.coverage.run]
 source = ["automox_mcp"]
 

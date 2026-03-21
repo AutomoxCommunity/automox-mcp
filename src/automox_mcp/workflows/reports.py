@@ -8,7 +8,6 @@ from typing import Any
 
 from ..client import AutomoxClient
 
-
 _SEVERITY_RANK: dict[str, int] = {
     "critical": 4,
     "high": 3,

@@ -10,6 +10,7 @@ from typing import Any, cast
 
 from fastmcp import FastMCP
 
+from .client import AutomoxClient
 from .resources import register_resources
 from .tools import register_tools
 
@@ -211,9 +212,12 @@ def create_server() -> FastMCP:
         ),
     )
 
+    # Shared client — reused across all tool calls to avoid per-call TCP/TLS overhead
+    client = AutomoxClient()
+
     # Register tools and resources
-    register_tools(server)
-    register_resources(server)
+    register_tools(server, client=client)
+    register_resources(server, client=client)
 
     return server
 

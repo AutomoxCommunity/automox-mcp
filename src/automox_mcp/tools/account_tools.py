@@ -21,7 +21,7 @@ from ..utils.tooling import (
 )
 
 
-def register(server: FastMCP, *, read_only: bool = False) -> None:
+def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient) -> None:
     """Register account-related tools."""
 
     async def _call(
@@ -36,8 +36,7 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
             if params_model is not None:
                 model = params_model(**params)
                 payload = model.model_dump(mode="python", exclude_none=True)
-            async with AutomoxClient() as client:
-                result: dict[str, Any] = await func(client, **payload)
+            result: dict[str, Any] = await func(client, **payload)
         except (ValidationError, ValueError) as exc:
             raise ToolError(str(exc)) from exc
         except RateLimitError as exc:

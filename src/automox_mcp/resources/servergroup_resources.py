@@ -9,7 +9,7 @@ from fastmcp import FastMCP
 from ..client import AutomoxClient
 
 
-def register(server: FastMCP) -> None:
+def register(server: FastMCP, *, client: AutomoxClient) -> None:
     """Register server group resources."""
 
     @server.resource(
@@ -31,37 +31,35 @@ def register(server: FastMCP) -> None:
         Use this resource to map server_group_id values from device data
         to human-readable group names.
         """
-        client = AutomoxClient()
-        async with client as session:
-            org_id = client.org_id
-            if not org_id:
-                return {"error": "org_id required - set AUTOMOX_ORG_ID environment variable"}
+        org_id = client.org_id
+        if not org_id:
+            return {"error": "org_id required - set AUTOMOX_ORG_ID environment variable"}
 
-            params = {"o": org_id}
-            groups = await session.get("/servergroups", params=params)
+        params = {"o": org_id}
+        groups = await client.get("/servergroups", params=params)
 
-            if not isinstance(groups, list):
-                groups = []
+        if not isinstance(groups, list):
+            groups = []
 
-            # Create a compact mapping
-            group_list = []
-            for group in groups:
-                if isinstance(group, dict):
-                    group_list.append(
-                        {
-                            "id": group.get("id"),
-                            "name": group.get("name") or "(unnamed)",
-                            "organization_id": group.get("organization_id"),
-                            "server_count": group.get("server_count", 0),
-                            "policy_count": len(group.get("policies", [])),
-                        }
-                    )
+        # Create a compact mapping
+        group_list = []
+        for group in groups:
+            if isinstance(group, dict):
+                group_list.append(
+                    {
+                        "id": group.get("id"),
+                        "name": group.get("name") or "(unnamed)",
+                        "organization_id": group.get("organization_id"),
+                        "server_count": group.get("server_count", 0),
+                        "policy_count": len(group.get("policies", [])),
+                    }
+                )
 
-            return {
-                "server_groups": group_list,
-                "total_count": len(group_list),
-                "note": "Use this to map server_group_id from device data to group names",
-            }
+        return {
+            "server_groups": group_list,
+            "total_count": len(group_list),
+            "note": "Use this to map server_group_id from device data to group names",
+        }
 
 
 __all__ = ["register"]

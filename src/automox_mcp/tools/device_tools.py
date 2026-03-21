@@ -31,7 +31,7 @@ from ..utils.tooling import (
 )
 
 
-def register(server: FastMCP, *, read_only: bool = False) -> None:
+def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient) -> None:
     """Register device-related tools."""
 
     async def _call(
@@ -41,21 +41,19 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
     ) -> dict[str, Any]:
         try:
             await enforce_rate_limit()
-            client = AutomoxClient()
-            client_org_id = getattr(client, "org_id", None)
-            async with client as session:
-                params = dict(raw_params)
-                if issubclass(params_model, (OrgIdContextMixin, OrgIdRequiredMixin)):
-                    params.setdefault("org_id", client_org_id)
-                    if params.get("org_id") is None:
-                        raise ToolError(
-                            "org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly."
-                        )
-                model = params_model(**params)
-                payload = model.model_dump(mode="python", exclude_none=True)
-                if isinstance(model, (OrgIdContextMixin, OrgIdRequiredMixin)):
-                    payload["org_id"] = model.org_id
-                result: dict[str, Any] = await func(session, **payload)
+            client_org_id = client.org_id
+            params = dict(raw_params)
+            if issubclass(params_model, (OrgIdContextMixin, OrgIdRequiredMixin)):
+                params.setdefault("org_id", client_org_id)
+                if params.get("org_id") is None:
+                    raise ToolError(
+                        "org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly."
+                    )
+            model = params_model(**params)
+            payload = model.model_dump(mode="python", exclude_none=True)
+            if isinstance(model, (OrgIdContextMixin, OrgIdRequiredMixin)):
+                payload["org_id"] = model.org_id
+            result: dict[str, Any] = await func(client, **payload)
         except (ValidationError, ValueError) as exc:
             raise ToolError(str(exc)) from exc
         except RateLimitError as exc:

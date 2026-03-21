@@ -7,6 +7,7 @@ import logging
 
 from fastmcp import FastMCP
 
+from ..client import AutomoxClient
 from ..utils.tooling import get_enabled_modules, is_read_only
 
 logger = logging.getLogger(__name__)
@@ -26,7 +27,7 @@ _MODULE_REGISTRY: dict[str, tuple[str, bool]] = {
 }
 
 
-def register_tools(server: FastMCP) -> None:
+def register_tools(server: FastMCP, *, client: AutomoxClient) -> None:
     """Register Automox tool modules with the FastMCP server.
 
     Respects ``AUTOMOX_MCP_MODULES`` for selective loading and
@@ -44,7 +45,7 @@ def register_tools(server: FastMCP) -> None:
         try:
             mod = importlib.import_module(f".{tool_module_name}", __package__)
             register_fn = getattr(mod, "register")
-            register_fn(server, read_only=read_only)
+            register_fn(server, read_only=read_only, client=client)
         except ImportError:
             logger.warning("Tool module %s not found, skipping", tool_module_name)
         except Exception:

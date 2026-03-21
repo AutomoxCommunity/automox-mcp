@@ -25,6 +25,20 @@ class StubServer:
         return decorator
 
 
+class FakeClient:
+    """Minimal client stub for registration tests."""
+
+    def __init__(self, *, org_id=42, org_uuid=None, account_uuid="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"):
+        self.org_id = org_id
+        self.org_uuid = org_uuid
+        self.account_uuid = account_uuid
+
+    async def get(self, path, *, params=None, headers=None):
+        if path == "/orgs":
+            return [{"id": self.org_id, "org_uuid": "cccccccc-cccc-cccc-cccc-cccccccccccc"}]
+        return {}
+
+
 def success_result():
     return {"data": {}, "metadata": {"deprecated_endpoint": False}}
 
@@ -39,7 +53,7 @@ class TestCompoundToolRegistration:
 
     def test_compound_tools_register_both_tools(self) -> None:
         server = StubServer()
-        compound_tools.register(server)
+        compound_tools.register(server, client=FakeClient())
 
         assert "get_patch_tuesday_readiness" in server.tools
         assert "get_compliance_snapshot" in server.tools
@@ -58,26 +72,10 @@ class TestCompoundToolRegistration:
             fake_workflow,
         )
 
-        class RecordingClient:
-            def __init__(self, **kwargs):
-                self.org_id = 42
-                self.org_uuid = None
-                self.account_uuid = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
-
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, exc_type, exc, tb):
-                return False
-
-            async def get(self, path, *, params=None, headers=None):
-                # resolve_org_uuid will call /orgs
-                return [{"id": 42, "org_uuid": "cccccccc-cccc-cccc-cccc-cccccccccccc"}]
-
-        monkeypatch.setattr(compound_tools, "AutomoxClient", RecordingClient)
+        fake_client = FakeClient(org_id=42)
 
         server = StubServer()
-        compound_tools.register(server)
+        compound_tools.register(server, client=fake_client)
         tool_fn = server.tools["get_patch_tuesday_readiness"]
 
         await tool_fn(group_id=10)
@@ -98,41 +96,17 @@ class TestCompoundToolRegistration:
             fake_workflow,
         )
 
-        class RecordingClient:
-            def __init__(self, **kwargs):
-                self.org_id = 42
-
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, exc_type, exc, tb):
-                return False
-
-        monkeypatch.setattr(compound_tools, "AutomoxClient", RecordingClient)
-
         server = StubServer()
-        compound_tools.register(server)
+        compound_tools.register(server, client=FakeClient(org_id=42))
         tool_fn = server.tools["get_compliance_snapshot"]
 
         await tool_fn()
         assert recorded["kwargs"]["org_id"] == 42
 
     @pytest.mark.asyncio
-    async def test_compound_tool_errors_without_org_id(self, monkeypatch) -> None:
-        class NoOrgClient:
-            def __init__(self, **kwargs):
-                self.org_id = None
-
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, exc_type, exc, tb):
-                return False
-
-        monkeypatch.setattr(compound_tools, "AutomoxClient", NoOrgClient)
-
+    async def test_compound_tool_errors_without_org_id(self) -> None:
         server = StubServer()
-        compound_tools.register(server)
+        compound_tools.register(server, client=FakeClient(org_id=None))
         tool_fn = server.tools["get_compliance_snapshot"]
 
         with pytest.raises(ToolError, match="org_id required"):
@@ -149,7 +123,7 @@ class TestPolicyCrudToolRegistration:
 
     def test_policy_crud_tools_register_in_write_mode(self) -> None:
         server = StubServer()
-        policy_tools.register(server, read_only=False)
+        policy_tools.register(server, read_only=False, client=FakeClient())
 
         assert "delete_policy" in server.tools
         assert "clone_policy" in server.tools
@@ -157,7 +131,7 @@ class TestPolicyCrudToolRegistration:
 
     def test_policy_crud_write_tools_hidden_in_read_only(self) -> None:
         server = StubServer()
-        policy_tools.register(server, read_only=True)
+        policy_tools.register(server, read_only=True, client=FakeClient())
 
         assert "delete_policy" not in server.tools
         assert "clone_policy" not in server.tools
@@ -174,20 +148,8 @@ class TestPolicyCrudToolRegistration:
 
         monkeypatch.setattr(policy_tools.workflows, "delete_policy", fake_workflow)
 
-        class RecordingClient:
-            def __init__(self, **kwargs):
-                self.org_id = 42
-
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, exc_type, exc, tb):
-                return False
-
-        monkeypatch.setattr(policy_tools, "AutomoxClient", RecordingClient)
-
         server = StubServer()
-        policy_tools.register(server)
+        policy_tools.register(server, client=FakeClient(org_id=42))
         tool_fn = server.tools["delete_policy"]
 
         await tool_fn(policy_id=901)
@@ -203,20 +165,8 @@ class TestPolicyCrudToolRegistration:
 
         monkeypatch.setattr(policy_tools.workflows, "clone_policy", fake_workflow)
 
-        class RecordingClient:
-            def __init__(self, **kwargs):
-                self.org_id = 42
-
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, exc_type, exc, tb):
-                return False
-
-        monkeypatch.setattr(policy_tools, "AutomoxClient", RecordingClient)
-
         server = StubServer()
-        policy_tools.register(server)
+        policy_tools.register(server, client=FakeClient(org_id=42))
         tool_fn = server.tools["clone_policy"]
 
         await tool_fn(policy_id=901, name="My Clone", server_groups=[20, 30])
@@ -236,20 +186,8 @@ class TestPolicyCrudToolRegistration:
             policy_tools.workflows, "get_policy_compliance_stats", fake_workflow
         )
 
-        class RecordingClient:
-            def __init__(self, **kwargs):
-                self.org_id = 42
-
-            async def __aenter__(self):
-                return self
-
-            async def __aexit__(self, exc_type, exc, tb):
-                return False
-
-        monkeypatch.setattr(policy_tools, "AutomoxClient", RecordingClient)
-
         server = StubServer()
-        policy_tools.register(server)
+        policy_tools.register(server, client=FakeClient(org_id=42))
         tool_fn = server.tools["policy_compliance_stats"]
 
         await tool_fn()

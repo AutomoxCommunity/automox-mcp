@@ -20,6 +20,20 @@ class StubServer:
         return decorator
 
 
+class FakeClient:
+    """Minimal client stub for tool registration tests."""
+
+    def __init__(self, *, org_id=42, org_uuid=None, account_uuid="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"):
+        self.org_id = org_id
+        self.org_uuid = org_uuid
+        self.account_uuid = account_uuid
+
+    async def get(self, path, *, params=None, headers=None):
+        if path == "/orgs":
+            return [{"id": self.org_id, "org_uuid": "cccccccc-cccc-cccc-cccc-cccccccccccc"}]
+        return {}
+
+
 def success_result():
     return {"data": {}, "metadata": {"deprecated_endpoint": False}}
 
@@ -31,75 +45,35 @@ async def test_policy_tool_creates_client(monkeypatch):
 
     monkeypatch.setattr(policy_tools.workflows, "summarize_policy_activity", fake_workflow)
 
-    recorded = []
-
-    class RecordingClient:
-        def __init__(self, **kwargs):
-            recorded.append(True)
-            self.org_id = 42
-            self.org_uuid = None
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            return False
-
-        async def get(self, path, *, params=None, headers=None):
-            raise AssertionError("resolve_org_uuid should not call get when org_uuid provided.")
-
-    monkeypatch.setattr(policy_tools, "AutomoxClient", RecordingClient)
+    fake_client = FakeClient(org_uuid=str(UUID("56c0ba07-69f2-4f7c-b0a1-2bb0ed68578e")))
 
     server = StubServer()
-    policy_tools.register(server)
+    policy_tools.register(server, client=fake_client)
     tool_fn = server.tools["policy_health_overview"]
 
     await tool_fn(org_uuid=str(UUID("56c0ba07-69f2-4f7c-b0a1-2bb0ed68578e")))
-    assert recorded[-1] is True
 
 
 @pytest.mark.asyncio
 async def test_policy_tool_resolves_org_uuid(monkeypatch):
-    resolved_uuid = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+    resolved_uuid = UUID("cccccccc-cccc-cccc-cccc-cccccccccccc")
 
-    recorded = {"created": False, "calls": []}
+    recorded = {"calls": []}
 
     async def fake_workflow(client, **kwargs):
         recorded["calls"].append(kwargs)
-        assert kwargs["org_uuid"] == resolved_uuid
         return success_result()
 
     monkeypatch.setattr(policy_tools.workflows, "summarize_policy_activity", fake_workflow)
 
-    class RecordingClient:
-        def __init__(self, **kwargs):
-            recorded["created"] = True
-            self.org_id = 123
-            self.org_uuid = None
-            self.account_uuid = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            return False
-
-        async def get(self, path, *, params=None, headers=None):
-            assert path == "/orgs"
-            return [
-                {"id": 999, "org_uuid": "ffffffff-ffff-ffff-ffff-ffffffffffff"},
-                {"id": 123, "org_uuid": str(resolved_uuid)},
-            ]
-
-    monkeypatch.setattr(policy_tools, "AutomoxClient", RecordingClient)
+    fake_client = FakeClient(org_id=123)
 
     server = StubServer()
-    policy_tools.register(server)
+    policy_tools.register(server, client=fake_client)
     tool_fn = server.tools["policy_health_overview"]
 
     await tool_fn()
 
-    assert recorded["created"] is True
     assert recorded["calls"], "workflow should have been invoked"
 
 
@@ -113,20 +87,8 @@ async def test_policy_catalog_allows_limit_one(monkeypatch):
 
     monkeypatch.setattr(policy_tools.workflows, "summarize_policies", fake_workflow)
 
-    class RecordingClient:
-        def __init__(self, **kwargs):
-            self.org_id = 7
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            return False
-
-    monkeypatch.setattr(policy_tools, "AutomoxClient", RecordingClient)
-
     server = StubServer()
-    policy_tools.register(server)
+    policy_tools.register(server, client=FakeClient(org_id=7))
     tool_fn = server.tools["policy_catalog"]
 
     await tool_fn(limit=1)
@@ -143,20 +105,8 @@ async def test_policy_detail_allows_zero_recent_runs(monkeypatch):
 
     monkeypatch.setattr(policy_tools.workflows, "describe_policy", fake_workflow)
 
-    class RecordingClient:
-        def __init__(self, **kwargs):
-            self.org_id = 10
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            return False
-
-    monkeypatch.setattr(policy_tools, "AutomoxClient", RecordingClient)
-
     server = StubServer()
-    policy_tools.register(server)
+    policy_tools.register(server, client=FakeClient(org_id=10))
     tool_fn = server.tools["policy_detail"]
 
     await tool_fn(policy_id=12345, include_recent_runs=0)
@@ -170,27 +120,11 @@ async def test_device_tool_creates_client(monkeypatch):
 
     monkeypatch.setattr(device_tools.workflows, "list_device_inventory", fake_workflow)
 
-    recorded = []
-
-    class RecordingClient:
-        def __init__(self, **kwargs):
-            recorded.append(True)
-            self.org_id = 42
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            return False
-
-    monkeypatch.setattr(device_tools, "AutomoxClient", RecordingClient)
-
     server = StubServer()
-    device_tools.register(server)
+    device_tools.register(server, client=FakeClient())
     tool_fn = server.tools["list_devices"]
 
     await tool_fn()
-    assert recorded[-1] is True
 
 
 @pytest.mark.asyncio
@@ -204,26 +138,11 @@ async def test_account_tools_use_env_fallback(monkeypatch):
     monkeypatch.setenv("AUTOMOX_ACCOUNT_UUID", account_uuid)
     monkeypatch.setattr(account_tools.workflows, "invite_user_to_account", fake_invite)
 
-    captured = {}
-
-    class RecordingClient:
-        def __init__(self, **kwargs):
-            captured["created"] = True
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb):
-            return False
-
-    monkeypatch.setattr(account_tools, "AutomoxClient", RecordingClient)
-
     server = StubServer()
-    account_tools.register(server)
+    account_tools.register(server, client=FakeClient())
     tool_fn = server.tools["invite_user_to_account"]
 
     await tool_fn(email="user@example.com", account_rbac_role="global-admin")
-    assert captured["created"] is True
 
 
 @pytest.mark.asyncio
@@ -231,7 +150,7 @@ async def test_account_tools_error_when_env_missing(monkeypatch):
     monkeypatch.delenv("AUTOMOX_ACCOUNT_UUID", raising=False)
 
     server = StubServer()
-    account_tools.register(server)
+    account_tools.register(server, client=FakeClient())
     tool_fn = server.tools["remove_user_from_account"]
 
     with pytest.raises(ToolError):

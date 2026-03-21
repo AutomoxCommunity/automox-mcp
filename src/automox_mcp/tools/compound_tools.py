@@ -21,7 +21,7 @@ from ..utils.tooling import (
 )
 
 
-def register(server: FastMCP, *, read_only: bool = False) -> None:
+def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient) -> None:
     """Register compound tools."""
 
     async def _call(
@@ -30,15 +30,13 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
     ) -> dict[str, Any]:
         try:
             await enforce_rate_limit()
-            client = AutomoxClient()
-            client_org_id = getattr(client, "org_id", None)
-            async with client as session:
-                if client_org_id is None:
-                    raise ToolError(
-                        "org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly."
-                    )
-                raw_params["org_id"] = client_org_id
-                result: dict[str, Any] = await func(session, **raw_params)
+            client_org_id = client.org_id
+            if client_org_id is None:
+                raise ToolError(
+                    "org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly."
+                )
+            raw_params["org_id"] = client_org_id
+            result: dict[str, Any] = await func(client, **raw_params)
         except (ValidationError, ValueError) as exc:
             raise ToolError(str(exc)) from exc
         except RateLimitError as exc:
@@ -57,21 +55,19 @@ def register(server: FastMCP, *, read_only: bool = False) -> None:
     ) -> dict[str, Any]:
         try:
             await enforce_rate_limit()
-            client = AutomoxClient()
-            client_org_id = getattr(client, "org_id", None)
-            async with client as session:
-                if client_org_id is None:
-                    raise ToolError(
-                        "org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly."
-                    )
-                org_uuid = await resolve_org_uuid(
-                    session,
-                    org_id=client_org_id,
-                    allow_account_uuid=True,
+            client_org_id = client.org_id
+            if client_org_id is None:
+                raise ToolError(
+                    "org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly."
                 )
-                raw_params["org_id"] = client_org_id
-                raw_params["org_uuid"] = str(org_uuid)
-                result: dict[str, Any] = await func(session, **raw_params)
+            org_uuid = await resolve_org_uuid(
+                client,
+                org_id=client_org_id,
+                allow_account_uuid=True,
+            )
+            raw_params["org_id"] = client_org_id
+            raw_params["org_uuid"] = str(org_uuid)
+            result: dict[str, Any] = await func(client, **raw_params)
         except (ValidationError, ValueError) as exc:
             raise ToolError(str(exc)) from exc
         except RateLimitError as exc:

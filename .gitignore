@@ -13,3 +13,4 @@ htmlcov/
 .ruff_cache/
 build/
 dist/
+automox-mcp-design-guide.md

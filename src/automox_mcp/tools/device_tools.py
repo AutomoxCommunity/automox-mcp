@@ -26,8 +26,11 @@ from ..schemas import (
 from ..utils.tooling import (
     RateLimitError,
     as_tool_response,
+    check_idempotency,
     enforce_rate_limit,
+    format_as_markdown_table,
     format_error,
+    store_idempotency,
 )
 
 
@@ -81,6 +84,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         include_unmanaged: bool | None = True,
         policy_status: str | None = None,
         managed: bool | None = None,
+        output_format: str | None = "json",
     ) -> dict[str, Any]:
         params = {
             "group_id": group_id,
@@ -89,12 +93,20 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "policy_status": policy_status,
             "managed": managed,
         }
-        return await _call(
+        result = await _call(
             workflows.list_device_inventory,
             DeviceInventoryOverviewParams,
             params,
-
         )
+
+        if output_format == "markdown":
+            data = result.get("data", {})
+            for _key, value in data.items():
+                if isinstance(value, list) and value:
+                    return format_as_markdown_table(value)
+            return format_as_markdown_table([])
+
+        return result
 
     @server.tool(
         name="device_detail",
@@ -123,17 +135,26 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     async def devices_needing_attention(
         group_id: int | None = None,
         limit: int | None = 20,
+        output_format: str | None = "json",
     ) -> dict[str, Any]:
         params = {
             "group_id": group_id,
             "limit": limit,
         }
-        return await _call(
+        result = await _call(
             workflows.list_devices_needing_attention,
             DevicesNeedingAttentionParams,
             params,
-
         )
+
+        if output_format == "markdown":
+            data = result.get("data", {})
+            for _key, value in data.items():
+                if isinstance(value, list) and value:
+                    return format_as_markdown_table(value)
+            return format_as_markdown_table([])
+
+        return result
 
     @server.tool(
         name="search_devices",
@@ -151,6 +172,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         managed: bool | None = None,
         group_id: int | None = None,
         limit: int | None = 50,
+        output_format: str | None = "json",
     ) -> dict[str, Any]:
         params = {
             "hostname_contains": hostname_contains,
@@ -162,12 +184,20 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "group_id": group_id,
             "limit": limit,
         }
-        return await _call(
+        result = await _call(
             workflows.search_devices,
             DeviceSearchParams,
             params,
-
         )
+
+        if output_format == "markdown":
+            data = result.get("data", {})
+            for _key, value in data.items():
+                if isinstance(value, list) and value:
+                    return format_as_markdown_table(value)
+            return format_as_markdown_table([])
+
+        return result
 
     @server.tool(
         name="device_health_metrics",
@@ -246,18 +276,24 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             device_id: int,
             command_type: str,
             patch_names: str | None = None,
+            request_id: str | None = None,
         ) -> dict[str, Any]:
+            cached = check_idempotency(request_id, "execute_device_command")
+            if cached is not None:
+                return cached
+
             params = {
                 "device_id": device_id,
                 "command_type": command_type,
                 "patch_names": patch_names,
             }
-            return await _call(
+            result = await _call(
                 workflows.issue_device_command,
                 IssueDeviceCommandParams,
                 params,
-    
             )
+            store_idempotency(request_id, "execute_device_command", result)
+            return result
 
 
 __all__ = ["register"]

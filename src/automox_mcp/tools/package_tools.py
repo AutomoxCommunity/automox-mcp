@@ -21,6 +21,7 @@ from ..utils.tooling import (
     RateLimitError,
     as_tool_response,
     enforce_rate_limit,
+    format_as_markdown_table,
     format_error,
 )
 
@@ -79,19 +80,28 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         device_id: int,
         page: int | None = None,
         limit: int | None = None,
+        output_format: str | None = "json",
     ) -> dict[str, Any]:
         params = {
             "device_id": device_id,
             "page": page,
             "limit": limit,
         }
-        return await _call(
+        result = await _call(
             workflows.list_device_packages,
             GetDevicePackagesParams,
             params,
-
             inject_org_id=True,
         )
+
+        if output_format == "markdown":
+            data = result.get("data", {})
+            for _key, value in data.items():
+                if isinstance(value, list) and value:
+                    return format_as_markdown_table(value)
+            return format_as_markdown_table([])
+
+        return result
 
     @server.tool(
         name="search_org_packages",
@@ -105,6 +115,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         awaiting: bool | None = None,
         page: int | None = None,
         limit: int | None = None,
+        output_format: str | None = "json",
     ) -> dict[str, Any]:
         params = {
             "include_unmanaged": include_unmanaged,
@@ -112,12 +123,20 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "page": page,
             "limit": limit,
         }
-        return await _call(
+        result = await _call(
             workflows.search_org_packages,
             GetOrganizationPackagesParams,
             params,
-
         )
+
+        if output_format == "markdown":
+            data = result.get("data", {})
+            for _key, value in data.items():
+                if isinstance(value, list) and value:
+                    return format_as_markdown_table(value)
+            return format_as_markdown_table([])
+
+        return result
 
 
 __all__ = ["register"]

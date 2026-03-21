@@ -9,10 +9,12 @@ if str(SRC) not in sys.path:
 
 
 @pytest.fixture(autouse=True)
-def _reset_rate_limiter():
-    """Clear the global rate limiter between tests to prevent cross-test pollution."""
-    from automox_mcp.utils.tooling import _RATE_LIMITER
+def _reset_shared_state():
+    """Clear global rate limiter and idempotency cache between tests."""
+    from automox_mcp.utils.tooling import _IDEMPOTENCY_CACHE, _RATE_LIMITER
 
     _RATE_LIMITER._timestamps.clear()
+    _IDEMPOTENCY_CACHE.clear()
     yield
     _RATE_LIMITER._timestamps.clear()
+    _IDEMPOTENCY_CACHE.clear()

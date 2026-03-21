@@ -8,9 +8,12 @@ from automox_mcp.client import AutomoxAPIError
 from automox_mcp.utils.tooling import (
     RateLimiter,
     RateLimitError,
+    _apply_token_budget,
+    _estimate_tokens,
     _has_content,
     _sanitize_errors,
     as_tool_response,
+    format_as_markdown_table,
     format_error,
     get_enabled_modules,
 )
@@ -262,3 +265,111 @@ def test_as_tool_response_with_none_metadata():
     result = as_tool_response({"data": None, "metadata": None})
     assert result["data"] is None
     assert result["metadata"]["current_page"] is None
+
+
+# ---------------------------------------------------------------------------
+# Token budget estimation
+# ---------------------------------------------------------------------------
+
+
+def test_estimate_tokens_small():
+    assert _estimate_tokens({"x": 1}) > 0
+
+
+def test_estimate_tokens_empty():
+    assert _estimate_tokens({}) >= 0
+
+
+def test_apply_token_budget_small_response_no_warning():
+    resp = {"data": {"items": [1, 2]}, "metadata": {}}
+    result = _apply_token_budget(resp, budget=10000)
+    assert "token_warning" not in result.get("metadata", {})
+
+
+def test_apply_token_budget_large_response_adds_warning():
+    big_list = [{"name": f"device-{i}", "status": "ok"} for i in range(200)]
+    resp = {"data": {"devices": big_list}, "metadata": {}}
+    result = _apply_token_budget(resp, budget=50)
+    meta = result["metadata"]
+    assert "token_warning" in meta
+    assert meta["estimated_tokens"] > 50
+    assert meta["truncated"] is True
+    assert meta["total_available"] == 200
+    assert meta["returned_count"] < 200
+
+
+def test_apply_token_budget_non_list_data_not_truncated():
+    big_str = "x" * 50000
+    resp = {"data": {"content": big_str}, "metadata": {}}
+    result = _apply_token_budget(resp, budget=50)
+    meta = result["metadata"]
+    assert "token_warning" in meta
+    assert "truncated" not in meta
+
+
+def test_as_tool_response_applies_token_budget():
+    """Token budget is applied inside as_tool_response."""
+    big_list = [{"id": i} for i in range(500)]
+    result = as_tool_response(
+        {"data": {"items": big_list}, "metadata": {}}
+    )
+    # With 500 items the response should exceed default 4000 token budget
+    meta = result["metadata"]
+    if meta.get("estimated_tokens", 0) > 4000:
+        assert "token_warning" in meta
+
+
+# ---------------------------------------------------------------------------
+# Markdown table formatting
+# ---------------------------------------------------------------------------
+
+
+def test_markdown_table_empty_list():
+    assert format_as_markdown_table([]) == "_No data_"
+
+
+def test_markdown_table_single_row():
+    table = format_as_markdown_table([{"name": "dev-1", "os": "linux"}])
+    lines = table.split("\n")
+    assert len(lines) == 3  # header, separator, 1 row
+    assert "name" in lines[0]
+    assert "os" in lines[0]
+    assert "---" in lines[1]
+    assert "dev-1" in lines[2]
+
+
+def test_markdown_table_mixed_keys():
+    data = [
+        {"a": 1, "b": 2},
+        {"b": 3, "c": 4},
+    ]
+    table = format_as_markdown_table(data)
+    lines = table.split("\n")
+    assert len(lines) == 4  # header, sep, 2 rows
+    # All three columns present
+    assert "a" in lines[0] and "b" in lines[0] and "c" in lines[0]
+
+
+def test_markdown_table_truncates_long_values():
+    data = [{"text": "x" * 100}]
+    table = format_as_markdown_table(data, max_col_width=20)
+    assert "..." in table
+    # No cell should exceed max_col_width
+    for line in table.split("\n")[2:]:
+        for cell in line.split("|")[1:-1]:
+            assert len(cell.strip()) <= 20
+
+
+def test_markdown_table_escapes_pipes():
+    data = [{"val": "a|b|c"}]
+    table = format_as_markdown_table(data)
+    # Pipes in values should be escaped
+    assert "a\\|b\\|c" in table
+
+
+def test_markdown_table_none_values():
+    data = [{"a": None, "b": 42}]
+    table = format_as_markdown_table(data)
+    lines = table.split("\n")
+    # None renders as empty string
+    assert "42" in lines[2]

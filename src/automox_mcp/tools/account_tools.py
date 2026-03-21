@@ -16,8 +16,10 @@ from ..schemas import InviteUserParams, RemoveUserFromAccountParams, ZoneAssignm
 from ..utils.tooling import (
     RateLimitError,
     as_tool_response,
+    check_idempotency,
     enforce_rate_limit,
     format_error,
+    store_idempotency,
 )
 
 
@@ -71,19 +73,25 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             email: str,
             account_rbac_role: Literal["global-admin", "no-global-access"],
             zone_assignments: list[ZoneAssignment] | None = None,
+            request_id: str | None = None,
         ) -> dict[str, Any]:
+            cached = check_idempotency(request_id, "invite_user_to_account")
+            if cached is not None:
+                return cached
+
             params = {
                 "account_id": _resolve_account_id(None),
                 "email": email,
                 "account_rbac_role": account_rbac_role,
                 "zone_assignments": zone_assignments,
             }
-            return await _call(
+            result = await _call(
                 workflows.invite_user_to_account,
                 InviteUserParams,
                 params,
-
             )
+            store_idempotency(request_id, "invite_user_to_account", result)
+            return result
 
         @server.tool(
             name="remove_user_from_account",
@@ -92,17 +100,23 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         )
         async def remove_user_from_account(
             user_id: str,
+            request_id: str | None = None,
         ) -> dict[str, Any]:
+            cached = check_idempotency(request_id, "remove_user_from_account")
+            if cached is not None:
+                return cached
+
             params = {
                 "account_id": _resolve_account_id(None),
                 "user_id": user_id,
             }
-            return await _call(
+            result = await _call(
                 workflows.remove_user_from_account,
                 RemoveUserFromAccountParams,
                 params,
-
             )
+            store_idempotency(request_id, "remove_user_from_account", result)
+            return result
 
 
 __all__ = ["register"]

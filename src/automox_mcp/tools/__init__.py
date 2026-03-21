@@ -26,6 +26,11 @@ _MODULE_REGISTRY: dict[str, tuple[str, bool]] = {
     "compound": ("compound_tools", False),
 }
 
+# Modules that always load regardless of AUTOMOX_MCP_MODULES filtering
+_ALWAYS_LOAD: dict[str, tuple[str, bool]] = {
+    "meta": ("meta_tools", False),
+}
+
 
 def register_tools(server: FastMCP, *, client: AutomoxClient) -> None:
     """Register Automox tool modules with the FastMCP server.
@@ -36,9 +41,15 @@ def register_tools(server: FastMCP, *, client: AutomoxClient) -> None:
     enabled = get_enabled_modules()
     read_only = is_read_only()
 
-    for module_name, (tool_module_name, _has_writes) in _MODULE_REGISTRY.items():
-        # Skip modules not in the enabled set (if filtering is active)
-        if enabled is not None and module_name not in enabled:
+    all_modules = {**_MODULE_REGISTRY, **_ALWAYS_LOAD}
+
+    for module_name, (tool_module_name, _has_writes) in all_modules.items():
+        # Skip modules not in the enabled set (unless always-load)
+        if (
+            enabled is not None
+            and module_name not in enabled
+            and module_name not in _ALWAYS_LOAD
+        ):
             logger.info("Skipping module %s (not in AUTOMOX_MCP_MODULES)", module_name)
             continue
 

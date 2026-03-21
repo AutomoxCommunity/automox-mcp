@@ -203,8 +203,21 @@ class AutomoxClient:
     ) -> AutomoxResponse:
         target = str(self._http.base_url)
 
-        # Log the request for debugging (omit params to avoid leaking sensitive values)
-        logger.debug("Request: %s %s%s", method, target, path)
+        # Inject correlation ID from middleware context
+        from .middleware import get_correlation_id
+
+        merged_headers: dict[str, str] = dict(headers) if headers else {}
+        correlation_id = get_correlation_id()
+        if correlation_id:
+            merged_headers["X-Correlation-ID"] = correlation_id
+
+        logger.debug(
+            "Request: %s %s%s correlation_id=%s",
+            method,
+            target,
+            path,
+            correlation_id,
+        )
 
         try:
             response = await self._http.request(
@@ -212,7 +225,7 @@ class AutomoxClient:
                 path,
                 params=params,
                 json=json_data,
-                headers=headers,
+                headers=merged_headers or None,
             )
         except httpx.RequestError as exc:
             raise AutomoxAPIError(

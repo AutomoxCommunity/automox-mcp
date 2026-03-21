@@ -20,6 +20,7 @@ from ..utils.tooling import (
     RateLimitError,
     as_tool_response,
     enforce_rate_limit,
+    format_as_markdown_table,
     format_error,
 )
 
@@ -84,6 +85,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         event_name: str | None = None,
         start_date: str | None = None,
         end_date: str | None = None,
+        output_format: str | None = "json",
     ) -> dict[str, Any]:
         params = {
             "page": page,
@@ -96,13 +98,21 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "start_date": start_date,
             "end_date": end_date,
         }
-        return await _call(
+        result = await _call(
             workflows.list_events,
             GetEventsParams,
             params,
-
             inject_org_id=True,
         )
+
+        if output_format == "markdown":
+            data = result.get("data", {})
+            for _key, value in data.items():
+                if isinstance(value, list) and value:
+                    return format_as_markdown_table(value)
+            return format_as_markdown_table([])
+
+        return result
 
 
 __all__ = ["register"]

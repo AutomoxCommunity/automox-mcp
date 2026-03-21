@@ -37,6 +37,68 @@ class RateLimitError(RuntimeError):
     """Raised when a tool exceeds the configured rate limit."""
 
 
+class IdempotencyCache:
+    """In-memory TTL cache for idempotent write operations."""
+
+    _MAX_ENTRIES = 1000
+
+    def __init__(self, *, ttl_seconds: float = 300.0) -> None:
+        self._ttl = ttl_seconds
+        self._cache: dict[tuple[str, str], tuple[dict[str, Any], float]] = {}
+
+    def get(self, request_id: str, tool_name: str) -> dict[str, Any] | None:
+        key = (request_id, tool_name)
+        entry = self._cache.get(key)
+        if entry is None:
+            return None
+        response, expiry = entry
+        if time.monotonic() > expiry:
+            del self._cache[key]
+            return None
+        return response
+
+    def put(
+        self, request_id: str, tool_name: str, response: dict[str, Any]
+    ) -> None:
+        self._evict_expired()
+        key = (request_id, tool_name)
+        self._cache[key] = (response, time.monotonic() + self._ttl)
+
+    def _evict_expired(self) -> None:
+        now = time.monotonic()
+        expired = [k for k, (_, exp) in self._cache.items() if now > exp]
+        for k in expired:
+            del self._cache[k]
+        # Hard cap to prevent unbounded growth
+        if len(self._cache) >= self._MAX_ENTRIES:
+            oldest = min(self._cache, key=lambda k: self._cache[k][1])
+            del self._cache[oldest]
+
+    def clear(self) -> None:
+        self._cache.clear()
+
+
+_IDEMPOTENCY_CACHE = IdempotencyCache()
+
+
+def check_idempotency(
+    request_id: str | None, tool_name: str
+) -> dict[str, Any] | None:
+    """Return cached response for a duplicate request_id, or None."""
+    if not request_id:
+        return None
+    return _IDEMPOTENCY_CACHE.get(request_id, tool_name)
+
+
+def store_idempotency(
+    request_id: str | None, tool_name: str, response: dict[str, Any]
+) -> None:
+    """Cache a response for idempotent replay."""
+    if not request_id:
+        return
+    _IDEMPOTENCY_CACHE.put(request_id, tool_name, response)
+
+
 class RateLimiter:
     """Simple sliding window rate limiter to throttle outbound API usage."""
 
@@ -155,23 +217,113 @@ def format_error(exc: AutomoxAPIError) -> str:
     return f"{str(exc)} (status={exc.status_code})\n\nAPI Response:\n{payload_text}"
 
 
+_CHARS_PER_TOKEN = 4
+_DEFAULT_TOKEN_BUDGET = int(
+    os.environ.get("AUTOMOX_MCP_TOKEN_BUDGET", "4000")
+)
+
+
+def _estimate_tokens(response_dict: dict[str, Any]) -> int:
+    """Rough token estimate: JSON character count / 4."""
+    try:
+        return len(json.dumps(response_dict)) // _CHARS_PER_TOKEN
+    except (TypeError, ValueError):
+        return 0
+
+
+def _apply_token_budget(
+    response_dict: dict[str, Any],
+    *,
+    budget: int | None = None,
+) -> dict[str, Any]:
+    """Add a token warning and optionally truncate list data."""
+    effective_budget = budget or _DEFAULT_TOKEN_BUDGET
+    estimated = _estimate_tokens(response_dict)
+    if estimated <= effective_budget:
+        return response_dict
+
+    meta = response_dict.setdefault("metadata", {})
+    meta["estimated_tokens"] = estimated
+    meta["token_warning"] = (
+        f"Response is ~{estimated} tokens (budget: {effective_budget}). "
+        "Consider using pagination or filters to reduce size."
+    )
+
+    # Truncate list data if the data payload is a dict with a list value
+    data = response_dict.get("data")
+    if isinstance(data, Mapping):
+        for _key, value in data.items():
+            if isinstance(value, list) and len(value) > 1:
+                total = len(value)
+                value[:] = value[: max(total // 2, 1)]
+                meta["truncated"] = True
+                meta["total_available"] = total
+                meta["returned_count"] = len(value)
+                break
+
+    return response_dict
+
+
 def as_tool_response(result: Mapping[str, Any]) -> dict[str, Any]:
     """Convert a workflow result to a standardized tool response."""
+    from ..middleware import get_correlation_id
+
     metadata_input = result.get("metadata") or {}
     if not isinstance(metadata_input, Mapping):
         metadata_input = {}
+    metadata_dict = dict(metadata_input)
+    correlation_id = get_correlation_id()
+    if correlation_id:
+        metadata_dict["correlation_id"] = correlation_id
     data = result.get("data")
-    metadata = PaginationMetadata(**metadata_input)
+    metadata = PaginationMetadata(**metadata_dict)
     response = ToolResponse(data=data, metadata=metadata)
-    return cast(dict[str, Any], response.model_dump())
+    response_dict = cast(dict[str, Any], response.model_dump())
+    return _apply_token_budget(response_dict)
+
+
+def format_as_markdown_table(
+    data: list[dict[str, Any]], *, max_col_width: int = 40
+) -> str:
+    """Convert a list of flat dicts into a Markdown table string."""
+    if not data:
+        return "_No data_"
+
+    # Collect all keys preserving insertion order
+    columns: list[str] = []
+    seen: set[str] = set()
+    for row in data:
+        for key in row:
+            if key not in seen:
+                columns.append(key)
+                seen.add(key)
+
+    def _cell(value: Any) -> str:
+        text = str(value) if value is not None else ""
+        if len(text) > max_col_width:
+            text = text[: max_col_width - 3] + "..."
+        return text.replace("|", "\\|")
+
+    header = "| " + " | ".join(columns) + " |"
+    separator = "| " + " | ".join("---" for _ in columns) + " |"
+
+    rows = []
+    for row in data:
+        cells = [_cell(row.get(col)) for col in columns]
+        rows.append("| " + " | ".join(cells) + " |")
+
+    return "\n".join([header, separator, *rows])
 
 
 __all__ = [
     "RateLimitError",
     "RateLimiter",
     "as_tool_response",
+    "check_idempotency",
     "enforce_rate_limit",
+    "format_as_markdown_table",
     "format_error",
     "get_enabled_modules",
     "is_read_only",
+    "store_idempotency",
 ]

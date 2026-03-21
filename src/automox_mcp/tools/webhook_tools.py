@@ -17,8 +17,11 @@ from ..utils import resolve_org_uuid
 from ..utils.tooling import (
     RateLimitError,
     as_tool_response,
+    check_idempotency,
     enforce_rate_limit,
+    format_as_markdown_table,
     format_error,
+    store_idempotency,
 )
 
 # -----------------------------------------------------------------
@@ -153,19 +156,28 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         org_uuid: str | None = None,
         limit: int | None = None,
         cursor: str | None = None,
+        output_format: str | None = "json",
     ) -> dict[str, Any]:
         params = {
             "org_uuid": org_uuid,
             "limit": limit,
             "cursor": cursor,
         }
-        return await _call(
+        result = await _call(
             workflows.list_webhooks,
             ListWebhooksParams,
             params,
-
             org_uuid_field="org_uuid",
         )
+
+        if output_format == "markdown":
+            data = result.get("data", {})
+            for _key, value in data.items():
+                if isinstance(value, list) and value:
+                    return format_as_markdown_table(value)
+            return format_as_markdown_table([])
+
+        return result
 
     @server.tool(
         name="get_webhook",
@@ -205,20 +217,26 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             url: str,
             event_types: list[str],
             org_uuid: str | None = None,
+            request_id: str | None = None,
         ) -> dict[str, Any]:
+            cached = check_idempotency(request_id, "create_webhook")
+            if cached is not None:
+                return cached
+
             params = {
                 "org_uuid": org_uuid,
                 "name": name,
                 "url": url,
                 "event_types": event_types,
             }
-            return await _call(
+            result = await _call(
                 workflows.create_webhook,
                 CreateWebhookParams,
                 params,
-    
                 org_uuid_field="org_uuid",
             )
+            store_idempotency(request_id, "create_webhook", result)
+            return result
 
         @server.tool(
             name="update_webhook",
@@ -235,7 +253,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             url: str | None = None,
             enabled: bool | None = None,
             event_types: list[str] | None = None,
+            request_id: str | None = None,
         ) -> dict[str, Any]:
+            cached = check_idempotency(request_id, "update_webhook")
+            if cached is not None:
+                return cached
+
             params = {
                 "org_uuid": org_uuid,
                 "webhook_id": webhook_id,
@@ -244,13 +267,14 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "enabled": enabled,
                 "event_types": event_types,
             }
-            return await _call(
+            result = await _call(
                 workflows.update_webhook,
                 UpdateWebhookParams,
                 params,
-    
                 org_uuid_field="org_uuid",
             )
+            store_idempotency(request_id, "update_webhook", result)
+            return result
 
         @server.tool(
             name="delete_webhook",
@@ -260,18 +284,24 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         async def delete_webhook(
             webhook_id: str,
             org_uuid: str | None = None,
+            request_id: str | None = None,
         ) -> dict[str, Any]:
+            cached = check_idempotency(request_id, "delete_webhook")
+            if cached is not None:
+                return cached
+
             params = {
                 "org_uuid": org_uuid,
                 "webhook_id": webhook_id,
             }
-            return await _call(
+            result = await _call(
                 workflows.delete_webhook,
                 DeleteWebhookParams,
                 params,
-    
                 org_uuid_field="org_uuid",
             )
+            store_idempotency(request_id, "delete_webhook", result)
+            return result
 
         @server.tool(
             name="test_webhook",
@@ -284,18 +314,24 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         async def test_webhook(
             webhook_id: str,
             org_uuid: str | None = None,
+            request_id: str | None = None,
         ) -> dict[str, Any]:
+            cached = check_idempotency(request_id, "test_webhook")
+            if cached is not None:
+                return cached
+
             params = {
                 "org_uuid": org_uuid,
                 "webhook_id": webhook_id,
             }
-            return await _call(
+            result = await _call(
                 workflows.test_webhook,
                 TestWebhookParams,
                 params,
-    
                 org_uuid_field="org_uuid",
             )
+            store_idempotency(request_id, "test_webhook", result)
+            return result
 
         @server.tool(
             name="rotate_webhook_secret",
@@ -308,18 +344,24 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         async def rotate_webhook_secret(
             webhook_id: str,
             org_uuid: str | None = None,
+            request_id: str | None = None,
         ) -> dict[str, Any]:
+            cached = check_idempotency(request_id, "rotate_webhook_secret")
+            if cached is not None:
+                return cached
+
             params = {
                 "org_uuid": org_uuid,
                 "webhook_id": webhook_id,
             }
-            return await _call(
+            result = await _call(
                 workflows.rotate_webhook_secret,
                 RotateWebhookSecretParams,
                 params,
-    
                 org_uuid_field="org_uuid",
             )
+            store_idempotency(request_id, "rotate_webhook_secret", result)
+            return result
 
 
 __all__ = ["register"]

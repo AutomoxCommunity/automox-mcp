@@ -23,8 +23,11 @@ from ..schemas import (
 from ..utils.tooling import (
     RateLimitError,
     as_tool_response,
+    check_idempotency,
     enforce_rate_limit,
+    format_as_markdown_table,
     format_error,
+    store_idempotency,
 )
 
 
@@ -80,18 +83,27 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     async def list_server_groups(
         page: int | None = None,
         limit: int | None = None,
+        output_format: str | None = "json",
     ) -> dict[str, Any]:
         params = {
             "page": page,
             "limit": limit,
         }
-        return await _call(
+        result = await _call(
             workflows.list_server_groups,
             ListServerGroupsParams,
             params,
-
             inject_org_id=True,
         )
+
+        if output_format == "markdown":
+            data = result.get("data", {})
+            for _key, value in data.items():
+                if isinstance(value, list) and value:
+                    return format_as_markdown_table(value)
+            return format_as_markdown_table([])
+
+        return result
 
     @server.tool(
         name="get_server_group",
@@ -125,7 +137,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             ui_color: str | None = None,
             notes: str | None = None,
             policies: list[int] | None = None,
+            request_id: str | None = None,
         ) -> dict[str, Any]:
+            cached = check_idempotency(request_id, "create_server_group")
+            if cached is not None:
+                return cached
+
             params = {
                 "name": name,
                 "refresh_interval": refresh_interval,
@@ -134,13 +151,14 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "notes": notes,
                 "policies": policies,
             }
-            return await _call(
+            result = await _call(
                 workflows.create_server_group,
                 CreateServerGroupParams,
                 params,
-    
                 inject_org_id=True,
             )
+            store_idempotency(request_id, "create_server_group", result)
+            return result
 
         @server.tool(
             name="update_server_group",
@@ -155,7 +173,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             ui_color: str | None = None,
             notes: str | None = None,
             policies: list[int] | None = None,
+            request_id: str | None = None,
         ) -> dict[str, Any]:
+            cached = check_idempotency(request_id, "update_server_group")
+            if cached is not None:
+                return cached
+
             params = {
                 "group_id": group_id,
                 "name": name,
@@ -165,13 +188,14 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "notes": notes,
                 "policies": policies,
             }
-            return await _call(
+            result = await _call(
                 workflows.update_server_group,
                 UpdateServerGroupParams,
                 params,
-    
                 inject_org_id=True,
             )
+            store_idempotency(request_id, "update_server_group", result)
+            return result
 
         @server.tool(
             name="delete_server_group",
@@ -180,16 +204,22 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         )
         async def delete_server_group(
             group_id: int,
+            request_id: str | None = None,
         ) -> dict[str, Any]:
+            cached = check_idempotency(request_id, "delete_server_group")
+            if cached is not None:
+                return cached
+
             params = {
                 "group_id": group_id,
             }
-            return await _call(
+            result = await _call(
                 workflows.delete_server_group,
                 DeleteServerGroupParams,
                 params,
-    
             )
+            store_idempotency(request_id, "delete_server_group", result)
+            return result
 
 
 __all__ = ["register"]

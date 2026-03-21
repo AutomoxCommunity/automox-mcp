@@ -16,6 +16,7 @@ from ..utils.tooling import (
     RateLimitError,
     as_tool_response,
     enforce_rate_limit,
+    format_as_markdown_table,
     format_error,
 )
 
@@ -68,6 +69,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         limit: int | None = None,
         include_raw_events: bool | None = False,
         org_uuid: str | None = None,
+        output_format: str | None = "json",
     ) -> dict[str, Any]:
         params = {
             "date": date,
@@ -79,12 +81,20 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "include_raw_events": include_raw_events,
             "org_uuid": org_uuid,
         }
-        return await _call(
+        result = await _call(
             workflows.audit_trail_user_activity,
             AuditTrailEventsParams,
             params,
-
         )
+
+        if output_format == "markdown":
+            data = result.get("data", {})
+            for _key, value in data.items():
+                if isinstance(value, list) and value:
+                    return format_as_markdown_table(value)
+            return format_as_markdown_table([])
+
+        return result
 
 
 __all__ = ["register"]

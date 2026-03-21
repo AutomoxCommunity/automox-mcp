@@ -30,8 +30,11 @@ from ..utils import resolve_org_uuid
 from ..utils.tooling import (
     RateLimitError,
     as_tool_response,
+    check_idempotency,
     enforce_rate_limit,
+    format_as_markdown_table,
     format_error,
+    store_idempotency,
 )
 
 
@@ -171,18 +174,27 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         limit: int | None = 20,
         page: int | None = 0,
         include_inactive: bool | None = False,
+        output_format: str | None = "json",
     ) -> dict[str, Any]:
         params = {
             "limit": limit,
             "page": page,
             "include_inactive": include_inactive,
         }
-        return await _call(
+        result = await _call(
             workflows.summarize_policies,
             PolicySummaryParams,
             params,
-
         )
+
+        if output_format == "markdown":
+            data = result.get("data", {})
+            for _key, value in data.items():
+                if isinstance(value, list) and value:
+                    return format_as_markdown_table(value)
+            return format_as_markdown_table([])
+
+        return result
 
     @server.tool(
         name="policy_detail", description="Retrieve configuration and recent history for a policy."
@@ -223,17 +235,26 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     async def patch_approvals_summary(
         status: str | None = None,
         limit: int | None = 25,
+        output_format: str | None = "json",
     ) -> dict[str, Any]:
         params = {
             "status": status,
             "limit": limit,
         }
-        return await _call(
+        result = await _call(
             workflows.summarize_patch_approvals,
             PatchApprovalSummaryParams,
             params,
-
         )
+
+        if output_format == "markdown":
+            data = result.get("data", {})
+            for _key, value in data.items():
+                if isinstance(value, list) and value:
+                    return format_as_markdown_table(value)
+            return format_as_markdown_table([])
+
+        return result
 
     if not read_only:
 
@@ -246,18 +267,24 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             approval_id: int,
             decision: str,
             notes: str | None = None,
+            request_id: str | None = None,
         ) -> dict[str, Any]:
+            cached = check_idempotency(request_id, "decide_patch_approval")
+            if cached is not None:
+                return cached
+
             params = {
                 "approval_id": approval_id,
                 "decision": decision,
                 "notes": notes,
             }
-            return await _call(
+            result = await _call(
                 workflows.resolve_patch_approval,
                 PatchApprovalDecisionParams,
                 params,
-    
             )
+            store_idempotency(request_id, "decide_patch_approval", result)
+            return result
 
         @server.tool(
             name="delete_policy",
@@ -266,13 +293,20 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         )
         async def delete_policy(
             policy_id: int,
+            request_id: str | None = None,
         ) -> dict[str, Any]:
+            cached = check_idempotency(request_id, "delete_policy")
+            if cached is not None:
+                return cached
+
             params = {"policy_id": policy_id}
-            return await _call(
+            result = await _call(
                 workflows.delete_policy,
                 DeletePolicyToolParams,
                 params,
             )
+            store_idempotency(request_id, "delete_policy", result)
+            return result
 
         @server.tool(
             name="clone_policy",
@@ -286,17 +320,24 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             policy_id: int,
             name: str | None = None,
             server_groups: list[int] | None = None,
+            request_id: str | None = None,
         ) -> dict[str, Any]:
+            cached = check_idempotency(request_id, "clone_policy")
+            if cached is not None:
+                return cached
+
             params: dict[str, Any] = {"policy_id": policy_id}
             if name is not None:
                 params["name"] = name
             if server_groups is not None:
                 params["server_groups"] = server_groups
-            return await _call(
+            result = await _call(
                 workflows.clone_policy,
                 ClonePolicyParams,
                 params,
             )
+            store_idempotency(request_id, "clone_policy", result)
+            return result
 
         @server.tool(
             name="apply_policy_changes",
@@ -306,18 +347,24 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         async def apply_policy_changes_tool(
             operations: list[dict[str, Any]],
             preview: bool | None = False,
+            request_id: str | None = None,
         ) -> dict[str, Any]:
+            cached = check_idempotency(request_id, "apply_policy_changes")
+            if cached is not None:
+                return cached
+
             normalized_operations = workflows.normalize_policy_operations_input(operations)
             params = {
                 "operations": normalized_operations,
                 "preview": preview,
             }
-            return await _call(
+            result = await _call(
                 workflows.apply_policy_changes,
                 PolicyChangeRequestParams,
                 params,
-    
             )
+            store_idempotency(request_id, "apply_policy_changes", result)
+            return result
 
         @server.tool(
             name="execute_policy_now",
@@ -331,18 +378,24 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             policy_id: int,
             action: str,
             device_id: int | None = None,
+            request_id: str | None = None,
         ) -> dict[str, Any]:
+            cached = check_idempotency(request_id, "execute_policy_now")
+            if cached is not None:
+                return cached
+
             params = {
                 "policy_id": policy_id,
                 "action": action,
                 "device_id": device_id,
             }
-            return await _call(
+            result = await _call(
                 workflows.execute_policy,
                 ExecutePolicyParams,
                 params,
-    
             )
+            store_idempotency(request_id, "execute_policy_now", result)
+            return result
 
 
 __all__ = ["register"]

@@ -11,6 +11,7 @@ from typing import Any, cast
 from fastmcp import FastMCP
 
 from .client import AutomoxClient
+from .middleware import CorrelationMiddleware
 from .resources import register_resources
 from .tools import register_tools
 
@@ -174,6 +175,7 @@ def create_server() -> FastMCP:
     server: FastMCP = FastMCP(
         name="Automox MCP",
         lifespan=_lifespan,
+        middleware=[CorrelationMiddleware()],
         instructions=(
             "Curated Automox workflows for policy health, device insights, remediation, "
             "account management, server group management, package/patch visibility, "

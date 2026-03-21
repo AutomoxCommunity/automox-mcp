@@ -31,12 +31,14 @@ common operational scenarios.
   - [Reports (2 tools)](#reports-2-tools)
   - [Account Management (2 tools)](#account-management-2-tools)
   - [Audit Trail (1 tool)](#audit-trail-1-tool)
+  - [Capability Discovery (1 tool)](#capability-discovery-1-tool)
   - [MCP Resources](#mcp-resources)
   - [Example Workflows](#example-workflows)
   - [Tool Parameters](#tool-parameters)
 - [Configuration](#configuration)
   - [Read-Only Mode](#read-only-mode)
   - [Modular Architecture](#modular-architecture)
+  - [Enterprise Features](#enterprise-features)
 - [Setup & Usage](#setup--usage)
   - [Prerequisites](#prerequisites)
   - [Finding the values in your console](#finding-the-values-in-your-console)
@@ -59,7 +61,7 @@ common operational scenarios.
 
 ## Available Tools
 
-The MCP server exposes 44 workflow tools designed for common Automox management tasks:
+The MCP server exposes 45 workflow tools designed for common Automox management tasks:
 
 ### Device Management (8 tools)
 - **`list_devices`** - Summarize device inventory and policy status across the organization. Includes unmanaged devices by default and supports `policy_status`/`managed` filters so you can zero in on, for example, non-compliant managed endpoints.
@@ -124,6 +126,9 @@ The MCP server exposes 44 workflow tools designed for common Automox management 
 
 ### Audit Trail (1 tool)
 - **`audit_trail_user_activity`** - Retrieve Automox audit trail events performed by a specific user on a given date, with optional pagination cursor support. Set `include_raw_events=true` to include sanitized event payloads when deeper investigation is required. Pass either the full email address or provide `actor_name`/partial email hints and the tool will resolve the matching Automox user automatically.
+
+### Capability Discovery (1 tool)
+- **`discover_capabilities`** - Return all available tools organized by domain (devices, policies, patches, groups, events, reports, audit, webhooks, account, compound). This meta-tool is always loaded regardless of `AUTOMOX_MCP_MODULES` configuration and provides a quick reference for what the server can do.
 
 ### MCP Resources
 
@@ -287,6 +292,8 @@ Most tools accept optional parameters for filtering and pagination:
 - **Report tools**: `group_id`, `limit`, `offset`
 - **Compound tools**: `group_id`, `device_id`, `max_packages`
 - **Audit tools**: `date`, `actor_email`, `actor_uuid`, `cursor`, `limit`, `include_raw_events`, `org_uuid` (optional)
+- **Write tools** (all 16): accept an optional `request_id` parameter (UUID string) for idempotency. Supplying the same `request_id` on a repeat call returns the cached response without re-executing the operation (TTL: 300 seconds).
+- **List tools** (15 tools): accept an optional `output_format` parameter. Use `"json"` (default) for the standard structured response or `"markdown"` for a compact table suited to quick scanning.
 - **Execution tools**:
   - `execute_policy_now`: `policy_id` (required), `action` (remediateAll or remediateDevice), `device_id` (optional, required for remediateDevice)
   - `execute_device_command`: `device_id` (required), `command_type` (scan, patch_all, patch_specific, reboot), `patch_names` (optional, required for patch_specific)
@@ -297,7 +304,7 @@ Most tools accept optional parameters for filtering and pagination:
 
 ### Read-Only Mode
 
-Set `AUTOMOX_MCP_READ_ONLY=true` to disable all write operations. In this mode, only read-only tools are registered (28 of 44 tools). Destructive tools like `execute_device_command`, `apply_policy_changes`, `create_webhook`, `delete_server_group`, `clone_policy`, `delete_policy`, etc. will not be available.
+Set `AUTOMOX_MCP_READ_ONLY=true` to disable all write operations. In this mode, only read-only tools are registered (29 of 45 tools). Destructive tools like `execute_device_command`, `apply_policy_changes`, `create_webhook`, `delete_server_group`, `clone_policy`, `delete_policy`, etc. will not be available.
 
 This is useful for auditing, reporting, and monitoring use cases where you want to prevent accidental modifications.
 
@@ -307,7 +314,7 @@ AUTOMOX_MCP_READ_ONLY=true
 
 ### Modular Architecture
 
-Set `AUTOMOX_MCP_MODULES` to a comma-separated list of module names to load only the tools you need. This reduces the tool surface area for focused use cases and improves token efficiency.
+Set `AUTOMOX_MCP_MODULES` to a comma-separated list of module names to load only the tools you need. This reduces the tool surface area for focused use cases and improves token efficiency. The `discover_capabilities` tool is always registered regardless of this setting.
 
 Available modules: `audit`, `devices`, `policies`, `users`, `groups`, `events`, `reports`, `packages`, `webhooks`, `compound`
 
@@ -331,6 +338,49 @@ Both `AUTOMOX_MCP_READ_ONLY` and `AUTOMOX_MCP_MODULES` can be combined. For exam
 AUTOMOX_MCP_READ_ONLY=true
 AUTOMOX_MCP_MODULES=devices,policies
 ```
+
+Note: `discover_capabilities` is always registered regardless of `AUTOMOX_MCP_MODULES` configuration.
+
+### Enterprise Features
+
+The following features are built into the server and require no additional configuration unless noted.
+
+#### Correlation IDs
+
+Every tool call is automatically assigned a UUID4 correlation ID via FastMCP middleware. The ID flows through to the response `metadata` field and is forwarded to the Automox API as the `X-Correlation-ID` request header. The middleware also logs the tool name, final status, and wall-clock latency at `INFO` level.
+
+No configuration required. Correlation IDs appear in response metadata automatically.
+
+#### Token Budget Estimation
+
+The server warns when a response is estimated to exceed 4000 tokens and automatically truncates list data to keep responses within budget. The threshold is configurable:
+
+```bash
+AUTOMOX_MCP_TOKEN_BUDGET=4000   # default; set higher to allow larger responses
+```
+
+#### Idempotency Keys
+
+All 16 write tools accept an optional `request_id` parameter (any UUID string). Submitting the same `request_id` within 300 seconds returns the cached response without re-executing the underlying API call. The cache holds up to 1000 entries and is stored in-memory (cleared on server restart).
+
+```
+# Example: safe to retry — second call returns the cached result
+execute_device_command(device_id=123, command_type="reboot", request_id="550e8400-e29b-41d4-a716-446655440000")
+```
+
+#### Markdown Table Output
+
+Fifteen list tools accept an optional `output_format` parameter:
+- `"json"` (default) — standard structured JSON response
+- `"markdown"` — compact Markdown table suitable for quick scanning in chat interfaces
+
+```
+list_devices(output_format="markdown")
+```
+
+#### Capability Discovery
+
+The `discover_capabilities` meta-tool returns all available tools organized by domain. It is always available regardless of `AUTOMOX_MCP_MODULES` and is useful for discovering what the server can do without consulting this README.
 
 ## Setup & Usage
 

@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### Enterprise Features
+
+- **Correlation IDs** — UUID4 assigned per tool call via FastMCP middleware. The ID flows to the `metadata` field of every tool response and is forwarded to the Automox API as the `X-Correlation-ID` request header. The middleware logs tool name, final status, and wall-clock latency at `INFO` level.
+- **Token budget estimation** — Middleware warns when a response is estimated to exceed ~4000 tokens and auto-truncates list data to stay within budget. Threshold is configurable via `AUTOMOX_MCP_TOKEN_BUDGET` environment variable.
+- **Idempotency keys** — All 16 write tools accept an optional `request_id` parameter (UUID string). A duplicate `request_id` within 300 seconds returns the cached response without re-executing the API call. In-memory TTL cache with a maximum of 1000 entries.
+- **Markdown table output** — 15 list tools accept an optional `output_format` parameter (`"json"` default, `"markdown"` for compact tables suited to chat interfaces).
+- **`discover_capabilities` meta-tool** — Returns all available tools organized by domain (devices, policies, patches, groups, events, reports, audit, webhooks, account, compound). Always registered regardless of `AUTOMOX_MCP_MODULES` configuration. Brings total tool count to 45.
+
+#### Security Hardening
+
+- **API key privacy** — API key stored as a private attribute on the HTTP client; authentication injected per-request via an httpx auth callback rather than stored in headers.
+- **Client lifecycle management** — HTTP client `aclose()` called on server shutdown via FastMCP lifespan context, preventing connection leaks.
+- **Non-loopback binding warning** — Server emits a warning log when `--transport http` or `--transport sse` binds to a non-loopback address (e.g., `0.0.0.0`).
+- **Exception logging** — Silent exception swallowing replaced with structured `debug`-level logging throughout workflow modules.
+- **Bandit pre-commit hook** — `bandit` static security analysis added to pre-commit configuration; runs on every commit.
+- **Typed schema fields** — 18 previously bare `list` / `dict` fields in `schemas.py` replaced with fully parameterized types (e.g., `list[str]`, `dict[str, Any]`) for stronger Pydantic validation.
+- **Module splits** — `devices.py` split into `devices.py` + `device_inventory.py` + `device_commands.py`; `policy.py` split into `policy.py` + `policy_crud.py` for clearer separation of concerns.
+- **Lint cleanup** — Ruff lint errors reduced from 46 to 0 across `src/` and `tests/`.
+- **CI coverage threshold** — `pytest` now runs with `--cov-fail-under=90`; CI fails if coverage drops below 90%.
+- **Test suite growth** — Tests increased from 137 to 634; coverage increased from 70% to 92%.
+
 #### Phase 2: Compound Tools, Inventory & Resources (8 new tools, 4 new resources)
 
 - **Compound Workflows** (3 tools)

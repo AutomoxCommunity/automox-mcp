@@ -17,6 +17,7 @@ from ..schemas import (
     ClonePolicyParams,
     DeletePolicyToolParams,
     ExecutePolicyParams,
+    GetPolicyStatsParams,
     OrgIdContextMixin,
     OrgIdRequiredMixin,
     PatchApprovalDecisionParams,
@@ -223,7 +224,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     async def policy_compliance_stats() -> dict[str, Any]:
         return await _call(
             workflows.get_policy_compliance_stats,
-            PolicySummaryParams,
+            GetPolicyStatsParams,
             {},
         )
 

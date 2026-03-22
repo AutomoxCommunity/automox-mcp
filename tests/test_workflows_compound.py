@@ -13,37 +13,7 @@ from automox_mcp.workflows.compound import (
     get_device_full_profile,
     get_patch_tuesday_readiness,
 )
-
-
-class StubClient:
-    """Lightweight Automox client stub for compound workflow testing."""
-
-    def __init__(
-        self,
-        *,
-        get_responses: dict[str, list[Any]] | None = None,
-        post_responses: dict[str, list[Any]] | None = None,
-    ) -> None:
-        self._get_responses = {key: list(value) for key, value in (get_responses or {}).items()}
-        self._post_responses = {key: list(value) for key, value in (post_responses or {}).items()}
-        self.org_id: int | None = 555
-        self.org_uuid: str | None = None
-        self.account_uuid: str = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
-        self.calls: list[tuple[str, str, dict[str, Any] | None]] = []
-
-    async def get(
-        self,
-        path: str,
-        *,
-        params: dict[str, Any] | None = None,
-        headers: dict[str, str] | None = None,
-    ) -> Any:
-        self.calls.append(("GET", path, params))
-        responses = self._get_responses.get(path)
-        if not responses:
-            # Return empty response for unmatched paths (graceful degradation)
-            return {}
-        return copy.deepcopy(responses.pop(0))
+from conftest import StubClient
 
 
 # ---------------------------------------------------------------------------
@@ -140,7 +110,7 @@ _NONCOMPLIANT_RESPONSE = {
 
 
 def _build_readiness_client() -> StubClient:
-    return StubClient(
+    client = StubClient(
         get_responses={
             "/reports/prepatch": [_PREPATCH_RESPONSE],
             "/approvals": [_APPROVALS_RESPONSE],
@@ -148,10 +118,12 @@ def _build_readiness_client() -> StubClient:
             "/policystats": [_POLICYSTATS_RESPONSE],
         }
     )
+    client.org_id = 555
+    return client
 
 
 def _build_compliance_client() -> StubClient:
-    return StubClient(
+    client = StubClient(
         get_responses={
             "/reports/needs-attention": [_NONCOMPLIANT_RESPONSE],
             "/servers": [
@@ -180,6 +152,8 @@ def _build_compliance_client() -> StubClient:
             "/policystats": [_POLICYSTATS_RESPONSE],
         }
     )
+    client.org_id = 555
+    return client
 
 
 # ---------------------------------------------------------------------------
@@ -249,6 +223,7 @@ async def test_patch_tuesday_readiness_handles_partial_failures() -> None:
             "/policystats": [_POLICYSTATS_RESPONSE],
         }
     )
+    client.org_id = 555
 
     result = await get_patch_tuesday_readiness(
         cast(AutomoxClient, client),
@@ -336,6 +311,7 @@ async def test_compliance_snapshot_handles_empty_org() -> None:
             "/policystats": [[]],
         }
     )
+    client.org_id = 555
 
     result = await get_compliance_snapshot(
         cast(AutomoxClient, client),
@@ -374,6 +350,7 @@ async def test_compliance_snapshot_records_errors_on_partial_failure() -> None:
             "/policystats": [_POLICYSTATS_RESPONSE],
         }
     )
+    client.org_id = 555
 
     result = await get_compliance_snapshot(
         cast(AutomoxClient, client),

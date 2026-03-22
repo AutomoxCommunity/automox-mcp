@@ -58,7 +58,7 @@ class AutomoxClient:
     ) -> None:
         # Read from environment if not provided
         try:
-            self._api_key = api_key or os.environ["AUTOMOX_API_KEY"]
+            self._api_key = (api_key or os.environ["AUTOMOX_API_KEY"]).strip()
         except KeyError as exc:
             raise ValueError(
                 "AUTOMOX_API_KEY environment variable is required. "
@@ -75,7 +75,7 @@ class AutomoxClient:
                 "You can find it in the Automox console URL or API responses."
             ) from exc
 
-        self.org_id = org_id or (
+        self.org_id = org_id if org_id is not None else (
             int(os.environ["AUTOMOX_ORG_ID"]) if os.environ.get("AUTOMOX_ORG_ID") else None
         )
         env_org_uuid = os.environ.get("AUTOMOX_ORG_UUID")
@@ -259,7 +259,9 @@ class AutomoxClient:
                 return data
         except json.JSONDecodeError:
             pass
-        return {"message": response.text}
+        # Truncate raw text to avoid leaking verbose upstream error pages.
+        raw = response.text[:500] if response.text else ""
+        return {"message": raw}
 
     def _build_error(self, response: httpx.Response) -> AutomoxAPIError:
         payload = self._extract_error_payload(response)

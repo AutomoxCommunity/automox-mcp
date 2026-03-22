@@ -8,43 +8,7 @@ import pytest
 
 from automox_mcp.client import AutomoxClient
 from automox_mcp.workflows.device_commands import issue_device_command
-
-
-class StubClient:
-    def __init__(
-        self,
-        *,
-        get_responses=None,
-        post_responses=None,
-        delete_responses=None,
-        org_id=42,
-        org_uuid=None,
-        account_uuid="test-account",
-    ):
-        self.org_id = org_id
-        self.org_uuid = org_uuid
-        self.account_uuid = account_uuid
-        self._get = get_responses or {}
-        self._post = post_responses or {}
-        self._delete = delete_responses or {}
-
-    async def get(self, path, *, params=None, headers=None):
-        for prefix, responses in self._get.items():
-            if path.startswith(prefix) and responses:
-                return responses.pop(0)
-        return {}
-
-    async def post(self, path, *, json_data=None, params=None, headers=None):
-        for prefix, responses in self._post.items():
-            if path.startswith(prefix) and responses:
-                return responses.pop(0)
-        return {}
-
-    async def delete(self, path, *, params=None, headers=None):
-        for prefix, responses in self._delete.items():
-            if path.startswith(prefix) and responses:
-                return responses.pop(0)
-        return {}
+from conftest import StubClient
 
 
 @pytest.mark.asyncio
@@ -129,7 +93,8 @@ async def test_issue_device_command_patch_specific_missing_patch_names_raises():
 
 @pytest.mark.asyncio
 async def test_issue_device_command_missing_org_id_raises():
-    client = StubClient(org_id=None)
+    client = StubClient()
+    client.org_id = None
     with pytest.raises(ValueError, match="org_id required"):
         await issue_device_command(
             cast(AutomoxClient, client),
@@ -140,7 +105,8 @@ async def test_issue_device_command_missing_org_id_raises():
 
 @pytest.mark.asyncio
 async def test_issue_device_command_explicit_org_id_overrides_client():
-    client = StubClient(org_id=None, post_responses={"/servers/": [{}]})
+    client = StubClient(post_responses={"/servers/": [{}]})
+    client.org_id = None
     result = await issue_device_command(
         cast(AutomoxClient, client),
         org_id=99,

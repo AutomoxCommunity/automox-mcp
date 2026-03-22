@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Unreachable dead code** — Removed 13 `return result` statements that were unreachable after `return maybe_format_markdown(result, output_format)` across 8 tool files (`device_tools.py`, `policy_tools.py`, `group_tools.py`, `webhook_tools.py`, `package_tools.py`, `event_tools.py`, `report_tools.py`, `audit_tools.py`). Leftover from the `maybe_format_markdown()` refactor.
+- **Incorrect bitmask values in policy resources** — Fixed 4 wrong schedule bitmask values in `policy_resources.py` that would cause policies to skip Sundays:
+  - `Sunday=1` → `Sunday=128` (line 205)
+  - `1-127 for all 7 days` → `254 for all 7 days` (line 219)
+  - Example `"schedule_days": 127` → `254` (line 460)
+  - Schedule syntax guide `1-127, where 127 = all 7 days` → `2-254, where 254 = all 7 days` (line 632)
+
+### Security
+
+- **V-018**: Webhook URL validation upgraded from string prefix check (`startswith("https://")`) to proper `urllib.parse.urlparse()` validation — now verifies scheme is `https`, hostname is present, and rejects URLs containing userinfo (`user:pass@host`) to prevent credential-smuggling patterns.
+
 ### Added
 
 #### Enterprise Features
@@ -14,7 +27,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Correlation IDs** — UUID4 assigned per tool call via FastMCP middleware. The ID flows to the `metadata` field of every tool response and is forwarded to the Automox API as the `X-Correlation-ID` request header. The middleware logs tool name, final status, and wall-clock latency at `INFO` level.
 - **Token budget estimation** — Middleware warns when a response is estimated to exceed ~4000 tokens and auto-truncates list data to stay within budget. Threshold is configurable via `AUTOMOX_MCP_TOKEN_BUDGET` environment variable.
 - **Idempotency keys** — All 16 write tools accept an optional `request_id` parameter (UUID string). A duplicate `request_id` within 300 seconds returns the cached response without re-executing the API call. In-memory TTL cache with a maximum of 1000 entries.
-- **Markdown table output** — 15 list tools accept an optional `output_format` parameter (`"json"` default, `"markdown"` for compact tables suited to chat interfaces).
+- **Markdown table output** — 13 list tools accept an optional `output_format` parameter (`"json"` default, `"markdown"` for compact tables suited to chat interfaces).
 - **`discover_capabilities` meta-tool** — Returns all available tools organized by domain (devices, policies, patches, groups, events, reports, audit, webhooks, account, compound). Always registered regardless of `AUTOMOX_MCP_MODULES` configuration. Brings total tool count to 45.
 
 #### Security Hardening
@@ -63,7 +76,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `search_devices` — Multi-severity filtering now works (parses JSON string arrays); uses list-of-tuples for repeated query params
 - `policy_resources.py` — Shell types corrected to Bash only for Mac/Linux, PowerShell only for Windows; added worklet terminology
 - `platform_resources.py` — OS lists updated from official Automox docs; package statuses replaced with actual API fields; added source URLs and last_verified dates
-- `README.md` — Updated to document all 44 tools, 9 resources, 10 modules, and new compound/inventory capabilities
+- `README.md` — Updated to document all 45 tools, 9 resources, 10 modules, and new compound/inventory capabilities
 - API client `get()` method now accepts `Sequence[tuple[str, Any]]` params for repeated query keys
 
 ### Fixed
@@ -77,6 +90,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Clone policy: API returns empty body; added fallback name-based lookup for new policy ID
 - Clone policy: 500 errors from sending read-only fields; expanded `_READ_ONLY_POLICY_FIELDS` set
 - Multi-severity search: JSON string array `'["critical", "high"]'` not parsed; added JSON deserialization
+- **Falsy-value `or` bugs** — Fixed `exit_code`, `active_flag`, `pending_patches`, and `org_id` fields that used Python `or` operator, causing `0` and `False` to be silently dropped. Replaced with `is not None` checks in `policy.py`, `devices.py`, and `client.py`.
+- **`ToolResult.deprecated_endpoint`** — Default changed from `True` to `False` (copy-paste error from `PaginationMetadata`)
+- **`policy_compliance_stats` crash** — Changed from `PolicySummaryParams` (which injected extra kwargs) to `GetPolicyStatsParams` with `OrgIdContextMixin`
+- **Response parsing mismatch** — `list_devices_needing_attention` now handles both `{"data": [...]}` and `{"nonCompliant": {"devices": [...]}}` response shapes from `/reports/needs-attention`
+- **Policy resource `or` bug** — `["policy_id" or "id within policy object"]` evaluated to `["policy_id"]`; fixed to proper list with comma
+- **Webhook event type count** — Description said "39" but actual list contains 36; corrected in `webhook_resources.py`
+- **String-as-sequence guard** — `_candidate_org_sequences()` now rejects `str`/`bytes` as sequences
+- **Pagination `limit=None`** — `summarize_policies` loop broke after first page when limit was None; removed premature break
+- **`total_count` key mismatch** — `compound.py` referenced non-existent `total_count` key; fixed to `total_policies_considered`/`total_policies_available`
+- **`ClonePolicyParams` missing mixin** — Added `OrgIdContextMixin` for consistent `org_id` injection
+- **`compound_tools.py` dict mutation** — `_call` and `_call_with_org_uuid` now copy `raw_params` before modifying
+- **Noncompliant report pagination** — Added auto-pagination loop matching `get_prepatch_report` behavior
+- **Markdown return type** — All 13 markdown-format tool returns now wrapped in `dict` to match `dict[str, Any]` type annotation
+- **`schedule_time` regex** — Tightened from `^\d{2}:\d{2}$` (allowed "99:99") to `^([01]\d|2[0-3]):[0-5]\d$`
+- **API key whitespace** — `client.py` now strips whitespace from API key values
+- **`_extract_devices` list handling** — Now merges devices from all list elements instead of only inspecting the first
+- **Default port logic** — Host and port defaults now applied independently instead of requiring both to be None
+- **`date` parameter shadow** — Annotated with `noqa: A002` in `audit.py` to acknowledge intentional shadowing
+- **`_orgs_payload()` test fixture** — Fixed `"uuid"` key to `"org_uuid"` in `test_workflows_device_inventory.py`
+- **Docstring module names** — `get_enabled_modules()` docstring corrected: `patches`→`packages`, `approvals`/`inventory` removed, `compound` added
+- **README/CHANGELOG counts** — Corrected tool counts (44→45), read-only counts (28→29), list tool counts (15→13), initial release date (2025-01-01→2025-11-13)
+- **README ToC link** — Fixed broken `#versioning--release-notes` anchor to `#versioning`
+- **README `.python-version` claim** — Removed reference to non-existent `.python-version` file
 
 #### Phase 1: Core Gaps (18 new tools)
 
@@ -92,7 +128,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `delete_server_group` — Delete a server group permanently
 
 - **Webhook Management** (8 tools)
-  - `list_webhook_event_types` — List all 39 available webhook event types with descriptions
+  - `list_webhook_event_types` — List all 36 available webhook event types with descriptions
   - `list_webhooks` — List all webhook subscriptions for the organization with cursor-based pagination
   - `get_webhook` — Retrieve details for a specific webhook subscription
   - `create_webhook` — Create a new webhook subscription (returns one-time signing secret)
@@ -110,11 +146,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### MCP Resources
 
-- `resource://webhooks/event-types` — Static reference of all 39 webhook event types organized by category (device, policy, worklet, device_group, organization, audit) with descriptions and delivery limits
+- `resource://webhooks/event-types` — Static reference of all 36 webhook event types organized by category (device, policy, worklet, device_group, organization, audit) with descriptions and delivery limits
 
 #### Configuration
 
-- **Read-Only Mode** (`AUTOMOX_MCP_READ_ONLY`) — When set to `true`, all 16 destructive tools are excluded at registration time, leaving 28 read-only tools. Useful for audit, reporting, and monitoring use cases.
+- **Read-Only Mode** (`AUTOMOX_MCP_READ_ONLY`) — When set to `true`, all 16 destructive tools are excluded at registration time, leaving 29 read-only tools. Useful for audit, reporting, and monitoring use cases.
 - **Modular Architecture** (`AUTOMOX_MCP_MODULES`) — Comma-separated list of module names to selectively load. Available modules: `audit`, `devices`, `policies`, `users`, `groups`, `events`, `reports`, `packages`, `webhooks`, `compound`. Unset loads all modules.
 
 #### Infrastructure
@@ -135,13 +171,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `workflows/__init__.py` — Exports all new workflow functions; `__all__` alphabetically sorted
 - `resources/__init__.py` — Registers webhook resources
 - `server.py` — Updated server instructions to document new capabilities, resources, and webhook guidance; added startup validation for `AUTOMOX_ORG_ID`
-- `README.md` — Updated to document all 44 tools, 9 MCP resources, read-only mode, modular architecture, and new configuration options
+- `README.md` — Updated to document all 45 tools, 9 MCP resources, read-only mode, modular architecture, and new configuration options
 
 ### Fixed
 
 - `tools/__init__.py` — `groups` module `has_writes` flag corrected from `False` to `True` (group CRUD tools were not gated by read-only mode)
 - `webhook_tools.py`, `policy_tools.py` — Fixed `org_id` falsy-value check: `or` operator replaced with explicit `None` comparison to prevent `org_id=0` from being silently overwritten
-- `webhook_resources.py` — Corrected webhook event type count from 38 to 39
+- `webhook_resources.py` — Corrected webhook event type count from 38 to 36
 - `workflows/devices.py` — Fixed parameter shadowing: local `policy_status` variable renamed to `device_policy_status` to avoid shadowing the function parameter `policy_status_filter`
 - `workflows/__init__.py` — Fixed `__all__` ordering (`audit_trail_user_activity` before `apply_policy_changes`, `summarize_patch_approvals` before `summarize_policies`)
 
@@ -152,9 +188,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **V-003**: Webhook `create` and `update` operations enforce HTTPS-only URLs via Pydantic `model_validator`
 - **V-004**: Report `limit` parameters (`GetPrepatchReportParams`, `GetNeedsAttentionReportParams`) bounded with `le=500` to prevent unbounded result sets
 - **V-005**: HTTP client debug logging no longer includes request parameters, preventing accidental credential exposure in log output
-- **V-006**: All 9 tool module `_call()` wrappers now include catch-all exception handling (`except ToolError: raise` + `except Exception` → `ToolError`), preventing raw stack traces from leaking to MCP clients
+- **V-006**: All 10 tool module `_call()` wrappers now log unexpected exceptions server-side and return a generic error message to MCP clients, preventing internal details (file paths, connection strings, module names) from leaking
 - **V-007**: `AUTOMOX_ORG_ID` validated as a positive integer at server startup; non-numeric or non-positive values raise `RuntimeError` before any tools are registered
 - **V-008**: Policy workflow narrowed 3 broad `except Exception` handlers to `except (AutomoxAPIError, ValueError, TypeError, KeyError)` with structured debug logging
+- **V-009**: `PolicyDefinition` model changed from `extra="allow"` to `extra="ignore"` — unrecognized fields are silently dropped instead of passed to the Automox API
+- **V-010**: Sensitive field redaction keywords restored to broad patterns (`token`, `secret`, `key`, `password`, `credential`, `auth`) to cover `access_token`, `signing_key`, etc.
+- **V-011**: Auto-pagination loops in reports and policies capped at 50 pages to prevent runaway API calls
+- **V-012**: Webhook secrets stripped from idempotency cache after `create_webhook` and `rotate_webhook_secret` — the one-time secret is returned to the caller but not persisted in memory
+- **V-013**: Raw upstream error text truncated to 500 characters in `_extract_error_payload()` to prevent verbose error pages from leaking infrastructure details
+- **V-014**: `AUTOMOX_MCP_TOKEN_BUDGET` parsing wrapped in try/except — invalid values fall back to 4000 instead of crashing at import
+- **V-015**: `get_enabled_modules()` validates module names against the known set and logs a warning for unrecognized names
+- **V-016**: Audit `_sanitize_payload()` now redacts keys matching sensitive patterns before returning raw events to MCP clients
+- **V-017**: `.gitignore` updated to cover `.env.*` variants (with `!.env.example` exclusion)
 
 ### Optimized
 
@@ -164,8 +209,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `workflows/devices.py` — Early `break` in `list_device_inventory` when limit is reached, avoiding unnecessary iteration
 - `workflows/audit.py` — Removed unreachable dead code in `_email_looks_valid`
 - `workflows/devices.py` — Simplified `_normalize_status` priority loop: replaced sorted-list iteration with set-based check
+- `utils/tooling.py` — Extracted `maybe_format_markdown()` helper to replace 13 identical 6-line markdown formatting blocks across 8 tool files
+- `conftest.py` — Consolidated duplicated `StubClient` implementations from 11 test files into a single shared class
+- `utils/tooling.py` — `IdempotencyCache.get()`/`put()` and `check_idempotency()`/`store_idempotency()` made async with `asyncio.Lock` for concurrency safety
 
-## [0.1.0] - 2025-01-01
+## [0.1.0] - 2025-11-13
 
 ### Added
 

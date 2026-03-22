@@ -683,7 +683,7 @@ class TestEventToolsErrorHandling:
         server = StubServer()
         event_tools.register(server, client=FakeClient(org_id=42))
 
-        with pytest.raises(ToolError, match="Unexpected error"):
+        with pytest.raises(ToolError, match="internal error occurred"):
             await server.tools["list_events"]()
 
     @pytest.mark.asyncio
@@ -792,7 +792,7 @@ class TestReportToolsErrorHandling:
         server = StubServer()
         report_tools.register(server, client=FakeClient(org_id=42))
 
-        with pytest.raises(ToolError, match="Unexpected error"):
+        with pytest.raises(ToolError, match="internal error occurred"):
             await server.tools["prepatch_report"]()
 
     @pytest.mark.asyncio
@@ -1040,7 +1040,7 @@ class TestCompoundToolsErrorHandling:
         server = StubServer()
         compound_tools.register(server, client=FakeClient(org_id=42))
 
-        with pytest.raises(ToolError, match="Unexpected error"):
+        with pytest.raises(ToolError, match="internal error occurred"):
             await server.tools["get_compliance_snapshot"]()
 
     @pytest.mark.asyncio
@@ -1135,7 +1135,7 @@ class TestPackageToolsErrorHandling:
         server = StubServer()
         package_tools.register(server, client=FakeClient(org_id=42))
 
-        with pytest.raises(ToolError, match="Unexpected error"):
+        with pytest.raises(ToolError, match="internal error occurred"):
             await server.tools["list_device_packages"](device_id=7)
 
     @pytest.mark.asyncio
@@ -1208,7 +1208,7 @@ class TestGroupToolsErrorHandling:
         server = StubServer()
         group_tools.register(server, client=FakeClient(org_id=42))
 
-        with pytest.raises(ToolError, match="Unexpected error"):
+        with pytest.raises(ToolError, match="internal error occurred"):
             await server.tools["list_server_groups"]()
 
     @pytest.mark.asyncio
@@ -1302,7 +1302,7 @@ class TestDeviceToolsErrorHandling:
         server = StubServer()
         device_tools.register(server, client=FakeClient(org_id=42))
 
-        with pytest.raises(ToolError, match="Unexpected error"):
+        with pytest.raises(ToolError, match="internal error occurred"):
             await server.tools["device_detail"](device_id=101)
 
     @pytest.mark.asyncio
@@ -1420,7 +1420,7 @@ class TestAccountToolsErrorHandling:
         server = StubServer()
         account_tools.register(server, read_only=False, client=FakeClient(org_id=42))
 
-        with pytest.raises(ToolError, match="Unexpected error"):
+        with pytest.raises(ToolError, match="internal error occurred"):
             await server.tools["invite_user_to_account"](
                 email="test@example.com", account_rbac_role="global-admin"
             )
@@ -1536,7 +1536,7 @@ class TestCompoundToolsOrgUuidErrorHandling:
         server = StubServer()
         compound_tools.register(server, client=FakeClient(org_id=42))
 
-        with pytest.raises(ToolError, match="Unexpected error"):
+        with pytest.raises(ToolError, match="internal error occurred"):
             await server.tools["get_patch_tuesday_readiness"]()
 
     @pytest.mark.asyncio
@@ -1628,7 +1628,7 @@ class TestPolicyToolsErrorHandling:
         server = StubServer()
         policy_tools.register(server, client=FakeClient(org_uuid=org_uuid))
 
-        with pytest.raises(ToolError, match="Unexpected error"):
+        with pytest.raises(ToolError, match="internal error occurred"):
             await server.tools["policy_health_overview"](org_uuid=org_uuid)
 
     @pytest.mark.asyncio

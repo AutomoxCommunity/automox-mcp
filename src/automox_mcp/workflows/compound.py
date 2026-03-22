@@ -148,7 +148,7 @@ async def get_compliance_snapshot(
             pstatus = str(p.get("status", "unknown"))
             status_counts[pstatus] = status_counts.get(pstatus, 0) + 1
     policy_summary = {
-        "total_policies": catalog_data.get("total_count") or len(all_policies),
+        "total_policies": catalog_data.get("total_policies_considered") or catalog_data.get("total_policies_available") or len(all_policies),
         "by_type": type_counts,
         "by_status": status_counts,
     }

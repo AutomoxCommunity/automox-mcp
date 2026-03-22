@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy
 from typing import Any, cast
 
 import pytest
@@ -19,49 +18,7 @@ from automox_mcp.workflows.webhooks import (
 from automox_mcp.workflows.webhooks import (
     test_webhook as send_test_webhook,
 )
-
-# ---------------------------------------------------------------------------
-# Stub client (mirrors the pattern in test_workflows_webhooks.py)
-# ---------------------------------------------------------------------------
-
-
-class StubClient:
-    """Minimal client stub that records calls and returns canned responses."""
-
-    def __init__(
-        self,
-        *,
-        get_responses: dict[str, list[Any]] | None = None,
-        post_responses: dict[str, list[Any]] | None = None,
-        put_responses: dict[str, list[Any]] | None = None,
-        delete_responses: dict[str, list[Any]] | None = None,
-    ) -> None:
-        self._get = {k: list(v) for k, v in (get_responses or {}).items()}
-        self._post = {k: list(v) for k, v in (post_responses or {}).items()}
-        self._put = {k: list(v) for k, v in (put_responses or {}).items()}
-        self._delete = {k: list(v) for k, v in (delete_responses or {}).items()}
-        self.calls: list[tuple[str, str, Any]] = []
-
-    async def get(self, path, *, params=None, headers=None):
-        self.calls.append(("GET", path, params))
-        responses = self._get.get(path)
-        return copy.deepcopy(responses.pop(0)) if responses else {}
-
-    async def post(self, path, *, json_data=None, params=None, headers=None):
-        self.calls.append(("POST", path, json_data))
-        responses = self._post.get(path)
-        return copy.deepcopy(responses.pop(0)) if responses else {}
-
-    async def put(self, path, *, json_data=None, params=None, headers=None):
-        self.calls.append(("PUT", path, json_data))
-        responses = self._put.get(path)
-        return copy.deepcopy(responses.pop(0)) if responses else {}
-
-    async def delete(self, path, *, params=None, headers=None):
-        self.calls.append(("DELETE", path, params))
-        responses = self._delete.get(path)
-        return copy.deepcopy(responses.pop(0)) if responses else None
-
+from conftest import StubClient
 
 _ORG_UUID = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
 

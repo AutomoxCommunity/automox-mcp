@@ -24,13 +24,27 @@ def get_enabled_modules() -> set[str] | None:
     """Return the set of enabled module names, or None if all are enabled.
 
     Controlled by ``AUTOMOX_MCP_MODULES`` (comma-separated).  Valid names:
-    devices, policies, patches, approvals, groups, reports, audit, users,
-    inventory, events, webhooks.
+    audit, devices, policies, users, groups, events, reports, packages,
+    webhooks, compound.
     """
     raw = os.environ.get("AUTOMOX_MCP_MODULES", "").strip()
     if not raw:
         return None
-    return {m.strip().lower() for m in raw.split(",") if m.strip()}
+    _VALID_MODULES = {
+        "audit", "devices", "policies", "users", "groups",
+        "events", "reports", "packages", "webhooks", "compound",
+    }
+    modules = {m.strip().lower() for m in raw.split(",") if m.strip()}
+    unknown = modules - _VALID_MODULES
+    if unknown:
+        import logging as _logging
+        _logging.getLogger(__name__).warning(
+            "AUTOMOX_MCP_MODULES contains unknown module names: %s. "
+            "Valid names: %s",
+            ", ".join(sorted(unknown)),
+            ", ".join(sorted(_VALID_MODULES)),
+        )
+    return modules
 
 
 class RateLimitError(RuntimeError):
@@ -45,24 +59,27 @@ class IdempotencyCache:
     def __init__(self, *, ttl_seconds: float = 300.0) -> None:
         self._ttl = ttl_seconds
         self._cache: dict[tuple[str, str], tuple[dict[str, Any], float]] = {}
+        self._lock = asyncio.Lock()
 
-    def get(self, request_id: str, tool_name: str) -> dict[str, Any] | None:
-        key = (request_id, tool_name)
-        entry = self._cache.get(key)
-        if entry is None:
-            return None
-        response, expiry = entry
-        if time.monotonic() > expiry:
-            del self._cache[key]
-            return None
-        return response
+    async def get(self, request_id: str, tool_name: str) -> dict[str, Any] | None:
+        async with self._lock:
+            key = (request_id, tool_name)
+            entry = self._cache.get(key)
+            if entry is None:
+                return None
+            response, expiry = entry
+            if time.monotonic() > expiry:
+                del self._cache[key]
+                return None
+            return response
 
-    def put(
+    async def put(
         self, request_id: str, tool_name: str, response: dict[str, Any]
     ) -> None:
-        self._evict_expired()
-        key = (request_id, tool_name)
-        self._cache[key] = (response, time.monotonic() + self._ttl)
+        async with self._lock:
+            self._evict_expired()
+            key = (request_id, tool_name)
+            self._cache[key] = (response, time.monotonic() + self._ttl)
 
     def _evict_expired(self) -> None:
         now = time.monotonic()
@@ -81,22 +98,22 @@ class IdempotencyCache:
 _IDEMPOTENCY_CACHE = IdempotencyCache()
 
 
-def check_idempotency(
+async def check_idempotency(
     request_id: str | None, tool_name: str
 ) -> dict[str, Any] | None:
     """Return cached response for a duplicate request_id, or None."""
     if not request_id:
         return None
-    return _IDEMPOTENCY_CACHE.get(request_id, tool_name)
+    return await _IDEMPOTENCY_CACHE.get(request_id, tool_name)
 
 
-def store_idempotency(
+async def store_idempotency(
     request_id: str | None, tool_name: str, response: dict[str, Any]
 ) -> None:
     """Cache a response for idempotent replay."""
     if not request_id:
         return
-    _IDEMPOTENCY_CACHE.put(request_id, tool_name, response)
+    await _IDEMPOTENCY_CACHE.put(request_id, tool_name, response)
 
 
 class RateLimiter:
@@ -180,7 +197,7 @@ def _redact_sensitive_fields(payload: Any) -> Any:
         redacted: dict[Any, Any] = {}
         for key, value in payload.items():
             lower_key = str(key).lower()
-            if any(sensitive in lower_key for sensitive in ("token", "secret", "key", "password")):
+            if any(sensitive in lower_key for sensitive in ("token", "secret", "key", "password", "credential", "auth")):
                 redacted[key] = "***redacted***"
             else:
                 redacted[key] = _redact_sensitive_fields(value)
@@ -218,9 +235,10 @@ def format_error(exc: AutomoxAPIError) -> str:
 
 
 _CHARS_PER_TOKEN = 4
-_DEFAULT_TOKEN_BUDGET = int(
-    os.environ.get("AUTOMOX_MCP_TOKEN_BUDGET", "4000")
-)
+try:
+    _DEFAULT_TOKEN_BUDGET = int(os.environ.get("AUTOMOX_MCP_TOKEN_BUDGET", "4000"))
+except (ValueError, TypeError):
+    _DEFAULT_TOKEN_BUDGET = 4000
 
 
 def _estimate_tokens(response_dict: dict[str, Any]) -> int:
@@ -315,6 +333,23 @@ def format_as_markdown_table(
     return "\n".join([header, separator, *rows])
 
 
+def maybe_format_markdown(
+    result: dict[str, Any], output_format: str | None
+) -> dict[str, Any]:
+    """If *output_format* is ``"markdown"``, convert the first list in *data* to a table.
+
+    Returns the original *result* unchanged when the format is not markdown.
+    """
+    if output_format != "markdown":
+        return result
+    data = result.get("data", {})
+    if isinstance(data, Mapping):
+        for _key, value in data.items():
+            if isinstance(value, list) and value:
+                return {"data": format_as_markdown_table(value), "metadata": {"format": "markdown"}}
+    return {"data": format_as_markdown_table([]), "metadata": {"format": "markdown"}}
+
+
 __all__ = [
     "RateLimitError",
     "RateLimiter",
@@ -325,5 +360,6 @@ __all__ = [
     "format_error",
     "get_enabled_modules",
     "is_read_only",
+    "maybe_format_markdown",
     "store_idempotency",
 ]

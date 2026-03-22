@@ -447,8 +447,21 @@ async def list_devices_needing_attention(
 
     report = await client.get("/reports/needs-attention", params=params)
 
-    items = report.get("data") if isinstance(report, Mapping) else None
-    devices: Sequence[Mapping[str, Any]] = items if isinstance(items, Sequence) else []
+    # The API may return {"data": [...]} or {"nonCompliant": {"devices": [...]}} or a list
+    devices: Sequence[Mapping[str, Any]] = []
+    if isinstance(report, Mapping):
+        items = report.get("data")
+        if isinstance(items, Sequence):
+            devices = items
+        elif not items:
+            # Try nested format: {"nonCompliant": {"devices": [...]}}
+            nc = report.get("nonCompliant")
+            if isinstance(nc, Mapping):
+                nc_devices = nc.get("devices")
+                if isinstance(nc_devices, Sequence):
+                    devices = nc_devices
+    elif isinstance(report, Sequence):
+        devices = [item for item in report if isinstance(item, Mapping)]
 
     curated_devices = []
     for item in devices:
@@ -457,7 +470,7 @@ async def list_devices_needing_attention(
                 "device_id": item.get("device_id") or item.get("id"),
                 "device_name": _format_device_display_name(item),
                 "policy_status": item.get("policy_status") or item.get("status"),
-                "pending_patches": item.get("pending_updates") or item.get("pending"),
+                "pending_patches": item.get("pending_updates") if item.get("pending_updates") is not None else item.get("pending"),
                 "last_check_in": item.get("last_check_in") or item.get("last_seen"),
                 "server_group_id": item.get("server_group_id"),
             }

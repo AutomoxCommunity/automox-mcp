@@ -154,9 +154,14 @@ class PolicyExecutionTimelineParams(ForbidExtraModel):
 
 
 class PolicyDefinition(BaseModel):
-    """Generic policy definition payload passed to Automox."""
+    """Generic policy definition payload passed to Automox.
 
-    model_config = ConfigDict(extra="allow")
+    Uses ``extra="ignore"`` to silently drop unrecognized fields rather than
+    passing arbitrary keys to the API (``extra="allow"``) or rejecting the
+    request entirely (``extra="forbid"`` — too strict for forward-compat).
+    """
+
+    model_config = ConfigDict(extra="ignore")
 
     name: str | None = Field(None, description="Display name for the policy")
     policy_type_name: Literal["patch", "custom", "required_software"] | None = Field(
@@ -185,7 +190,7 @@ class PolicyDefinition(BaseModel):
     schedule_time: str | None = Field(
         None,
         description="Scheduled execution time in HH:MM format.",
-        pattern=r"^\d{2}:\d{2}$",
+        pattern=r"^([01]\d|2[0-3]):[0-5]\d$",
     )
     use_scheduled_timezone: bool | None = Field(
         None, description="When true, schedule is interpreted in UTC."
@@ -487,7 +492,7 @@ class GetPolicyParams(ForbidExtraModel):
     policy_id: int = Field(description="Policy ID")
 
 
-class GetPolicyStatsParams(ForbidExtraModel):
+class GetPolicyStatsParams(OrgIdContextMixin, ForbidExtraModel):
     pass  # Only requires org_id from context
 
 
@@ -614,7 +619,7 @@ class IssueDeviceCommandParams(OrgIdContextMixin, ForbidExtraModel):
     )
 
 
-class ClonePolicyParams(ForbidExtraModel):
+class ClonePolicyParams(OrgIdContextMixin, ForbidExtraModel):
     policy_id: int = Field(description="Policy ID to clone")
     name: str | None = Field(
         None, description="Name for the cloned policy (defaults to '<source> (Clone)')"
@@ -909,5 +914,5 @@ class MCPError(BaseModel):
 class ToolResult(BaseModel):
     response: ToolResponse
     deprecated_endpoint: bool = Field(
-        True, description="Whether Automox notes this endpoint as deprecated"
+        False, description="Whether Automox notes this endpoint as deprecated"
     )

@@ -8,43 +8,7 @@ import pytest
 
 from automox_mcp.client import AutomoxClient
 from automox_mcp.workflows.events import list_events
-
-
-class StubClient:
-    def __init__(
-        self,
-        *,
-        get_responses=None,
-        post_responses=None,
-        delete_responses=None,
-        org_id=42,
-        org_uuid=None,
-        account_uuid="test-account",
-    ):
-        self.org_id = org_id
-        self.org_uuid = org_uuid
-        self.account_uuid = account_uuid
-        self._get = get_responses or {}
-        self._post = post_responses or {}
-        self._delete = delete_responses or {}
-
-    async def get(self, path, *, params=None, headers=None):
-        for prefix, responses in self._get.items():
-            if path.startswith(prefix) and responses:
-                return responses.pop(0)
-        return {}
-
-    async def post(self, path, *, json_data=None, params=None, headers=None):
-        for prefix, responses in self._post.items():
-            if path.startswith(prefix) and responses:
-                return responses.pop(0)
-        return {}
-
-    async def delete(self, path, *, params=None, headers=None):
-        for prefix, responses in self._delete.items():
-            if path.startswith(prefix) and responses:
-                return responses.pop(0)
-        return {}
+from conftest import StubClient
 
 
 @pytest.mark.asyncio

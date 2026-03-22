@@ -1,6 +1,5 @@
 """Tests for package workflows."""
 
-import copy
 from typing import Any, cast
 
 import pytest
@@ -10,28 +9,7 @@ from automox_mcp.workflows.packages import (
     list_device_packages,
     search_org_packages,
 )
-
-# ---------------------------------------------------------------------------
-# Stub client
-# ---------------------------------------------------------------------------
-
-
-class StubClient:
-    """Minimal client stub that records calls and returns canned responses."""
-
-    def __init__(
-        self,
-        *,
-        get_responses: dict[str, list[Any]] | None = None,
-    ) -> None:
-        self._get = {k: list(v) for k, v in (get_responses or {}).items()}
-        self.calls: list[tuple[str, str, Any]] = []
-
-    async def get(self, path, *, params=None, headers=None):
-        self.calls.append(("GET", path, params))
-        responses = self._get.get(path)
-        return copy.deepcopy(responses.pop(0)) if responses else {}
-
+from conftest import StubClient
 
 _DEVICE_PACKAGES: list[dict[str, Any]] = [
     {

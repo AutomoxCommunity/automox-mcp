@@ -25,20 +25,7 @@ from automox_mcp.workflows.devices import (
     search_devices,
     summarize_device_health,
 )
-
-
-class StubClient:
-    def __init__(self, *, get_responses=None, org_id=42, org_uuid=None, account_uuid="test-acct"):
-        self.org_id = org_id
-        self.org_uuid = org_uuid
-        self.account_uuid = account_uuid
-        self._get = get_responses or {}
-
-    async def get(self, path, *, params=None, headers=None):
-        for prefix, responses in self._get.items():
-            if path.startswith(prefix) and responses:
-                return responses.pop(0)
-        return {}
+from conftest import StubClient
 
 
 # ---------------------------------------------------------------------------
@@ -716,7 +703,8 @@ async def test_search_devices_metadata_contains_filters() -> None:
 
 @pytest.mark.asyncio
 async def test_search_devices_no_org_id_raises() -> None:
-    client = StubClient(org_id=None)
+    client = StubClient()
+    client.org_id = None
     with pytest.raises(ValueError, match="org_id required"):
         await search_devices(cast(AutomoxClient, client))
 
@@ -1217,7 +1205,8 @@ async def test_summarize_device_health_metadata_fields() -> None:
 
 @pytest.mark.asyncio
 async def test_summarize_device_health_no_org_id_raises() -> None:
-    client = StubClient(org_id=None)
+    client = StubClient()
+    client.org_id = None
     with pytest.raises(ValueError, match="org_id required"):
         await summarize_device_health(cast(AutomoxClient, client))
 
@@ -1377,14 +1366,16 @@ async def test_list_devices_needing_attention_with_group_id() -> None:
 @pytest.mark.asyncio
 async def test_list_devices_needing_attention_uses_client_org_id() -> None:
     report = {"data": []}
-    client = StubClient(org_id=99, get_responses={"/reports/needs-attention": [report]})
+    client = StubClient(get_responses={"/reports/needs-attention": [report]})
+    client.org_id = 99
     result = await list_devices_needing_attention(cast(AutomoxClient, client))
     assert result["metadata"]["org_id"] == 99
 
 
 @pytest.mark.asyncio
 async def test_list_devices_needing_attention_no_org_id_raises() -> None:
-    client = StubClient(org_id=None)
+    client = StubClient()
+    client.org_id = None
     with pytest.raises(ValueError, match="org_id required"):
         await list_devices_needing_attention(cast(AutomoxClient, client))
 
@@ -1508,13 +1499,15 @@ async def test_list_device_inventory_metadata() -> None:
 
 @pytest.mark.asyncio
 async def test_list_device_inventory_no_org_id_raises() -> None:
-    client = StubClient(org_id=None)
+    client = StubClient()
+    client.org_id = None
     with pytest.raises(ValueError, match="org_id required"):
         await list_device_inventory(cast(AutomoxClient, client))
 
 
 @pytest.mark.asyncio
 async def test_list_device_inventory_uses_client_org_id() -> None:
-    client = StubClient(org_id=7, get_responses={"/servers": [[]]})
+    client = StubClient(get_responses={"/servers": [[]]})
+    client.org_id = 7
     result = await list_device_inventory(cast(AutomoxClient, client))
     assert result["metadata"]["org_id"] == 7

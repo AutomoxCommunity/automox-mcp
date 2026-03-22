@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -18,6 +20,9 @@ from ..utils.tooling import (
     enforce_rate_limit,
     format_error,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient) -> None:
@@ -45,7 +50,8 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         except ToolError:
             raise
         except Exception as exc:
-            raise ToolError(f"Unexpected error: {type(exc).__name__}: {exc}") from exc
+            logger.exception("Unexpected error in tool call")
+            raise ToolError("An internal error occurred. Check server logs for details.") from exc
         return as_tool_response(result)
 
     async def _call_with_org_uuid(
@@ -76,7 +82,8 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         except ToolError:
             raise
         except Exception as exc:
-            raise ToolError(f"Unexpected error: {type(exc).__name__}: {exc}") from exc
+            logger.exception("Unexpected error in tool call")
+            raise ToolError("An internal error occurred. Check server logs for details.") from exc
         return as_tool_response(result)
 
     @server.tool(

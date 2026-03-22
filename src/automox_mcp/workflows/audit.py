@@ -470,6 +470,9 @@ def _resolve_event_time(event: Mapping[str, Any]) -> str | None:
     return None
 
 
+_SENSITIVE_PAYLOAD_KEYS = {"token", "secret", "key", "password", "credential", "auth"}
+
+
 def _sanitize_payload(value: Any, depth: int = 0) -> Any:
     if depth > _MAX_RECURSION_DEPTH:
         return "... (max depth reached)"
@@ -478,6 +481,10 @@ def _sanitize_payload(value: Any, depth: int = 0) -> Any:
         sanitized: dict[str, Any] = {}
         for key, inner_value in value.items():
             if inner_value in (None, "", [], {}):
+                continue
+            lower_key = str(key).lower()
+            if any(s in lower_key for s in _SENSITIVE_PAYLOAD_KEYS):
+                sanitized[key] = "***redacted***"
                 continue
             sanitized[key] = _sanitize_payload(inner_value, depth + 1)
         return sanitized
@@ -631,7 +638,7 @@ async def audit_trail_user_activity(
     client: AutomoxClient,
     *,
     org_id: int,
-    date: date,
+    date: date,  # noqa: A002 — shadows builtin but matches the API parameter name
     actor_email: str | None = None,
     actor_uuid: str | UUID | None = None,
     actor_name: str | None = None,

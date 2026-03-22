@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -32,10 +34,13 @@ from ..utils.tooling import (
     as_tool_response,
     check_idempotency,
     enforce_rate_limit,
-    format_as_markdown_table,
+    maybe_format_markdown,
     format_error,
     store_idempotency,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient) -> None:
@@ -81,7 +86,8 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         except ToolError:
             raise
         except Exception as exc:
-            raise ToolError(f"Unexpected error: {type(exc).__name__}: {exc}") from exc
+            logger.exception("Unexpected error in tool call")
+            raise ToolError("An internal error occurred. Check server logs for details.") from exc
         return as_tool_response(result)
 
     @server.tool(
@@ -187,14 +193,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             params,
         )
 
-        if output_format == "markdown":
-            data = result.get("data", {})
-            for _key, value in data.items():
-                if isinstance(value, list) and value:
-                    return format_as_markdown_table(value)
-            return format_as_markdown_table([])
-
-        return result
+        return maybe_format_markdown(result, output_format)
 
     @server.tool(
         name="policy_detail", description="Retrieve configuration and recent history for a policy."
@@ -247,14 +246,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             params,
         )
 
-        if output_format == "markdown":
-            data = result.get("data", {})
-            for _key, value in data.items():
-                if isinstance(value, list) and value:
-                    return format_as_markdown_table(value)
-            return format_as_markdown_table([])
-
-        return result
+        return maybe_format_markdown(result, output_format)
 
     if not read_only:
 
@@ -269,7 +261,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             notes: str | None = None,
             request_id: str | None = None,
         ) -> dict[str, Any]:
-            cached = check_idempotency(request_id, "decide_patch_approval")
+            cached = await check_idempotency(request_id, "decide_patch_approval")
             if cached is not None:
                 return cached
 
@@ -283,7 +275,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 PatchApprovalDecisionParams,
                 params,
             )
-            store_idempotency(request_id, "decide_patch_approval", result)
+            await store_idempotency(request_id, "decide_patch_approval", result)
             return result
 
         @server.tool(
@@ -295,7 +287,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             policy_id: int,
             request_id: str | None = None,
         ) -> dict[str, Any]:
-            cached = check_idempotency(request_id, "delete_policy")
+            cached = await check_idempotency(request_id, "delete_policy")
             if cached is not None:
                 return cached
 
@@ -305,7 +297,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 DeletePolicyToolParams,
                 params,
             )
-            store_idempotency(request_id, "delete_policy", result)
+            await store_idempotency(request_id, "delete_policy", result)
             return result
 
         @server.tool(
@@ -322,7 +314,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             server_groups: list[int] | None = None,
             request_id: str | None = None,
         ) -> dict[str, Any]:
-            cached = check_idempotency(request_id, "clone_policy")
+            cached = await check_idempotency(request_id, "clone_policy")
             if cached is not None:
                 return cached
 
@@ -336,7 +328,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 ClonePolicyParams,
                 params,
             )
-            store_idempotency(request_id, "clone_policy", result)
+            await store_idempotency(request_id, "clone_policy", result)
             return result
 
         @server.tool(
@@ -349,7 +341,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             preview: bool | None = False,
             request_id: str | None = None,
         ) -> dict[str, Any]:
-            cached = check_idempotency(request_id, "apply_policy_changes")
+            cached = await check_idempotency(request_id, "apply_policy_changes")
             if cached is not None:
                 return cached
 
@@ -363,7 +355,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 PolicyChangeRequestParams,
                 params,
             )
-            store_idempotency(request_id, "apply_policy_changes", result)
+            await store_idempotency(request_id, "apply_policy_changes", result)
             return result
 
         @server.tool(
@@ -380,7 +372,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             device_id: int | None = None,
             request_id: str | None = None,
         ) -> dict[str, Any]:
-            cached = check_idempotency(request_id, "execute_policy_now")
+            cached = await check_idempotency(request_id, "execute_policy_now")
             if cached is not None:
                 return cached
 
@@ -394,7 +386,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 ExecutePolicyParams,
                 params,
             )
-            store_idempotency(request_id, "execute_policy_now", result)
+            await store_idempotency(request_id, "execute_policy_now", result)
             return result
 
 

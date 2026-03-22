@@ -125,9 +125,9 @@ def main(argv: Sequence[str] | None = None) -> None:
             transport_kwargs["port"] = port
         if path is not None:
             transport_kwargs["path"] = path
-        if host is None and port is None:
-            # Provide sensible defaults that mirror the FastMCP CLI.
+        if host is None:
             transport_kwargs.setdefault("host", "127.0.0.1")
+        if port is None:
             transport_kwargs.setdefault("port", 8000)
 
         resolved_host = str(transport_kwargs.get("host", "127.0.0.1"))

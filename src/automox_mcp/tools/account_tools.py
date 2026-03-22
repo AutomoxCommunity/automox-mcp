@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 import os
 from collections.abc import Awaitable, Callable
 from typing import Any, Literal
@@ -21,6 +23,9 @@ from ..utils.tooling import (
     format_error,
     store_idempotency,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient) -> None:
@@ -48,7 +53,8 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         except ToolError:
             raise
         except Exception as exc:
-            raise ToolError(f"Unexpected error: {type(exc).__name__}: {exc}") from exc
+            logger.exception("Unexpected error in tool call")
+            raise ToolError("An internal error occurred. Check server logs for details.") from exc
         return as_tool_response(result)
 
     def _resolve_account_id(explicit: str | None = None) -> str:
@@ -75,7 +81,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             zone_assignments: list[ZoneAssignment] | None = None,
             request_id: str | None = None,
         ) -> dict[str, Any]:
-            cached = check_idempotency(request_id, "invite_user_to_account")
+            cached = await check_idempotency(request_id, "invite_user_to_account")
             if cached is not None:
                 return cached
 
@@ -90,7 +96,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 InviteUserParams,
                 params,
             )
-            store_idempotency(request_id, "invite_user_to_account", result)
+            await store_idempotency(request_id, "invite_user_to_account", result)
             return result
 
         @server.tool(
@@ -102,7 +108,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             user_id: str,
             request_id: str | None = None,
         ) -> dict[str, Any]:
-            cached = check_idempotency(request_id, "remove_user_from_account")
+            cached = await check_idempotency(request_id, "remove_user_from_account")
             if cached is not None:
                 return cached
 
@@ -115,7 +121,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 RemoveUserFromAccountParams,
                 params,
             )
-            store_idempotency(request_id, "remove_user_from_account", result)
+            await store_idempotency(request_id, "remove_user_from_account", result)
             return result
 
 

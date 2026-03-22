@@ -8,6 +8,9 @@ from typing import Any
 
 from ..client import AutomoxClient
 
+# Safety cap on auto-pagination to prevent runaway loops.
+_MAX_PAGINATION_PAGES = 50
+
 _SEVERITY_RANK: dict[str, int] = {
     "critical": 4,
     "high": 3,
@@ -56,8 +59,30 @@ def _extract_devices(response: Any, *wrapper_keys: str) -> list[Any]:
     """
     current: Any = response
 
-    # If the response is a list, check inside the first element
+    # If the response is a list, try to merge devices from all elements
     if isinstance(current, list) and current:
+        # Walk wrapper keys in the first element to check if the structure matches
+        test = current[0]
+        for key in wrapper_keys:
+            if isinstance(test, Mapping):
+                test = test.get(key)
+            else:
+                test = None
+                break
+        if isinstance(test, Sequence) and not isinstance(test, (str, bytes)) and len(current) > 1:
+            # Multiple result objects — merge their device lists
+            merged: list[Any] = []
+            for element in current:
+                inner = element
+                for key in wrapper_keys:
+                    if isinstance(inner, Mapping):
+                        inner = inner.get(key)
+                    else:
+                        inner = None
+                        break
+                if isinstance(inner, Sequence) and not isinstance(inner, (str, bytes)):
+                    merged.extend(inner)
+            return merged
         current = current[0]
 
     # Walk through wrapper keys (e.g. "prepatch" -> "devices")
@@ -116,7 +141,7 @@ async def get_prepatch_report(
     device_list: list[Any] = []
     summary: dict[str, Any] = {}
 
-    while True:
+    for _page_num in range(_MAX_PAGINATION_PAGES):
         report = await client.get("/reports/prepatch", params=params)
 
         # Response shape: {"prepatch": {"total": N, ..., "devices": [...]}}
@@ -198,22 +223,50 @@ async def get_noncompliant_report(
     limit: int | None = None,
     offset: int | None = None,
 ) -> dict[str, Any]:
-    """Retrieve the non-compliant devices report."""
+    """Retrieve the non-compliant devices report.
+
+    Automatically paginates to fetch all devices unless an explicit
+    limit/offset is provided (single-page mode).
+    """
     params: dict[str, Any] = {"o": org_id}
     if group_id is not None:
         params["groupId"] = group_id
-    if limit is not None:
-        params["limit"] = limit
-    if offset is not None:
-        params["offset"] = offset
 
-    report = await client.get(
-        "/reports/needs-attention", params=params,
-    )
+    # If caller provided explicit limit/offset, do a single request (backwards compat)
+    single_page = limit is not None or offset is not None
+    if single_page:
+        if limit is not None:
+            params["limit"] = limit
+        if offset is not None:
+            params["offset"] = offset
 
-    # Response shape: array or {"nonCompliant": {"total": N, ..., "devices": [...]}}
-    device_list = _extract_devices(report, "nonCompliant", "devices")
-    summary = _extract_summary(report, "nonCompliant")
+    page_size = limit or 500
+    params.setdefault("limit", page_size)
+    params.setdefault("offset", 0)
+
+    device_list: list[Any] = []
+    summary: dict[str, Any] = {}
+
+    for _page_num in range(_MAX_PAGINATION_PAGES):
+        report = await client.get(
+            "/reports/needs-attention", params=params,
+        )
+
+        # Response shape: array or {"nonCompliant": {"total": N, ..., "devices": [...]}}
+        page_devices = _extract_devices(report, "nonCompliant", "devices")
+        if not summary:
+            summary = _extract_summary(report, "nonCompliant")
+
+        device_list.extend(page_devices)
+
+        if single_page:
+            break
+
+        total = summary.get("total") or 0
+        if len(device_list) >= total or not page_devices:
+            break
+
+        params["offset"] = params["offset"] + page_size
 
     devices: list[dict[str, Any]] = []
     for item in device_list:

@@ -17,12 +17,12 @@ def _coerce_int(value: Any) -> int | None:
 
 
 def _candidate_org_sequences(payload: Any) -> Sequence[Any]:
-    if isinstance(payload, Sequence):
+    if isinstance(payload, Sequence) and not isinstance(payload, (str, bytes)):
         return payload
     if isinstance(payload, Mapping):
         for key in ("orgs", "organizations", "data", "items", "results"):
             value = payload.get(key)
-            if isinstance(value, Sequence):
+            if isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
                 return value
     return ()
 

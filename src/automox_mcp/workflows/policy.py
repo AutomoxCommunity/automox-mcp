@@ -13,6 +13,9 @@ from ..utils import resolve_org_uuid
 
 logger = logging.getLogger(__name__)
 
+# Safety cap on auto-pagination to prevent runaway loops.
+_MAX_PAGINATION_PAGES = 50
+
 
 def _normalize_status(value: str | None) -> str:
     """Normalize policy/device status values to consistent format."""
@@ -273,7 +276,7 @@ async def summarize_policies(
     filtered: list[Mapping[str, Any]] = []
     preview: list[Mapping[str, Any]] = []
 
-    while True:
+    for _page_num in range(_MAX_PAGINATION_PAGES):
         policies_response = await client.get("/policies", params=params)
         page_results: list[Mapping[str, Any]] = []
         if isinstance(policies_response, Sequence):
@@ -286,11 +289,11 @@ async def summarize_policies(
             if not isinstance(policy_item, Mapping):
                 continue
             status_raw = str(policy_item.get("status") or "").lower()
-            active_flag = (
-                policy_item.get("active")
-                or policy_item.get("enabled")
-                or policy_item.get("is_active")
-            )
+            active_flag = policy_item.get("active")
+            if active_flag is None:
+                active_flag = policy_item.get("enabled")
+            if active_flag is None:
+                active_flag = policy_item.get("is_active")
             if active_flag is not None:
                 is_active = active_flag not in (False, 0, "false", "inactive")
             else:
@@ -330,10 +333,7 @@ async def summarize_policies(
                     }
                 )
 
-        if limit is None:
-            break
-
-        has_reached_preview_cap = len(preview) >= limit
+        has_reached_preview_cap = limit is not None and len(preview) >= limit
         next_page_index = current_page + 1
         params["page"] = next_page_index
         current_page = next_page_index
@@ -672,7 +672,7 @@ async def describe_policy_run_result(
                 "event_time": entry.get("event_time"),
                 "stdout": entry.get("stdout"),
                 "stderr": entry.get("stderr"),
-                "exit_code": entry.get("exit_code") or entry.get("error_code"),
+                "exit_code": entry.get("exit_code") if entry.get("exit_code") is not None else entry.get("error_code"),
                 "patches": entry.get("patches"),
                 "device_deleted_at": entry.get("device_deleted_at"),
             }

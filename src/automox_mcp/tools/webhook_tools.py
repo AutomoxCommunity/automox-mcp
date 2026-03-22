@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import logging
+from urllib.parse import urlparse
+
 from collections.abc import Awaitable, Callable
 from typing import Any
 from uuid import UUID
@@ -19,10 +22,23 @@ from ..utils.tooling import (
     as_tool_response,
     check_idempotency,
     enforce_rate_limit,
-    format_as_markdown_table,
+    maybe_format_markdown,
     format_error,
     store_idempotency,
 )
+
+def _strip_secret(result: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy of *result* with any ``secret`` value removed from the data payload.
+
+    Used to avoid caching one-time webhook secrets in the idempotency cache.
+    """
+    import copy
+    safe = copy.deepcopy(result)
+    data = safe.get("data")
+    if isinstance(data, dict):
+        data.pop("secret", None)
+    return safe
+
 
 # -----------------------------------------------------------------
 # Webhook-specific Pydantic schemas (not pre-existing in schemas.py)
@@ -53,8 +69,11 @@ class CreateWebhookParams(ForbidExtraModel):
 
     @model_validator(mode="after")
     def _enforce_https(self) -> CreateWebhookParams:
-        if not self.url.lower().startswith("https://"):
-            raise ValueError("Webhook URL must use HTTPS (e.g. https://example.com/webhook)")
+        parsed = urlparse(self.url)
+        if parsed.scheme.lower() != "https" or not parsed.hostname:
+            raise ValueError("Webhook URL must use HTTPS with a valid hostname (e.g. https://example.com/webhook)")
+        if "@" in (parsed.netloc or ""):
+            raise ValueError("Webhook URL must not contain userinfo (user:pass@host)")
         return self
 
 
@@ -68,8 +87,12 @@ class UpdateWebhookParams(ForbidExtraModel):
 
     @model_validator(mode="after")
     def _enforce_https(self) -> UpdateWebhookParams:
-        if self.url is not None and not self.url.lower().startswith("https://"):
-            raise ValueError("Webhook URL must use HTTPS (e.g. https://example.com/webhook)")
+        if self.url is not None:
+            parsed = urlparse(self.url)
+            if parsed.scheme.lower() != "https" or not parsed.hostname:
+                raise ValueError("Webhook URL must use HTTPS with a valid hostname (e.g. https://example.com/webhook)")
+            if "@" in (parsed.netloc or ""):
+                raise ValueError("Webhook URL must not contain userinfo (user:pass@host)")
         return self
 
 
@@ -86,6 +109,9 @@ class TestWebhookParams(ForbidExtraModel):
 class RotateWebhookSecretParams(ForbidExtraModel):
     org_uuid: UUID
     webhook_id: UUID
+
+
+logger = logging.getLogger(__name__)
 
 
 def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient) -> None:
@@ -125,7 +151,8 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         except ToolError:
             raise
         except Exception as exc:
-            raise ToolError(f"Unexpected error: {type(exc).__name__}: {exc}") from exc
+            logger.exception("Unexpected error in tool call")
+            raise ToolError("An internal error occurred. Check server logs for details.") from exc
         return as_tool_response(result)
 
     # ------ Read-only tools (always registered) ------
@@ -170,14 +197,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             org_uuid_field="org_uuid",
         )
 
-        if output_format == "markdown":
-            data = result.get("data", {})
-            for _key, value in data.items():
-                if isinstance(value, list) and value:
-                    return format_as_markdown_table(value)
-            return format_as_markdown_table([])
-
-        return result
+        return maybe_format_markdown(result, output_format)
 
     @server.tool(
         name="get_webhook",
@@ -219,7 +239,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             org_uuid: str | None = None,
             request_id: str | None = None,
         ) -> dict[str, Any]:
-            cached = check_idempotency(request_id, "create_webhook")
+            cached = await check_idempotency(request_id, "create_webhook")
             if cached is not None:
                 return cached
 
@@ -235,7 +255,9 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 params,
                 org_uuid_field="org_uuid",
             )
-            store_idempotency(request_id, "create_webhook", result)
+            # Cache without the one-time secret to avoid keeping it in memory.
+            cache_safe = _strip_secret(result)
+            await store_idempotency(request_id, "create_webhook", cache_safe)
             return result
 
         @server.tool(
@@ -255,7 +277,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             event_types: list[str] | None = None,
             request_id: str | None = None,
         ) -> dict[str, Any]:
-            cached = check_idempotency(request_id, "update_webhook")
+            cached = await check_idempotency(request_id, "update_webhook")
             if cached is not None:
                 return cached
 
@@ -273,7 +295,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 params,
                 org_uuid_field="org_uuid",
             )
-            store_idempotency(request_id, "update_webhook", result)
+            await store_idempotency(request_id, "update_webhook", result)
             return result
 
         @server.tool(
@@ -286,7 +308,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             org_uuid: str | None = None,
             request_id: str | None = None,
         ) -> dict[str, Any]:
-            cached = check_idempotency(request_id, "delete_webhook")
+            cached = await check_idempotency(request_id, "delete_webhook")
             if cached is not None:
                 return cached
 
@@ -300,7 +322,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 params,
                 org_uuid_field="org_uuid",
             )
-            store_idempotency(request_id, "delete_webhook", result)
+            await store_idempotency(request_id, "delete_webhook", result)
             return result
 
         @server.tool(
@@ -316,7 +338,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             org_uuid: str | None = None,
             request_id: str | None = None,
         ) -> dict[str, Any]:
-            cached = check_idempotency(request_id, "test_webhook")
+            cached = await check_idempotency(request_id, "test_webhook")
             if cached is not None:
                 return cached
 
@@ -330,7 +352,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 params,
                 org_uuid_field="org_uuid",
             )
-            store_idempotency(request_id, "test_webhook", result)
+            await store_idempotency(request_id, "test_webhook", result)
             return result
 
         @server.tool(
@@ -346,7 +368,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             org_uuid: str | None = None,
             request_id: str | None = None,
         ) -> dict[str, Any]:
-            cached = check_idempotency(request_id, "rotate_webhook_secret")
+            cached = await check_idempotency(request_id, "rotate_webhook_secret")
             if cached is not None:
                 return cached
 
@@ -360,7 +382,8 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 params,
                 org_uuid_field="org_uuid",
             )
-            store_idempotency(request_id, "rotate_webhook_secret", result)
+            cache_safe = _strip_secret(result)
+            await store_idempotency(request_id, "rotate_webhook_secret", cache_safe)
             return result
 
 

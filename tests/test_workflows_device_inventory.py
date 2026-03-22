@@ -11,43 +11,7 @@ from automox_mcp.workflows.device_inventory import (
     get_device_inventory,
     get_device_inventory_categories,
 )
-
-
-class StubClient:
-    def __init__(
-        self,
-        *,
-        get_responses=None,
-        post_responses=None,
-        delete_responses=None,
-        org_id=42,
-        org_uuid=None,
-        account_uuid="test-account",
-    ):
-        self.org_id = org_id
-        self.org_uuid = org_uuid
-        self.account_uuid = account_uuid
-        self._get = get_responses or {}
-        self._post = post_responses or {}
-        self._delete = delete_responses or {}
-
-    async def get(self, path, *, params=None, headers=None):
-        for prefix, responses in self._get.items():
-            if path.startswith(prefix) and responses:
-                return responses.pop(0)
-        return {}
-
-    async def post(self, path, *, json_data=None, params=None, headers=None):
-        for prefix, responses in self._post.items():
-            if path.startswith(prefix) and responses:
-                return responses.pop(0)
-        return {}
-
-    async def delete(self, path, *, params=None, headers=None):
-        for prefix, responses in self._delete.items():
-            if path.startswith(prefix) and responses:
-                return responses.pop(0)
-        return {}
+from conftest import StubClient
 
 
 # ---------------------------------------------------------------------------
@@ -59,7 +23,7 @@ DEVICE_UUID = "1111-2222-3333-4444"
 
 
 def _orgs_payload():
-    return [{"id": 42, "uuid": ORG_UUID}]
+    return [{"id": 42, "org_uuid": ORG_UUID}]
 
 
 def _device_payload():
@@ -152,7 +116,8 @@ async def test_get_device_inventory_empty_categories():
 
 @pytest.mark.asyncio
 async def test_get_device_inventory_missing_org_id_raises():
-    client = StubClient(org_id=None)
+    client = StubClient()
+    client.org_id = None
     with pytest.raises(ValueError, match="org_id required"):
         await get_device_inventory(
             cast(AutomoxClient, client),
@@ -234,7 +199,8 @@ async def test_get_device_inventory_categories_empty():
 
 @pytest.mark.asyncio
 async def test_get_device_inventory_categories_missing_org_id_raises():
-    client = StubClient(org_id=None)
+    client = StubClient()
+    client.org_id = None
     with pytest.raises(ValueError, match="org_id required"):
         await get_device_inventory_categories(
             cast(AutomoxClient, client),

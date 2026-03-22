@@ -5,6 +5,8 @@ __pycache__/
 .idea
 .uv-cache
 .env
+.env.*
+!.env.example
 .venv/
 .pytest_cache/
 .coverage

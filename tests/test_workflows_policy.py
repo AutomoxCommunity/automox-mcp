@@ -814,12 +814,9 @@ async def test_describe_policy_exception_wrapped() -> None:
     """Exception from the API call is wrapped as ValueError."""
     stub = StubClient()  # no responses → AssertionError on GET
 
-    try:
+    with pytest.raises(ValueError):
         await describe_policy(
             cast(AutomoxClient, stub),
             org_id=42,
             policy_id=999,
         )
-        raise AssertionError("Expected ValueError")
-    except (ValueError, AssertionError):
-        pass  # either is acceptable

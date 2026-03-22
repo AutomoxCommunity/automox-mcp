@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy
 import pathlib
 import sys
 from typing import Any, cast
@@ -19,31 +18,7 @@ from automox_mcp.workflows.reports import (  # noqa: E402
     get_noncompliant_report,
     get_prepatch_report,
 )
-
-# ---------------------------------------------------------------------------
-# Stub client
-# ---------------------------------------------------------------------------
-
-
-class StubClient:
-    def __init__(
-        self,
-        *,
-        get_responses: dict[str, list[Any]] | None = None,
-        org_id: int = 42,
-    ) -> None:
-        self.org_id = org_id
-        self._get: dict[str, list[Any]] = {
-            k: list(v) for k, v in (get_responses or {}).items()
-        }
-        self.calls: list[tuple[str, str, Any]] = []
-
-    async def get(self, path: str, *, params: Any = None, headers: Any = None) -> Any:
-        self.calls.append(("GET", path, params))
-        for prefix, responses in self._get.items():
-            if path.startswith(prefix) and responses:
-                return copy.deepcopy(responses.pop(0))
-        return {}
+from conftest import StubClient
 
 
 # ===========================================================================
@@ -177,7 +152,6 @@ async def test_get_prepatch_report_single_page_explicit_limit() -> None:
     }
     client = StubClient(
         get_responses={"/reports/prepatch": [_make_prepatch_response([device], total=1)]},
-        org_id=42,
     )
 
     result = await get_prepatch_report(
@@ -209,7 +183,6 @@ async def test_get_prepatch_report_auto_pagination() -> None:
 
     client = StubClient(
         get_responses={"/reports/prepatch": [page1_response, page2_response]},
-        org_id=42,
     )
 
     result = await get_prepatch_report(
@@ -240,7 +213,6 @@ async def test_get_prepatch_report_patches_as_mapping() -> None:
     }
     client = StubClient(
         get_responses={"/reports/prepatch": [_make_prepatch_response([device])]},
-        org_id=42,
     )
 
     result = await get_prepatch_report(
@@ -264,7 +236,6 @@ async def test_get_prepatch_report_severity_counters() -> None:
     ]
     client = StubClient(
         get_responses={"/reports/prepatch": [_make_prepatch_response(devices, total=3)]},
-        org_id=42,
     )
 
     result = await get_prepatch_report(
@@ -285,7 +256,6 @@ async def test_get_prepatch_report_with_group_id() -> None:
     """group_id parameter is forwarded as 'groupId' in the API request."""
     client = StubClient(
         get_responses={"/reports/prepatch": [_make_prepatch_response([])]},
-        org_id=42,
     )
 
     await get_prepatch_report(
@@ -309,7 +279,6 @@ async def test_get_prepatch_report_stops_when_page_empty() -> None:
 
     client = StubClient(
         get_responses={"/reports/prepatch": [page1, page2]},
-        org_id=42,
     )
 
     result = await get_prepatch_report(cast(AutomoxClient, client), org_id=42)
@@ -349,7 +318,6 @@ async def test_get_noncompliant_report_basic() -> None:
     }
     client = StubClient(
         get_responses={"/reports/needs-attention": [_make_noncompliant_response([device])]},
-        org_id=42,
     )
 
     result = await get_noncompliant_report(
@@ -380,7 +348,6 @@ async def test_get_noncompliant_report_with_failing_policies() -> None:
     }
     client = StubClient(
         get_responses={"/reports/needs-attention": [_make_noncompliant_response([device])]},
-        org_id=42,
     )
 
     result = await get_noncompliant_report(
@@ -401,7 +368,6 @@ async def test_get_noncompliant_report_with_group_id_and_pagination() -> None:
     """group_id, limit, and offset are forwarded to the API."""
     client = StubClient(
         get_responses={"/reports/needs-attention": [_make_noncompliant_response([])]},
-        org_id=42,
     )
 
     await get_noncompliant_report(
@@ -425,7 +391,6 @@ async def test_get_noncompliant_report_custom_name_fallback() -> None:
     device = {"id": 30, "customName": "My Custom Device"}
     client = StubClient(
         get_responses={"/reports/needs-attention": [_make_noncompliant_response([device])]},
-        org_id=42,
     )
 
     result = await get_noncompliant_report(
@@ -441,7 +406,6 @@ async def test_get_noncompliant_report_custom_name_fallback() -> None:
 async def test_get_noncompliant_report_empty() -> None:
     client = StubClient(
         get_responses={"/reports/needs-attention": [_make_noncompliant_response([])]},
-        org_id=42,
     )
 
     result = await get_noncompliant_report(
@@ -464,7 +428,6 @@ async def test_get_noncompliant_report_non_mapping_items_skipped() -> None:
     }
     client = StubClient(
         get_responses={"/reports/needs-attention": [response]},
-        org_id=42,
     )
 
     result = await get_noncompliant_report(
@@ -487,7 +450,6 @@ async def test_get_noncompliant_report_uses_len_when_total_absent() -> None:
     }
     client = StubClient(
         get_responses={"/reports/needs-attention": [response]},
-        org_id=42,
     )
 
     result = await get_noncompliant_report(

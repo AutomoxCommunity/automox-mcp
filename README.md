@@ -55,7 +55,7 @@ common operational scenarios.
   - [Testing](#testing)
   - [Running tests](#running-tests)
   - [MCP Scanner](#mcp-scanner)
-- [Versioning & Release Notes](#versioning--release-notes)
+- [Versioning](#versioning)
 - [License](#license)
 - [Support](#support)
 
@@ -140,7 +140,7 @@ The server also exposes 9 MCP resources that provide reference data and schemas:
 | `resource://policies/schema` | Full policy schema for create/update operations |
 | `resource://policies/schedule-syntax` | Schedule bitmask syntax reference |
 | `resource://servergroups/list` | Live server group ID-to-name mapping |
-| `resource://webhooks/event-types` | All 39 webhook event types with categories, descriptions, and delivery limits |
+| `resource://webhooks/event-types` | All 36 webhook event types with categories, descriptions, and delivery limits |
 | `resource://filters/syntax` | Device filtering reference (search_devices params, policy device_filters, list_devices filters) |
 | `resource://patches/categories` | Severity levels, patch_rule options, package fields, and filter pattern syntax |
 | `resource://platform/supported-os` | Supported OS matrix (Windows, Mac, Linux) with versions, architectures, shell types, and Linux distros -- verified against official Automox docs |
@@ -293,7 +293,7 @@ Most tools accept optional parameters for filtering and pagination:
 - **Compound tools**: `group_id`, `device_id`, `max_packages`
 - **Audit tools**: `date`, `actor_email`, `actor_uuid`, `cursor`, `limit`, `include_raw_events`, `org_uuid` (optional)
 - **Write tools** (all 16): accept an optional `request_id` parameter (UUID string) for idempotency. Supplying the same `request_id` on a repeat call returns the cached response without re-executing the operation (TTL: 300 seconds).
-- **List tools** (15 tools): accept an optional `output_format` parameter. Use `"json"` (default) for the standard structured response or `"markdown"` for a compact table suited to quick scanning.
+- **List tools** (13 tools): accept an optional `output_format` parameter. Use `"json"` (default) for the standard structured response or `"markdown"` for a compact table suited to quick scanning.
 - **Execution tools**:
   - `execute_policy_now`: `policy_id` (required), `action` (remediateAll or remediateDevice), `device_id` (optional, required for remediateDevice)
   - `execute_device_command`: `device_id` (required), `command_type` (scan, patch_all, patch_specific, reboot), `patch_names` (optional, required for patch_specific)
@@ -370,7 +370,7 @@ execute_device_command(device_id=123, command_type="reboot", request_id="550e840
 
 #### Markdown Table Output
 
-Fifteen list tools accept an optional `output_format` parameter:
+Thirteen list tools accept an optional `output_format` parameter:
 - `"json"` (default) — standard structured JSON response
 - `"markdown"` — compact Markdown table suitable for quick scanning in chat interfaces
 
@@ -527,7 +527,7 @@ git clone https://github.com/AutomoxCommunity/automox-mcp.git
 cd automox-mcp
 ```
 
-Install in development mode (the repo pins Python 3.13 via `.python-version`):
+Install in development mode (the repo targets Python 3.13):
 ```bash
 # Ensure the pinned interpreter is available
 uv python install

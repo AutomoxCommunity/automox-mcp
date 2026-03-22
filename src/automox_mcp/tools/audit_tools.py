@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -16,9 +18,12 @@ from ..utils.tooling import (
     RateLimitError,
     as_tool_response,
     enforce_rate_limit,
-    format_as_markdown_table,
+    maybe_format_markdown,
     format_error,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient) -> None:
@@ -53,7 +58,8 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         except ToolError:
             raise
         except Exception as exc:
-            raise ToolError(f"Unexpected error: {type(exc).__name__}: {exc}") from exc
+            logger.exception("Unexpected error in tool call")
+            raise ToolError("An internal error occurred. Check server logs for details.") from exc
         return as_tool_response(result)
 
     @server.tool(
@@ -87,14 +93,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             params,
         )
 
-        if output_format == "markdown":
-            data = result.get("data", {})
-            for _key, value in data.items():
-                if isinstance(value, list) and value:
-                    return format_as_markdown_table(value)
-            return format_as_markdown_table([])
-
-        return result
+        return maybe_format_markdown(result, output_format)
 
 
 __all__ = ["register"]

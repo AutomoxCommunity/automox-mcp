@@ -295,7 +295,27 @@ def test_main_http_transport_with_explicit_host_port(monkeypatch):
     assert run_calls[0]["port"] == 7777
 
 
-def test_main_http_non_loopback_host_logs_warning(monkeypatch, caplog):
+def test_main_http_non_loopback_host_rejected_without_flag(monkeypatch):
+    import automox_mcp as init_mod
+
+    monkeypatch.setenv("AUTOMOX_API_KEY", "env-key")
+    monkeypatch.setenv("AUTOMOX_ACCOUNT_UUID", "account-uuid")
+    monkeypatch.setenv("AUTOMOX_ORG_ID", "17")
+    monkeypatch.setenv("AUTOMOX_MCP_SKIP_DOTENV", "1")
+    monkeypatch.delenv("AUTOMOX_MCP_TRANSPORT", raising=False)
+    monkeypatch.delenv("AUTOMOX_MCP_ALLOW_REMOTE_BIND", raising=False)
+
+    class FakeServer:
+        def run(self, *, transport, show_banner, **kwargs):
+            pass
+
+    monkeypatch.setattr(init_mod.mcp, "_instance", FakeServer())
+
+    with pytest.raises(SystemExit, match="allow-remote-bind"):
+        init_mod.main(["--transport", "http", "--host", "0.0.0.0", "--port", "8080"])
+
+
+def test_main_http_non_loopback_host_allowed_with_flag(monkeypatch, caplog):
     import logging
 
     import automox_mcp as init_mod
@@ -313,7 +333,10 @@ def test_main_http_non_loopback_host_logs_warning(monkeypatch, caplog):
     monkeypatch.setattr(init_mod.mcp, "_instance", FakeServer())
 
     with caplog.at_level(logging.WARNING, logger="automox_mcp"):
-        init_mod.main(["--transport", "http", "--host", "0.0.0.0", "--port", "8080"])
+        init_mod.main([
+            "--transport", "http", "--host", "0.0.0.0", "--port", "8080",
+            "--allow-remote-bind",
+        ])
 
     assert any("non-loopback" in r.message for r in caplog.records)
 

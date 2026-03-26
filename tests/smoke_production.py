@@ -408,6 +408,7 @@ def test_non_loopback_warning() -> None:
     try:
         proc = start_server(
             "--host", "0.0.0.0",
+            "--allow-remote-bind",
             port=warn_port,
             capture_stderr=True,
         )

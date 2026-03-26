@@ -8,7 +8,7 @@ import logging
 from fastmcp import FastMCP
 
 from ..client import AutomoxClient
-from ..utils.tooling import get_enabled_modules, is_read_only
+from ..utils.tooling import get_enabled_modules, get_tool_prefix, is_read_only
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +61,30 @@ def register_tools(server: FastMCP, *, client: AutomoxClient) -> None:
             logger.warning("Tool module %s not found, skipping", tool_module_name)
         except Exception:
             logger.exception("Failed to register tool module %s", tool_module_name)
+
+    # Apply tool name prefix if configured
+    prefix = get_tool_prefix()
+    if prefix:
+        _apply_tool_prefix(server, prefix)
+
+
+def _apply_tool_prefix(server: FastMCP, prefix: str) -> None:
+    """Rename all registered tools with a prefix to prevent cross-server collisions.
+
+    Uses FastMCP internal API (``_tool_manager._tools``).  No public renaming
+    API exists as of FastMCP 2.x.  Pin the FastMCP version if this breaks.
+    """
+    tm = server._tool_manager
+    original_names = list(tm._tools.keys())
+    for name in original_names:
+        tool = tm._tools.pop(name)
+        tool.name = f"{prefix}_{name}"
+        tm._tools[tool.name] = tool
+    logger.info(
+        "Applied tool prefix '%s' to %d tools",
+        prefix,
+        len(original_names),
+    )
 
 
 __all__ = ["register_tools"]

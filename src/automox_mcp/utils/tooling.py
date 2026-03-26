@@ -12,12 +12,18 @@ from typing import Any, cast
 
 from automox_mcp.client import AutomoxAPIError
 from automox_mcp.schemas import PaginationMetadata, ToolResponse
+from automox_mcp.utils.sanitize import is_sanitization_enabled, sanitize_dict, sanitize_for_llm
 
 
 def is_read_only() -> bool:
     """Return True when the server is running in read-only mode."""
     value = os.environ.get("AUTOMOX_MCP_READ_ONLY", "")
     return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def get_tool_prefix() -> str:
+    """Return the configured tool name prefix, or empty string if none."""
+    return os.environ.get("AUTOMOX_MCP_TOOL_PREFIX", "").strip()
 
 
 def get_enabled_modules() -> set[str] | None:
@@ -197,7 +203,7 @@ def _redact_sensitive_fields(payload: Any) -> Any:
         redacted: dict[Any, Any] = {}
         for key, value in payload.items():
             lower_key = str(key).lower()
-            if any(sensitive in lower_key for sensitive in ("token", "secret", "key", "password", "credential", "auth")):
+            if any(sensitive in lower_key for sensitive in ("token", "secret", "key", "password", "credential", "auth", "bearer", "passwd", "api-key", "apikey")):
                 redacted[key] = "***redacted***"
             else:
                 redacted[key] = _redact_sensitive_fields(value)
@@ -221,7 +227,12 @@ def _sanitize_error_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def format_error(exc: AutomoxAPIError) -> str:
-    """Format an AutomoxAPIError for display to the user."""
+    """Format an AutomoxAPIError for display to the user.
+
+    The formatted string is sanitized against prompt injection before being
+    returned, because callers raise it as a ``ToolError`` that goes directly
+    to the LLM without passing through ``as_tool_response`` / ``sanitize_dict``.
+    """
     payload = exc.payload or {}
     safe_payload = _sanitize_error_payload(payload)
     if not safe_payload and payload:
@@ -231,7 +242,10 @@ def format_error(exc: AutomoxAPIError) -> str:
     except TypeError:
         payload_block = repr(safe_payload)
     payload_text = payload_block or "No additional details"
-    return f"{str(exc)} (status={exc.status_code})\n\nAPI Response:\n{payload_text}"
+    message = f"{str(exc)} (status={exc.status_code})\n\nAPI Response:\n{payload_text}"
+    if is_sanitization_enabled():
+        message = sanitize_for_llm(message, field_name="message")
+    return message
 
 
 _CHARS_PER_TOKEN = 4
@@ -297,6 +311,8 @@ def as_tool_response(result: Mapping[str, Any]) -> dict[str, Any]:
     metadata = PaginationMetadata(**metadata_dict)
     response = ToolResponse(data=data, metadata=metadata)
     response_dict = cast(dict[str, Any], response.model_dump())
+    if is_sanitization_enabled():
+        response_dict = sanitize_dict(response_dict)
     return _apply_token_budget(response_dict)
 
 
@@ -359,6 +375,7 @@ __all__ = [
     "format_as_markdown_table",
     "format_error",
     "get_enabled_modules",
+    "get_tool_prefix",
     "is_read_only",
     "maybe_format_markdown",
     "store_idempotency",

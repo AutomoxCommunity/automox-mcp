@@ -19,6 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - **V-018**: Webhook URL validation upgraded from string prefix check (`startswith("https://")`) to proper `urllib.parse.urlparse()` validation — now verifies scheme is `https`, hostname is present, and rejects URLs containing userinfo (`user:pass@host`) to prevent credential-smuggling patterns.
+- **V-101**: Error messages passed through `sanitize_for_llm()` before reaching the LLM via `ToolError`, preventing prompt injection through crafted error payloads.
+- **V-102**: Dependabot `pip` ecosystem added alongside `github-actions` for automated Python dependency security alerts.
+- **V-103**: Webhook URL validation now blocks private/loopback/link-local IP addresses and cloud metadata endpoints (169.254.169.254, fd00::, etc.) to prevent SSRF attacks.
+- **V-104**: Instruction-prefix regex expanded from 6 to 20+ patterns, covering additional injection vectors (`EXECUTE:`, `RUN:`, `OVERRIDE:`, `ADMIN:`, `TOOL_CALL:`, `<system>`, etc.).
+- **V-105**: Data at sanitization depth limit is now redacted (`[redacted: max depth exceeded]`) instead of passed through unsanitized.
+- **V-106**: Non-loopback HTTP/SSE binding now requires explicit opt-in via `--allow-remote-bind` flag or `AUTOMOX_MCP_ALLOW_REMOTE_BIND=true` environment variable. Server exits with an error if a non-loopback address is configured without this flag.
+- **V-107**: Sensitive field redaction expanded to include `bearer`, `passwd`, `api-key`, and `apikey` patterns alongside existing `token`, `secret`, `key`, `password`, `credential`, `auth`.
 
 ### Added
 
@@ -41,7 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Module splits** — `devices.py` split into `devices.py` + `device_inventory.py` + `device_commands.py`; `policy.py` split into `policy.py` + `policy_crud.py` for clearer separation of concerns.
 - **Lint cleanup** — Ruff lint errors reduced from 46 to 0 across `src/` and `tests/`.
 - **CI coverage threshold** — `pytest` now runs with `--cov-fail-under=90`; CI fails if coverage drops below 90%.
-- **Test suite growth** — Tests increased from 137 to 634; coverage increased from 70% to 92%.
+- **Test suite growth** — Tests increased from 137 to 634; coverage increased from 70% to 91%.
 
 #### Phase 2: Compound Tools, Inventory & Resources (8 new tools, 4 new resources)
 
@@ -95,7 +102,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`policy_compliance_stats` crash** — Changed from `PolicySummaryParams` (which injected extra kwargs) to `GetPolicyStatsParams` with `OrgIdContextMixin`
 - **Response parsing mismatch** — `list_devices_needing_attention` now handles both `{"data": [...]}` and `{"nonCompliant": {"devices": [...]}}` response shapes from `/reports/needs-attention`
 - **Policy resource `or` bug** — `["policy_id" or "id within policy object"]` evaluated to `["policy_id"]`; fixed to proper list with comma
-- **Webhook event type count** — Description said "39" but actual list contains 36; corrected in `webhook_resources.py`
+- **Webhook event type count** — Description in `webhook_resources.py` corrected to match actual list of 39 event types
 - **String-as-sequence guard** — `_candidate_org_sequences()` now rejects `str`/`bytes` as sequences
 - **Pagination `limit=None`** — `summarize_policies` loop broke after first page when limit was None; removed premature break
 - **`total_count` key mismatch** — `compound.py` referenced non-existent `total_count` key; fixed to `total_policies_considered`/`total_policies_available`
@@ -128,7 +135,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `delete_server_group` — Delete a server group permanently
 
 - **Webhook Management** (8 tools)
-  - `list_webhook_event_types` — List all 36 available webhook event types with descriptions
+  - `list_webhook_event_types` — List all 39 available webhook event types with descriptions
   - `list_webhooks` — List all webhook subscriptions for the organization with cursor-based pagination
   - `get_webhook` — Retrieve details for a specific webhook subscription
   - `create_webhook` — Create a new webhook subscription (returns one-time signing secret)
@@ -146,7 +153,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### MCP Resources
 
-- `resource://webhooks/event-types` — Static reference of all 36 webhook event types organized by category (device, policy, worklet, device_group, organization, audit) with descriptions and delivery limits
+- `resource://webhooks/event-types` — Static reference of all 39 webhook event types organized by category (device, policy, worklet, device_group, organization, audit) with descriptions and delivery limits
 
 #### Configuration
 
@@ -177,7 +184,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `tools/__init__.py` — `groups` module `has_writes` flag corrected from `False` to `True` (group CRUD tools were not gated by read-only mode)
 - `webhook_tools.py`, `policy_tools.py` — Fixed `org_id` falsy-value check: `or` operator replaced with explicit `None` comparison to prevent `org_id=0` from being silently overwritten
-- `webhook_resources.py` — Corrected webhook event type count from 38 to 36
+- `webhook_resources.py` — Corrected webhook event type count to 39
 - `workflows/devices.py` — Fixed parameter shadowing: local `policy_status` variable renamed to `device_policy_status` to avoid shadowing the function parameter `policy_status_filter`
 - `workflows/__init__.py` — Fixed `__all__` ordering (`audit_trail_user_activity` before `apply_policy_changes`, `summarize_patch_approvals` before `summarize_policies`)
 

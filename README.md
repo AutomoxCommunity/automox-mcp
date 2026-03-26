@@ -98,6 +98,7 @@ For the full list of tools, parameters, and MCP resources, see the **[Tool Refer
 | `AUTOMOX_MCP_TRANSPORT` | No | `stdio` | Transport: `stdio`, `http`, or `sse` |
 | `AUTOMOX_MCP_HOST` | No | `127.0.0.1` | Bind address for HTTP/SSE |
 | `AUTOMOX_MCP_PORT` | No | `8000` | Bind port for HTTP/SSE |
+| `AUTOMOX_MCP_ALLOW_REMOTE_BIND` | No | `false` | Allow binding to non-loopback addresses (required for `0.0.0.0` or external IPs) |
 
 ### Read-Only Mode
 
@@ -149,7 +150,9 @@ The Automox MCP server is designed for enterprise deployment with defense-in-dep
 - **Structured JSON logging** (`AUTOMOX_MCP_LOG_FORMAT=json`) for SIEM integration
 - **Tool name prefixing** (`AUTOMOX_MCP_TOOL_PREFIX`) to prevent cross-server collisions
 - **Sigstore-signed releases** with CycloneDX SBOM
-- **18 security hardening items** (V-001 through V-018) documented in CHANGELOG and SECURITY.md
+- **SSRF prevention** — webhook URLs validated against private/loopback IPs and cloud metadata endpoints
+- **Remote bind protection** — non-loopback HTTP/SSE binding requires explicit `--allow-remote-bind` opt-in
+- **25 security hardening items** (V-001 through V-018, V-101 through V-107) documented in CHANGELOG and SECURITY.md
 
 For vulnerability reporting and the full threat model, see [SECURITY.md](SECURITY.md).
 For deployment hardening (containers, Kubernetes, MCP gateways, TLS, authentication), see the [Deployment Security Guide](docs/deployment-security.md).

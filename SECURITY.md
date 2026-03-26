@@ -35,7 +35,7 @@ The following attack surfaces have been identified and mitigated:
 - API key stored as private attribute (`_api_key`), injected per-request via httpx auth callback (V-001)
 - Generic error messages prevent key leakage in stack traces (V-006)
 - Webhook secrets stripped from idempotency cache after create/rotate (V-012)
-- Sensitive field redaction covers: `token`, `secret`, `key`, `password`, `credential`, `auth` (V-010)
+- Sensitive field redaction covers: `token`, `secret`, `key`, `password`, `credential`, `auth`, `bearer`, `passwd`, `api-key`, `apikey` (V-010, V-107)
 - HTTP client debug logging excludes request parameters (V-005)
 
 ### Prompt Injection via API Data
@@ -59,9 +59,10 @@ For sensitive deployments, we recommend using an MCP gateway with inline guardra
 
 ### Network Exposure
 
-- Non-loopback binding warning logged when using HTTP/SSE transport (V-003)
+- Non-loopback HTTP/SSE binding requires explicit opt-in via `--allow-remote-bind` or `AUTOMOX_MCP_ALLOW_REMOTE_BIND=true` (V-106); server exits with an error otherwise
 - No built-in authentication — an authenticating reverse proxy or MCP gateway is required for non-local deployments
 - Tool name prefixing (`AUTOMOX_MCP_TOOL_PREFIX`) prevents cross-server collisions
+- Webhook URLs validated against private/loopback/link-local IPs and cloud metadata endpoints to prevent SSRF (V-103)
 
 ### Denial of Service
 
@@ -91,6 +92,13 @@ For sensitive deployments, we recommend using an MCP gateway with inline guardra
 | V-016 | Audit payload redaction | `workflows/audit.py` |
 | V-017 | .gitignore covers .env variants | `.gitignore` |
 | V-018 | Webhook URL validation with urlparse | `tools/webhook_tools.py` |
+| V-101 | Error messages sanitized before ToolError | `utils/tooling.py` |
+| V-102 | Dependabot pip ecosystem for Python deps | `.github/dependabot.yml` |
+| V-103 | SSRF prevention in webhook URLs (private IP/metadata blocking) | `tools/webhook_tools.py` |
+| V-104 | Expanded instruction-prefix regex (20+ patterns) | `utils/sanitize.py` |
+| V-105 | Redact data at sanitization depth limit | `utils/sanitize.py` |
+| V-106 | Require `--allow-remote-bind` for non-loopback binding | `__init__.py` |
+| V-107 | Expanded sensitive field redaction patterns | `utils/tooling.py` |
 
 ## Scope and Limitations
 

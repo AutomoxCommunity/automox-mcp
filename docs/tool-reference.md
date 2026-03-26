@@ -143,8 +143,8 @@ Most tools accept optional parameters for filtering and pagination:
 
 ### Execution Tools
 
-- `execute_policy_now`: `policy_id` (required), `action` (remediateAll or remediateDevice), `device_id` (optional, required for remediateDevice)
-- `execute_device_command`: `device_id` (required), `command_type` (scan, patch_all, patch_specific, reboot), `patch_names` (optional, required for patch_specific)
+- `execute_policy_now`: `policy_id` (required), `action` (remediateAll or remediateServer), `device_id` (optional, required for remediateServer)
+- `execute_device_command`: `device_id` (required), `command_type` (scan, get_os, refresh, patch, patch_all, patch_specific, reboot), `patch_names` (optional, required for patch_specific)
 - `apply_policy_changes`: accepts one or more `operations` where each entry contains `action` (`create`/`update`) and a policy payload. The helper accepts convenient shorthands (`filter_name`, `filter_names`), converts friendly `schedule` blocks, and enforces Automox-friendly defaults (e.g., inclusion of `id` during updates).
 - `policy_run_results`: `policy_uuid`, `exec_token`, and optional filters (`org_uuid`, `result_status`, `device_name`, pagination arguments).
 

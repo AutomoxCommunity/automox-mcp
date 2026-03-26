@@ -200,7 +200,7 @@ def register(server: FastMCP) -> None:
         "resource://webhooks/event-types",
         name="Webhook Event Types",
         description=(
-            "Complete list of all 36 Automox webhook event types with categories "
+            "Complete list of all 39 Automox webhook event types with categories "
             "and descriptions. Use this to see which events can trigger webhook "
             "deliveries when creating or updating webhook subscriptions."
         ),

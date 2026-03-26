@@ -21,7 +21,7 @@ COPY --from=builder /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
 USER automox
 ENTRYPOINT ["automox-mcp"]
-CMD ["--transport", "sse"]
+CMD ["--transport", "sse", "--allow-remote-bind"]
 ```
 
 Key points:
@@ -151,7 +151,7 @@ The `automox-mcp` server has no built-in authentication. Options by transport:
 | Transport | Recommendation |
 |-----------|---------------|
 | `stdio` | No network exposure — suitable for local/developer use |
-| `sse` / `http` | Place behind an authenticating reverse proxy that validates OAuth2/OIDC tokens |
+| `sse` / `http` | Place behind an authenticating reverse proxy that validates OAuth2/OIDC tokens. Requires `--allow-remote-bind` or `AUTOMOX_MCP_ALLOW_REMOTE_BIND=true` for non-loopback addresses |
 | Multi-user | Deploy separate server instances per API key/role, or use an MCP gateway that maps user identity to server instances |
 
 ## Human-in-the-Loop Configuration
@@ -203,6 +203,7 @@ Each release also includes a CycloneDX SBOM (`sbom.cdx.json`) attached to the Gi
 - [ ] MCP client configured with confirmation dialogs for write operations
 - [ ] Resource quotas (CPU/RAM) set on container
 - [ ] Tool prefix configured if running alongside other MCP servers (`AUTOMOX_MCP_TOOL_PREFIX`)
+- [ ] `AUTOMOX_MCP_ALLOW_REMOTE_BIND` set only when non-loopback binding is intentional
 
 ## References
 

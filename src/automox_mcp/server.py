@@ -163,6 +163,9 @@ def create_server() -> FastMCP:
     _load_env_file()
     _validate_env()
 
+    from .utils.logging import configure_logging
+    configure_logging()
+
     from contextlib import asynccontextmanager
 
     client = AutomoxClient()

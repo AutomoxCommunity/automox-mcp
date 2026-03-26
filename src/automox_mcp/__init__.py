@@ -89,6 +89,17 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         dest="show_banner",
         help="Suppress the FastMCP startup banner.",
     )
+    parser.add_argument(
+        "--allow-remote-bind",
+        action="store_true",
+        default=_env_flag("AUTOMOX_MCP_ALLOW_REMOTE_BIND"),
+        help=(
+            "Allow binding HTTP/SSE transports to non-loopback addresses. "
+            "Required when --host is not 127.0.0.1/::1/localhost. "
+            "The server has no built-in authentication — use an "
+            "authenticating reverse proxy to restrict access."
+        ),
+    )
     parser.set_defaults(show_banner=_env_flag("AUTOMOX_MCP_SHOW_BANNER"))
 
     return parser.parse_args(argv)
@@ -133,6 +144,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         resolved_host = str(transport_kwargs.get("host", "127.0.0.1"))
         _LOOPBACK = {"127.0.0.1", "::1", "localhost"}
         if resolved_host not in _LOOPBACK:
+            if not args.allow_remote_bind:
+                raise SystemExit(
+                    f"Refusing to bind {transport} transport to non-loopback address "
+                    f"{resolved_host}. The MCP server has NO built-in authentication.\n"
+                    f"Pass --allow-remote-bind (or set AUTOMOX_MCP_ALLOW_REMOTE_BIND=true) "
+                    f"to override, and use an authenticating reverse proxy to restrict access."
+                )
             logger.warning(
                 "Binding %s transport to non-loopback address %s — the MCP server "
                 "has NO built-in authentication. Use an authenticating reverse proxy "

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 from urllib.parse import urlparse
 
@@ -26,6 +27,34 @@ from ..utils.tooling import (
     format_error,
     store_idempotency,
 )
+
+def _validate_webhook_url(url: str) -> None:
+    """Validate a webhook URL: HTTPS, no userinfo, no private/internal IPs."""
+    parsed = urlparse(url)
+    if parsed.scheme.lower() != "https" or not parsed.hostname:
+        raise ValueError(
+            "Webhook URL must use HTTPS with a valid hostname "
+            "(e.g. https://example.com/webhook)"
+        )
+    if "@" in (parsed.netloc or ""):
+        raise ValueError("Webhook URL must not contain userinfo (user:pass@host)")
+    # Block private, loopback, and link-local IP addresses to prevent SSRF relay
+    hostname = parsed.hostname
+    try:
+        addr = ipaddress.ip_address(hostname)
+        if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved:
+            raise ValueError(
+                "Webhook URL must not target private, loopback, or link-local addresses"
+            )
+    except ValueError as exc:
+        if "must not target" in str(exc):
+            raise
+        # Not a bare IP — hostname is fine; DNS resolution is Automox's responsibility
+    # Block well-known cloud metadata endpoints by hostname
+    _BLOCKED_HOSTS = {"metadata.google.internal", "metadata.google"}
+    if hostname.lower() in _BLOCKED_HOSTS:
+        raise ValueError("Webhook URL must not target cloud metadata endpoints")
+
 
 def _strip_secret(result: dict[str, Any]) -> dict[str, Any]:
     """Return a copy of *result* with any ``secret`` value removed from the data payload.
@@ -69,11 +98,7 @@ class CreateWebhookParams(ForbidExtraModel):
 
     @model_validator(mode="after")
     def _enforce_https(self) -> CreateWebhookParams:
-        parsed = urlparse(self.url)
-        if parsed.scheme.lower() != "https" or not parsed.hostname:
-            raise ValueError("Webhook URL must use HTTPS with a valid hostname (e.g. https://example.com/webhook)")
-        if "@" in (parsed.netloc or ""):
-            raise ValueError("Webhook URL must not contain userinfo (user:pass@host)")
+        _validate_webhook_url(self.url)
         return self
 
 
@@ -88,11 +113,7 @@ class UpdateWebhookParams(ForbidExtraModel):
     @model_validator(mode="after")
     def _enforce_https(self) -> UpdateWebhookParams:
         if self.url is not None:
-            parsed = urlparse(self.url)
-            if parsed.scheme.lower() != "https" or not parsed.hostname:
-                raise ValueError("Webhook URL must use HTTPS with a valid hostname (e.g. https://example.com/webhook)")
-            if "@" in (parsed.netloc or ""):
-                raise ValueError("Webhook URL must not contain userinfo (user:pass@host)")
+            _validate_webhook_url(self.url)
         return self
 
 

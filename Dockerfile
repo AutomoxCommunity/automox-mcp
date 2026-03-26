@@ -31,4 +31,4 @@ RUN pip install --no-cache-dir /tmp/automox_mcp-*.whl \
 USER automox
 
 # Use the project CLI entry point; override args at runtime if needed.
-CMD ["automox-mcp", "--transport", "http", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["automox-mcp", "--transport", "http", "--host", "0.0.0.0", "--port", "8000", "--allow-remote-bind"]

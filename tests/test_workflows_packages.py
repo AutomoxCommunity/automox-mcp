@@ -3,13 +3,13 @@
 from typing import Any, cast
 
 import pytest
+from conftest import StubClient
 
 from automox_mcp.client import AutomoxClient
 from automox_mcp.workflows.packages import (
     list_device_packages,
     search_org_packages,
 )
-from conftest import StubClient
 
 _DEVICE_PACKAGES: list[dict[str, Any]] = [
     {
@@ -116,7 +116,11 @@ async def test_list_packages_omits_absent_optional_fields() -> None:
 async def test_list_packages_passes_pagination() -> None:
     client = StubClient(get_responses={"/servers/101/packages": [[]]})
     await list_device_packages(
-        cast(AutomoxClient, client), org_id=555, device_id=101, page=2, limit=50,
+        cast(AutomoxClient, client),
+        org_id=555,
+        device_id=101,
+        page=2,
+        limit=50,
     )
 
     params = client.calls[0][2]

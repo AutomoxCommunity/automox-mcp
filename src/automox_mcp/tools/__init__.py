@@ -15,14 +15,20 @@ logger = logging.getLogger(__name__)
 # Map of module name -> (register_function_module, contains_write_tools)
 _MODULE_REGISTRY: dict[str, tuple[str, bool]] = {
     "audit": ("audit_tools", False),
+    "audit_v2": ("audit_v2_tools", False),
     "devices": ("device_tools", True),
+    "device_search": ("device_search_tools", False),
     "policies": ("policy_tools", True),
+    "policy_history": ("policy_history_tools", False),
     "users": ("account_tools", True),
     "groups": ("group_tools", True),
     "events": ("event_tools", False),
     "reports": ("report_tools", False),
     "packages": ("package_tools", False),
     "webhooks": ("webhook_tools", True),
+    "worklets": ("worklet_tools", False),
+    "data_extracts": ("data_extract_tools", True),
+    "vuln_sync": ("vuln_sync_tools", True),
     "compound": ("compound_tools", False),
 }
 
@@ -45,11 +51,7 @@ def register_tools(server: FastMCP, *, client: AutomoxClient) -> None:
 
     for module_name, (tool_module_name, _has_writes) in all_modules.items():
         # Skip modules not in the enabled set (unless always-load)
-        if (
-            enabled is not None
-            and module_name not in enabled
-            and module_name not in _ALWAYS_LOAD
-        ):
+        if enabled is not None and module_name not in enabled and module_name not in _ALWAYS_LOAD:
             logger.info("Skipping module %s (not in AUTOMOX_MCP_MODULES)", module_name)
             continue
 

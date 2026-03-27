@@ -153,9 +153,7 @@ async def test_resolve_org_uuid_with_mapping_orgs_response():
     org_uuid = "ffffffff-ffff-ffff-ffff-ffffffffffff"
     stub = StubClient(
         org_id=5,
-        responses={
-            "/orgs": {"data": [{"id": 5, "org_uuid": org_uuid}]}
-        },
+        responses={"/orgs": {"data": [{"id": 5, "org_uuid": org_uuid}]}},
     )
     client = cast(AutomoxClient, stub)
     value = await resolve_org_uuid(client)

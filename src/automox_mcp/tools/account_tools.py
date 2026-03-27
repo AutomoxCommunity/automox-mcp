@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-
 import os
 from collections.abc import Awaitable, Callable
 from typing import Any, Literal
@@ -14,16 +13,21 @@ from pydantic import BaseModel, ValidationError
 
 from .. import workflows
 from ..client import AutomoxAPIError, AutomoxClient
-from ..schemas import InviteUserParams, RemoveUserFromAccountParams, ZoneAssignment
+from ..schemas import (
+    InviteUserParams,
+    ListOrgApiKeysParams,
+    RemoveUserFromAccountParams,
+    ZoneAssignment,
+)
 from ..utils.tooling import (
     RateLimitError,
     as_tool_response,
     check_idempotency,
     enforce_rate_limit,
     format_error,
+    maybe_format_markdown,
     store_idempotency,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +127,26 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             )
             await store_idempotency(request_id, "remove_user_from_account", result)
             return result
+
+    @server.tool(
+        name="list_org_api_keys",
+        description=(
+            "List API keys for the Automox organization. "
+            "Returns key names and IDs only — secrets are never exposed."
+        ),
+    )
+    async def list_org_api_keys(
+        output_format: str | None = "json",
+    ) -> dict[str, Any]:
+        org_id = client.org_id
+        if org_id is None:
+            raise ToolError("org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly.")
+        result = await _call(
+            workflows.list_org_api_keys,
+            ListOrgApiKeysParams,
+            {"org_id": org_id},
+        )
+        return maybe_format_markdown(result, output_format)
 
 
 __all__ = ["register"]

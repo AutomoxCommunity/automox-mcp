@@ -1,6 +1,5 @@
 """Tests for MCP resource registration and content."""
 
-
 import pytest
 
 from automox_mcp.resources.platform_resources import register as register_platform

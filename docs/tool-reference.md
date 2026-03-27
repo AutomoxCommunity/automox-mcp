@@ -1,22 +1,28 @@
 # Tool Reference
 
-Complete reference for all 45 tools, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
+Complete reference for all 70 tools, 6 workflow prompts, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
 
 > **Tip:** You don't need to memorize this. Call `discover_capabilities` from your AI assistant to get a live summary of available tools organized by domain.
 
 ## Table of Contents
 
 - [Device Management (8 tools)](#device-management-8-tools)
+- [Advanced Device Search (6 tools)](#advanced-device-search-6-tools)
 - [Policy Management (12 tools)](#policy-management-12-tools)
+- [Policy History v2 (6 tools)](#policy-history-v2-6-tools)
 - [Package Management (2 tools)](#package-management-2-tools)
 - [Group Management (5 tools)](#group-management-5-tools)
 - [Webhook Management (8 tools)](#webhook-management-8-tools)
+- [Worklet Catalog (2 tools)](#worklet-catalog-2-tools)
+- [Data Extracts (3 tools)](#data-extracts-3-tools)
+- [Vulnerability Sync (7 tools)](#vulnerability-sync-7-tools)
 - [Compound Workflows (3 tools)](#compound-workflows-3-tools)
 - [Events (1 tool)](#events-1-tool)
 - [Reports (2 tools)](#reports-2-tools)
-- [Account Management (2 tools)](#account-management-2-tools)
-- [Audit Trail (1 tool)](#audit-trail-1-tool)
+- [Account Management (3 tools)](#account-management-3-tools)
+- [Audit Trail (2 tools)](#audit-trail-2-tools)
 - [Capability Discovery (1 tool)](#capability-discovery-1-tool)
+- [Workflow Prompts (6 prompts)](#workflow-prompts-6-prompts)
 - [MCP Resources](#mcp-resources)
 - [Tool Parameters](#tool-parameters)
 - [Enterprise Features](#enterprise-features)
@@ -34,6 +40,17 @@ Complete reference for all 45 tools, MCP resources, parameters, and enterprise f
 - **`get_device_inventory_categories`** - List available inventory categories for a device. Categories are dynamic per device.
 - **`execute_device_command`** - Issue an immediate command to a device (scan, patch_all, patch_specific, reboot).
 
+## Advanced Device Search (6 tools)
+
+Uses the Server Groups API v2 for structured device queries, saved searches, and UUID-based lookups.
+
+- **`list_saved_searches`** - List saved device searches with names, queries, and metadata.
+- **`advanced_device_search`** - Execute an advanced device search using structured query language. Enables complex queries like "find all Windows devices not seen in 30 days" using field-based filtering.
+- **`device_search_typeahead`** - Get typeahead suggestions for device search fields. Useful for discovering valid values when building queries.
+- **`get_device_metadata_fields`** - Get available fields for device queries. Returns field names and types supported by the advanced search API.
+- **`get_device_assignments`** - Get device-to-policy and device-to-group assignments.
+- **`get_device_by_uuid`** - Get device details by UUID using the Server Groups API v2.
+
 ## Policy Management (12 tools)
 
 - **`policy_health_overview`** - Summarize recent Automox policy activity. Omit `org_uuid` to let the server resolve it from `AUTOMOX_ORG_ID` / `AUTOMOX_ORG_UUID`.
@@ -48,6 +65,17 @@ Complete reference for all 45 tools, MCP resources, parameters, and enterprise f
 - **`execute_policy_now`** - Execute a policy immediately for remediation (all devices or specific device).
 - **`clone_policy`** - Clone an existing policy with optional name and server group overrides.
 - **`delete_policy`** - Permanently delete a policy by ID.
+
+## Policy History v2 (6 tools)
+
+Richer policy execution reporting via the `/policy-history` API with UUID-based queries, time-range filtering, and aggregate views.
+
+- **`policy_runs_v2`** - List policy runs with time-range filtering, policy name/type filters, and result status filtering.
+- **`policy_run_count`** - Get aggregate policy execution counts. Optionally filter by number of days to look back.
+- **`policy_runs_by_policy`** - Get policy runs grouped by policy for cross-policy comparison.
+- **`policy_history_detail`** - Get policy history details by UUID, including run history and status.
+- **`policy_runs_for_policy`** - Get execution runs for a specific policy by UUID with optional day range and sort order.
+- **`policy_run_detail_v2`** - Get detailed per-device results for a specific policy run. Supports device name filtering and pagination.
 
 ## Package Management (2 tools)
 
@@ -73,6 +101,29 @@ Complete reference for all 45 tools, MCP resources, parameters, and enterprise f
 - **`test_webhook`** - Send a test delivery to a webhook endpoint. Returns success status, HTTP status code, and response time.
 - **`rotate_webhook_secret`** - Rotate the signing secret for a webhook. The old secret is immediately invalidated. Save the new secret -- it is only shown once.
 
+## Worklet Catalog (2 tools)
+
+- **`search_worklet_catalog`** - Search the Automox community worklet catalog. Returns worklet names, descriptions, categories, and OS compatibility.
+- **`get_worklet_detail`** - Get detailed information for a specific community worklet, including evaluation code, remediation code, and requirements.
+
+## Data Extracts (3 tools)
+
+- **`list_data_extracts`** - List available data extracts for the organization. Returns extract names, statuses, and download information.
+- **`get_data_extract`** - Get details and download information for a specific data extract.
+- **`create_data_extract`** - Request a new data extract for bulk reporting. Returns the extract ID and initial status.
+
+## Vulnerability Sync (7 tools)
+
+Manage vulnerability remediation workflows via the Vuln Sync API. Supports CSV-based import from vulnerability scanners (Qualys, Tenable, etc.).
+
+- **`list_remediation_action_sets`** - List vulnerability remediation action sets for the organization.
+- **`get_action_set_detail`** - Get details for a specific vulnerability remediation action set.
+- **`get_action_set_actions`** - Get remediation actions for an action set. Shows what patches or changes need to be applied.
+- **`get_action_set_issues`** - Get vulnerability issues (CVEs) associated with an action set.
+- **`get_action_set_solutions`** - Get solutions for an action set. Shows recommended patches or configurations.
+- **`get_upload_formats`** - Get supported CSV upload formats for vulnerability remediation action sets.
+- **`upload_action_set`** - Upload a CSV-based vulnerability remediation action set.
+
 ## Compound Workflows (3 tools)
 
 - **`get_patch_tuesday_readiness`** - Combined view of pre-patch report, pending approvals, and patch policy schedules. Answers "Are we ready for Patch Tuesday?" in a single call. Includes per-device severity classification computed from CVE data.
@@ -88,18 +139,31 @@ Complete reference for all 45 tools, MCP resources, parameters, and enterprise f
 - **`prepatch_report`** - Retrieve the pre-patch readiness report showing devices with pending patches before the next scheduled patch window.
 - **`noncompliant_report`** - Retrieve the non-compliant devices report showing devices that need attention due to policy failures or missing patches.
 
-## Account Management (2 tools)
+## Account Management (3 tools)
 
 - **`invite_user_to_account`** - Invite a user to the Automox account with optional zone assignments.
 - **`remove_user_from_account`** - Remove a user from the Automox account by UUID.
+- **`list_org_api_keys`** - List API keys for the organization. Returns key names and IDs only — secrets are never exposed.
 
-## Audit Trail (1 tool)
+## Audit Trail (2 tools)
 
 - **`audit_trail_user_activity`** - Retrieve Automox audit trail events performed by a specific user on a given date, with optional pagination cursor support. Set `include_raw_events=true` to include sanitized event payloads when deeper investigation is required. Pass either the full email address or provide `actor_name`/partial email hints and the tool will resolve the matching Automox user automatically.
+- **`audit_events_ocsf`** - Query OCSF-formatted audit events from the Audit Service v2. Supports filtering by date, event category (authentication, account_change, entity_management, user_access, web_resource_activity), and event type name. Uses cursor-based pagination for large result sets.
 
 ## Capability Discovery (1 tool)
 
-- **`discover_capabilities`** - Return all available tools organized by domain (devices, policies, patches, groups, events, reports, audit, webhooks, account, compound). This meta-tool is always loaded regardless of `AUTOMOX_MCP_MODULES` configuration and provides a quick reference for what the server can do.
+- **`discover_capabilities`** - Return all available tools organized by domain (devices, device_search, policies, policy_history, patches, groups, events, reports, audit, webhooks, worklets, data_extracts, vuln_sync, account, compound). This meta-tool is always loaded regardless of `AUTOMOX_MCP_MODULES` configuration and provides a quick reference for what the server can do.
+
+## Workflow Prompts (6 prompts)
+
+Pre-built guided templates for common admin workflows. These MCP prompts provide step-by-step instructions that structure multi-step operations and reduce hallucination risk.
+
+- **`investigate_noncompliant_device`** - Guided workflow to investigate why a device is non-compliant and remediate it. Walks through device detail, inventory, packages, policy status, execution history, root cause analysis, and remediation.
+- **`prepare_patch_tuesday`** - Guided workflow to assess readiness and prepare for Patch Tuesday. Covers readiness checks, pending approvals, policy schedules, at-risk devices, and approval actions.
+- **`audit_policy_execution`** - Guided workflow to audit a policy's execution history and identify issues. Includes timeline review, failure analysis, compliance stats, and trend reporting.
+- **`onboard_device_group`** - Guided workflow to create and configure a new device group with policies. Covers group creation, policy assignment, worklet discovery, and verification.
+- **`triage_failed_policy_run`** - Guided workflow to triage and remediate a failed policy execution. Categorizes failures, investigates top issues, and recommends remediation steps.
+- **`review_security_posture`** - Guided workflow to review the organization's fleet security posture. Covers compliance, patches, vulnerabilities, policy health, and recommended actions.
 
 ---
 

@@ -57,22 +57,17 @@ async def list_webhooks(
     if cursor is not None:
         params["cursor"] = cursor
 
-    result = await client.get(
-        f"/organizations/{org_uuid}/webhooks", params=params    )
+    result = await client.get(f"/organizations/{org_uuid}/webhooks", params=params)
 
     webhooks: list[dict[str, Any]] = []
     next_cursor: str | None = None
     if isinstance(result, Mapping):
         raw_items = result.get("data") or result.get("webhooks") or []
         if isinstance(raw_items, list):
-            webhooks = [
-                _summarize_webhook(w) for w in raw_items if isinstance(w, Mapping)
-            ]
+            webhooks = [_summarize_webhook(w) for w in raw_items if isinstance(w, Mapping)]
         next_cursor = result.get("nextCursor") or result.get("next_cursor")
     elif isinstance(result, list):
-        webhooks = [
-            _summarize_webhook(w) for w in result if isinstance(w, Mapping)
-        ]
+        webhooks = [_summarize_webhook(w) for w in result if isinstance(w, Mapping)]
 
     data: dict[str, Any] = {
         "total_webhooks": len(webhooks),
@@ -96,8 +91,7 @@ async def get_webhook(
     webhook_id: str,
 ) -> dict[str, Any]:
     """Retrieve details for a specific webhook."""
-    result = await client.get(
-        f"/organizations/{org_uuid}/webhooks/{webhook_id}"    )
+    result = await client.get(f"/organizations/{org_uuid}/webhooks/{webhook_id}")
 
     data: dict[str, Any]
     if isinstance(result, Mapping):
@@ -131,8 +125,7 @@ async def create_webhook(
         "eventTypes": event_types,
     }
 
-    result = await client.post(
-        f"/organizations/{org_uuid}/webhooks", json_data=body    )
+    result = await client.post(f"/organizations/{org_uuid}/webhooks", json_data=body)
 
     data: dict[str, Any]
     if isinstance(result, Mapping):
@@ -209,8 +202,7 @@ async def delete_webhook(
     webhook_id: str,
 ) -> dict[str, Any]:
     """Delete a webhook permanently."""
-    await client.delete(
-        f"/organizations/{org_uuid}/webhooks/{webhook_id}"    )
+    await client.delete(f"/organizations/{org_uuid}/webhooks/{webhook_id}")
 
     return {
         "data": {
@@ -230,8 +222,7 @@ async def test_webhook(
     webhook_id: str,
 ) -> dict[str, Any]:
     """Send a test delivery to a webhook endpoint."""
-    result = await client.post(
-        f"/organizations/{org_uuid}/webhooks/{webhook_id}/test"    )
+    result = await client.post(f"/organizations/{org_uuid}/webhooks/{webhook_id}/test")
 
     data: dict[str, Any]
     if isinstance(result, Mapping):

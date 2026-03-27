@@ -310,9 +310,7 @@ def test_apply_token_budget_non_list_data_not_truncated():
 def test_as_tool_response_applies_token_budget():
     """Token budget is applied inside as_tool_response."""
     big_list = [{"id": i, "name": f"item-{i}", "extra": "x" * 50} for i in range(500)]
-    result = as_tool_response(
-        {"data": {"items": big_list}, "metadata": {}}
-    )
+    result = as_tool_response({"data": {"items": big_list}, "metadata": {}})
     # With 500 items the response should exceed default 4000 token budget
     meta = result["metadata"]
     assert meta.get("estimated_tokens", 0) > 4000, "Test data must exceed token budget"

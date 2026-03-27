@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -27,11 +26,10 @@ from ..utils.tooling import (
     as_tool_response,
     check_idempotency,
     enforce_rate_limit,
-    maybe_format_markdown,
     format_error,
+    maybe_format_markdown,
     store_idempotency,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -118,7 +116,6 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             workflows.get_server_group,
             GetServerGroupParams,
             params,
-
             inject_org_id=True,
         )
 

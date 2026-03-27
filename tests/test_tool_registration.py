@@ -181,9 +181,7 @@ class TestPolicyCrudToolRegistration:
             recorded["called"] = True
             return success_result()
 
-        monkeypatch.setattr(
-            policy_tools.workflows, "get_policy_compliance_stats", fake_workflow
-        )
+        monkeypatch.setattr(policy_tools.workflows, "get_policy_compliance_stats", fake_workflow)
 
         server = StubServer()
         policy_tools.register(server, client=FakeClient(org_id=42))

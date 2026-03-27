@@ -37,16 +37,30 @@ def get_enabled_modules() -> set[str] | None:
     if not raw:
         return None
     _VALID_MODULES = {
-        "audit", "devices", "policies", "users", "groups",
-        "events", "reports", "packages", "webhooks", "compound",
+        "audit",
+        "audit_v2",
+        "devices",
+        "device_search",
+        "policies",
+        "policy_history",
+        "users",
+        "groups",
+        "events",
+        "reports",
+        "packages",
+        "webhooks",
+        "worklets",
+        "data_extracts",
+        "vuln_sync",
+        "compound",
     }
     modules = {m.strip().lower() for m in raw.split(",") if m.strip()}
     unknown = modules - _VALID_MODULES
     if unknown:
         import logging as _logging
+
         _logging.getLogger(__name__).warning(
-            "AUTOMOX_MCP_MODULES contains unknown module names: %s. "
-            "Valid names: %s",
+            "AUTOMOX_MCP_MODULES contains unknown module names: %s. Valid names: %s",
             ", ".join(sorted(unknown)),
             ", ".join(sorted(_VALID_MODULES)),
         )
@@ -79,9 +93,7 @@ class IdempotencyCache:
                 return None
             return response
 
-    async def put(
-        self, request_id: str, tool_name: str, response: dict[str, Any]
-    ) -> None:
+    async def put(self, request_id: str, tool_name: str, response: dict[str, Any]) -> None:
         async with self._lock:
             self._evict_expired()
             key = (request_id, tool_name)
@@ -104,9 +116,7 @@ class IdempotencyCache:
 _IDEMPOTENCY_CACHE = IdempotencyCache()
 
 
-async def check_idempotency(
-    request_id: str | None, tool_name: str
-) -> dict[str, Any] | None:
+async def check_idempotency(request_id: str | None, tool_name: str) -> dict[str, Any] | None:
     """Return cached response for a duplicate request_id, or None."""
     if not request_id:
         return None
@@ -203,7 +213,21 @@ def _redact_sensitive_fields(payload: Any) -> Any:
         redacted: dict[Any, Any] = {}
         for key, value in payload.items():
             lower_key = str(key).lower()
-            if any(sensitive in lower_key for sensitive in ("token", "secret", "key", "password", "credential", "auth", "bearer", "passwd", "api-key", "apikey")):
+            if any(
+                sensitive in lower_key
+                for sensitive in (
+                    "token",
+                    "secret",
+                    "key",
+                    "password",
+                    "credential",
+                    "auth",
+                    "bearer",
+                    "passwd",
+                    "api-key",
+                    "apikey",
+                )
+            ):
                 redacted[key] = "***redacted***"
             else:
                 redacted[key] = _redact_sensitive_fields(value)
@@ -316,9 +340,7 @@ def as_tool_response(result: Mapping[str, Any]) -> dict[str, Any]:
     return _apply_token_budget(response_dict)
 
 
-def format_as_markdown_table(
-    data: list[dict[str, Any]], *, max_col_width: int = 40
-) -> str:
+def format_as_markdown_table(data: list[dict[str, Any]], *, max_col_width: int = 40) -> str:
     """Convert a list of flat dicts into a Markdown table string."""
     if not data:
         return "_No data_"
@@ -349,9 +371,7 @@ def format_as_markdown_table(
     return "\n".join([header, separator, *rows])
 
 
-def maybe_format_markdown(
-    result: dict[str, Any], output_format: str | None
-) -> dict[str, Any]:
+def maybe_format_markdown(result: dict[str, Any], output_format: str | None) -> dict[str, Any]:
     """If *output_format* is ``"markdown"``, convert the first list in *data* to a table.
 
     Returns the original *result* unchanged when the format is not markdown.

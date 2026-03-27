@@ -12,6 +12,7 @@ from fastmcp import FastMCP
 
 from .client import AutomoxClient
 from .middleware import CorrelationMiddleware
+from .prompts import register_prompts
 from .resources import register_resources
 from .tools import register_tools
 
@@ -144,9 +145,7 @@ def _validate_env() -> None:
                 f"AUTOMOX_ORG_ID must be a positive integer, got: {org_id_raw!r}"
             ) from exc
         if org_id_int <= 0:
-            raise RuntimeError(
-                f"AUTOMOX_ORG_ID must be a positive integer, got: {org_id_int}"
-            )
+            raise RuntimeError(f"AUTOMOX_ORG_ID must be a positive integer, got: {org_id_int}")
 
 
 def _load_env_file() -> None:
@@ -164,6 +163,7 @@ def create_server() -> FastMCP:
     _validate_env()
 
     from .utils.logging import configure_logging
+
     configure_logging()
 
     from contextlib import asynccontextmanager
@@ -186,17 +186,24 @@ def create_server() -> FastMCP:
             "CAPABILITIES:\n"
             "- Devices: list, search, detail (with inventory), health metrics, "
             "devices needing attention, execute commands (scan/patch/reboot)\n"
+            "- Advanced Device Search: saved searches, structured queries, "
+            "typeahead, field metadata, device assignments (Server Groups API v2)\n"
             "- Policies: catalog, detail, health overview, execution timeline, "
             "run results, create/update, execute, patch approvals\n"
+            "- Policy History v2: runs with time-range filters, run counts, "
+            "runs grouped by policy, UUID-based queries\n"
             "- Packages: list device packages, search organization packages\n"
             "- Groups: list, get, create, update, delete server groups\n"
             "- Events: list organization events with filters\n"
             "- Reports: pre-patch readiness, non-compliant devices\n"
             "- Webhooks: list event types, list/get/create/update/delete webhooks, "
             "test delivery, rotate signing secret\n"
+            "- Worklets: search community worklet catalog, get worklet details\n"
+            "- Data Extracts: list, get, create bulk data extracts\n"
+            "- Vuln Sync: remediation action sets, issues, solutions, uploads\n"
             "- Compound: patch tuesday readiness, compliance snapshot\n"
-            "- Audit: audit trail activity search\n"
-            "- Account: invite/remove users\n\n"
+            "- Audit: audit trail activity search, OCSF-formatted events (v2)\n"
+            "- Account: invite/remove users, list org API keys\n\n"
             "IMPORTANT: When working with Automox data, proactively check available resources:\n"
             "- Use resource://servergroups/list to translate server_group_id values to "
             "human-readable names\n"
@@ -228,9 +235,10 @@ def create_server() -> FastMCP:
         ),
     )
 
-    # Register tools and resources
+    # Register tools, resources, and prompts
     register_tools(server, client=client)
     register_resources(server, client=client)
+    register_prompts(server)
 
     return server
 

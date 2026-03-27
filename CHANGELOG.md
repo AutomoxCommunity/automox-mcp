@@ -7,6 +7,62 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+#### Phase 3: Advanced Workflows & Remediation (25 new tools, 6 prompts)
+
+- **Worklet Catalog** (2 tools)
+  - `search_worklet_catalog` — Search community worklets by keyword, OS, category
+  - `get_worklet_detail` — Detailed worklet info including evaluation and remediation code
+
+- **Data Extracts** (3 tools)
+  - `list_data_extracts` — List available/completed data extracts
+  - `get_data_extract` — Get extract details and download info
+  - `create_data_extract` — Request a new data extract for bulk reporting
+
+- **Org API Keys** (1 tool)
+  - `list_org_api_keys` — List organization API keys (names and IDs only, secrets never exposed)
+
+- **Policy History v2** (6 tools) — Richer policy execution reporting via `/policy-history` API
+  - `policy_runs_v2` — List runs with time-range filtering, policy name/type/status filters
+  - `policy_run_count` — Aggregate execution counts with day-range filtering
+  - `policy_runs_by_policy` — Runs grouped by policy for cross-policy comparison
+  - `policy_history_detail` — Policy history details by UUID
+  - `policy_runs_for_policy` — Execution runs for a specific policy
+  - `policy_run_detail_v2` — Per-device results with UUID-based queries and device name filtering
+
+- **Audit Service v2 / OCSF** (1 tool)
+  - `audit_events_ocsf` — OCSF-formatted audit events with category filtering (authentication, account_change, entity_management, user_access, web_resource_activity) and cursor pagination
+
+- **Advanced Device Search** (6 tools) — Server Groups API v2
+  - `list_saved_searches` — List saved device searches
+  - `advanced_device_search` — Execute advanced search with structured query language
+  - `device_search_typeahead` — Typeahead suggestions for search fields
+  - `get_device_metadata_fields` — Available fields for device queries
+  - `get_device_assignments` — Device-to-policy/group assignments
+  - `get_device_by_uuid` — Device details by UUID (v2 endpoint)
+
+- **Vulnerability Sync / Remediations** (7 tools)
+  - `list_remediation_action_sets` — List vulnerability remediation action sets
+  - `get_action_set_detail` — Action set details by ID
+  - `get_action_set_actions` — Remediation actions for an action set
+  - `get_action_set_issues` — Vulnerability issues (CVEs) for an action set
+  - `get_action_set_solutions` — Solutions for an action set
+  - `get_upload_formats` — Supported CSV upload formats
+  - `upload_action_set` — Upload CSV-based remediation data
+
+- **Workflow Prompts** (6 MCP prompts) — Pre-built guided templates for common admin tasks
+  - `investigate_noncompliant_device` — Investigate and remediate non-compliant devices
+  - `prepare_patch_tuesday` — Assess readiness and prepare for Patch Tuesday
+  - `audit_policy_execution` — Audit a policy's execution history
+  - `onboard_device_group` — Create and configure a new device group
+  - `triage_failed_policy_run` — Triage and remediate failed policy runs
+  - `review_security_posture` — Review fleet security posture
+
+- **New modules**: `audit_v2`, `device_search`, `policy_history`, `worklets`, `data_extracts`, `vuln_sync` — all selectable via `AUTOMOX_MCP_MODULES`
+- **Capability discovery** updated with 5 new domains (device_search, policy_history, worklets, data_extracts, vuln_sync); total domains: 15
+- **Smoke tests** expanded from 35 to 49 covering all Phase 3 tools against live Automox org
+
 ### Fixed
 
 - **Unreachable dead code** — Removed 13 `return result` statements that were unreachable after `return maybe_format_markdown(result, output_format)` across 8 tool files (`device_tools.py`, `policy_tools.py`, `group_tools.py`, `webhook_tools.py`, `package_tools.py`, `event_tools.py`, `report_tools.py`, `audit_tools.py`). Leftover from the `maybe_format_markdown()` refactor.

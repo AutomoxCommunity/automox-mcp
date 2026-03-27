@@ -7,6 +7,7 @@ from typing import Any, cast
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from conftest import StubClient
 
 from automox_mcp.client import AutomoxClient
 from automox_mcp.workflows.devices import (
@@ -25,12 +26,11 @@ from automox_mcp.workflows.devices import (
     search_devices,
     summarize_device_health,
 )
-from conftest import StubClient
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_device(
     device_id: int,
@@ -650,9 +650,7 @@ async def test_search_devices_filters_by_ip_address() -> None:
         _make_device(2, name="host-b", ip_address="10.0.0.2"),
     ]
     client = StubClient(get_responses={"/servers": [devices]})
-    result = await search_devices(
-        cast(AutomoxClient, client), org_id=42, ip_address="10.0.0.1"
-    )
+    result = await search_devices(cast(AutomoxClient, client), org_id=42, ip_address="10.0.0.1")
 
     data = result["data"]
     assert data["matches"] == 1
@@ -802,12 +800,14 @@ class FullStubClient:
 def _fresh_describe_device():
     """Return the describe_device function from the live (possibly re-imported) module."""
     import automox_mcp.workflows.devices as mod
+
     return mod.describe_device
 
 
 def _patch_get_device_inventory(**kwargs):
     """Return a context manager that patches get_device_inventory in the live module."""
     import automox_mcp.workflows.devices as mod
+
     return patch.object(mod, "get_device_inventory", **kwargs)
 
 
@@ -1214,9 +1214,7 @@ async def test_summarize_device_health_no_org_id_raises() -> None:
 @pytest.mark.asyncio
 async def test_summarize_device_health_stale_devices_truncated_by_limit() -> None:
     """With max_stale_devices=2, only 2 stale devices are shown but count is full."""
-    stale_devices = [
-        _make_device(i, last_check_in="2020-01-01T00:00:00Z") for i in range(1, 6)
-    ]
+    stale_devices = [_make_device(i, last_check_in="2020-01-01T00:00:00Z") for i in range(1, 6)]
     client = StubClient(get_responses={"/servers": [stale_devices]})
     reference_time = datetime(2024, 5, 11, 0, 0, 0, tzinfo=UTC)
 
@@ -1235,9 +1233,7 @@ async def test_summarize_device_health_stale_devices_truncated_by_limit() -> Non
 @pytest.mark.asyncio
 async def test_summarize_device_health_max_stale_devices_none_returns_all() -> None:
     """max_stale_devices=None returns all stale devices without truncation."""
-    stale_devices = [
-        _make_device(i, last_check_in="2020-01-01T00:00:00Z") for i in range(1, 6)
-    ]
+    stale_devices = [_make_device(i, last_check_in="2020-01-01T00:00:00Z") for i in range(1, 6)]
     client = StubClient(get_responses={"/servers": [stale_devices]})
     reference_time = datetime(2024, 5, 11, 0, 0, 0, tzinfo=UTC)
 
@@ -1257,8 +1253,7 @@ async def test_summarize_device_health_large_response_sets_truncation_flag() -> 
     """When response JSON exceeds _MAX_HEALTH_RESPONSE_BYTES, metadata flags it."""
     # Create enough devices with long hostnames to exceed 18 000 bytes
     devices = [
-        _make_device(i, name="x" * 200, last_check_in="2024-05-10T12:00:00Z")
-        for i in range(100)
+        _make_device(i, name="x" * 200, last_check_in="2024-05-10T12:00:00Z") for i in range(100)
     ]
     client = StubClient(get_responses={"/servers": [devices]})
     reference_time = datetime(2024, 5, 11, 12, 0, 0, tzinfo=UTC)
@@ -1341,9 +1336,7 @@ async def test_list_devices_needing_attention_multiple_devices() -> None:
 async def test_list_devices_needing_attention_metadata() -> None:
     report = {"data": []}
     client = StubClient(get_responses={"/reports/needs-attention": [report]})
-    result = await list_devices_needing_attention(
-        cast(AutomoxClient, client), org_id=42, limit=10
-    )
+    result = await list_devices_needing_attention(cast(AutomoxClient, client), org_id=42, limit=10)
 
     meta = result["metadata"]
     assert meta["org_id"] == 42

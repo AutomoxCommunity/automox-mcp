@@ -202,9 +202,7 @@ class TestPackageToolsDispatch:
 
 class TestGroupToolsDispatch:
     @pytest.mark.asyncio
-    async def test_list_server_groups_calls_workflow(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_list_server_groups_calls_workflow(self, monkeypatch: pytest.MonkeyPatch) -> None:
         called: list[bool] = []
 
         async def fake_list(client, **kwargs):
@@ -221,9 +219,7 @@ class TestGroupToolsDispatch:
         assert called
 
     @pytest.mark.asyncio
-    async def test_get_server_group_calls_workflow(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_get_server_group_calls_workflow(self, monkeypatch: pytest.MonkeyPatch) -> None:
         recorded: dict[str, Any] = {}
 
         async def fake_get(client, **kwargs):
@@ -728,9 +724,7 @@ class TestReportToolsErrorHandling:
         async def fake_noncompliant(client, **kwargs):
             return {"data": {"devices": [{"id": 99}]}, "metadata": {"total_count": 1}}
 
-        monkeypatch.setattr(
-            report_tools.workflows, "get_noncompliant_report", fake_noncompliant
-        )
+        monkeypatch.setattr(report_tools.workflows, "get_noncompliant_report", fake_noncompliant)
 
         server = StubServer()
         report_tools.register(server, client=FakeClient(org_id=42))
@@ -838,9 +832,7 @@ class TestRegisterToolsFiltering:
         assert "prepatch_report" not in server.tools
         assert "list_server_groups" not in server.tools
 
-    def test_import_error_is_skipped_gracefully(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_import_error_is_skipped_gracefully(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import importlib
 
         from automox_mcp.tools import register_tools
@@ -859,9 +851,7 @@ class TestRegisterToolsFiltering:
         register_tools(server, client=FakeClient(org_id=42))
         assert "list_events" not in server.tools
 
-    def test_register_exception_is_logged_not_raised(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_register_exception_is_logged_not_raised(self, monkeypatch: pytest.MonkeyPatch) -> None:
         import importlib
 
         from automox_mcp.tools import register_tools
@@ -1315,9 +1305,7 @@ class TestDeviceToolsErrorHandling:
             recorded.update(kwargs)
             return _success()
 
-        monkeypatch.setattr(
-            device_tools.workflows, "list_devices_needing_attention", fake_list
-        )
+        monkeypatch.setattr(device_tools.workflows, "list_devices_needing_attention", fake_list)
 
         server = StubServer()
         device_tools.register(server, client=FakeClient(org_id=42))
@@ -1334,9 +1322,7 @@ class TestDeviceToolsErrorHandling:
 
 class TestAccountToolsErrorHandling:
     @pytest.mark.asyncio
-    async def test_invite_user_calls_workflow(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_invite_user_calls_workflow(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from automox_mcp.tools import account_tools
 
         recorded: dict[str, Any] = {}
@@ -1632,9 +1618,7 @@ class TestPolicyToolsErrorHandling:
             await server.tools["policy_health_overview"](org_uuid=org_uuid)
 
     @pytest.mark.asyncio
-    async def test_policy_catalog_calls_workflow(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_policy_catalog_calls_workflow(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from automox_mcp.tools import policy_tools
 
         called: list[bool] = []

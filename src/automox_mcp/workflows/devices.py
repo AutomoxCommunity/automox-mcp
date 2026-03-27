@@ -470,7 +470,9 @@ async def list_devices_needing_attention(
                 "device_id": item.get("device_id") or item.get("id"),
                 "device_name": _format_device_display_name(item),
                 "policy_status": item.get("policy_status") or item.get("status"),
-                "pending_patches": item.get("pending_updates") if item.get("pending_updates") is not None else item.get("pending"),
+                "pending_patches": item.get("pending_updates")
+                if item.get("pending_updates") is not None
+                else item.get("pending"),
                 "last_check_in": item.get("last_check_in") or item.get("last_seen"),
                 "server_group_id": item.get("server_group_id"),
             }
@@ -612,8 +614,7 @@ async def describe_device(
 
     if include_packages:
         pkg_params: dict[str, Any] = {"o": resolved_org_id, "limit": 10}
-        packages_raw = await client.get(
-            f"/servers/{device_id}/packages", params=pkg_params        )
+        packages_raw = await client.get(f"/servers/{device_id}/packages", params=pkg_params)
         if isinstance(packages_raw, Sequence):
             packages_preview = [
                 {
@@ -628,7 +629,9 @@ async def describe_device(
     if include_inventory:
         try:
             inv_result = await get_device_inventory(
-                client, org_id=resolved_org_id, device_id=device_id,
+                client,
+                org_id=resolved_org_id,
+                device_id=device_id,
             )
             inv_data = inv_result.get("data") or {}
             inv_categories = inv_data.get("categories") or {}
@@ -648,8 +651,7 @@ async def describe_device(
 
     if include_queue:
         queue_params: dict[str, Any] = {"o": resolved_org_id}
-        queue_raw = await client.get(
-            f"/servers/{device_id}/queues", params=queue_params        )
+        queue_raw = await client.get(f"/servers/{device_id}/queues", params=queue_params)
         if isinstance(queue_raw, Sequence):
             queue_preview = [
                 {
@@ -844,6 +846,7 @@ __all__ = [
     "summarize_device_health",
 ]
 
+
 async def search_devices(
     client: AutomoxClient,
     *,
@@ -876,6 +879,7 @@ async def search_devices(
         stripped = severity.strip()
         if stripped.startswith("["):
             import json
+
             try:
                 parsed = json.loads(stripped)
                 if isinstance(parsed, list):
@@ -1157,5 +1161,3 @@ async def summarize_device_health(
         metadata["approx_response_bytes"] = response_size
 
     return response
-
-

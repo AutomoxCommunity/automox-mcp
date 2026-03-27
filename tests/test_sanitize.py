@@ -5,14 +5,11 @@ from __future__ import annotations
 import os
 from unittest.mock import patch
 
-import pytest
-
 from automox_mcp.utils.sanitize import (
     is_sanitization_enabled,
     sanitize_dict,
     sanitize_for_llm,
 )
-
 
 # ---------------------------------------------------------------------------
 # is_sanitization_enabled
@@ -111,7 +108,7 @@ class TestCodeBlockRemoval:
         assert "Get-Process" not in result
 
     def test_preserves_non_shell_code_blocks(self):
-        text = "```json\n{\"key\": \"value\"}\n```"
+        text = '```json\n{"key": "value"}\n```'
         result = sanitize_for_llm(text)
         # Triple backticks get escaped to single, but content preserved
         assert "key" in result
@@ -235,7 +232,9 @@ class TestEdgeCases:
 
     def test_deeply_nested_does_not_crash(self):
         """sanitize_dict should handle depth limits gracefully."""
-        data: dict = {"a": {"b": {"c": {"d": {"e": {"f": {"g": {"h": {"i": {"j": {"k": "deep"}}}}}}}}}}}
+        data: dict = {
+            "a": {"b": {"c": {"d": {"e": {"f": {"g": {"h": {"i": {"j": {"k": "deep"}}}}}}}}}}
+        }
         result = sanitize_dict(data)
         assert isinstance(result, dict)
 

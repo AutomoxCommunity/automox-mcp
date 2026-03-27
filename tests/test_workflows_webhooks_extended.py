@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import cast
 
 import pytest
+from conftest import StubClient
 
 from automox_mcp.client import AutomoxClient
 from automox_mcp.workflows.webhooks import (
@@ -18,7 +19,6 @@ from automox_mcp.workflows.webhooks import (
 from automox_mcp.workflows.webhooks import (
     test_webhook as send_test_webhook,
 )
-from conftest import StubClient
 
 _ORG_UUID = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
 
@@ -30,9 +30,7 @@ _ORG_UUID = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
 @pytest.mark.asyncio
 async def test_list_event_types_non_mapping_non_list_wrapped_in_raw() -> None:
     """When the API returns a scalar, it is wrapped under 'raw'."""
-    client = StubClient(
-        get_responses={"/webhooks/event-types": ["plain-string-response"]}
-    )
+    client = StubClient(get_responses={"/webhooks/event-types": ["plain-string-response"]})
     result = await list_webhook_event_types(cast(AutomoxClient, client))
     assert result["data"] == {"raw": "plain-string-response"}
     assert result["metadata"]["deprecated_endpoint"] is False
@@ -47,9 +45,7 @@ async def test_list_event_types_non_mapping_non_list_wrapped_in_raw() -> None:
 @pytest.mark.asyncio
 async def test_list_webhooks_empty_mapping_returns_zero() -> None:
     """An API mapping with no 'data' or 'webhooks' key yields zero webhooks."""
-    client = StubClient(
-        get_responses={f"/organizations/{_ORG_UUID}/webhooks": [{}]}
-    )
+    client = StubClient(get_responses={f"/organizations/{_ORG_UUID}/webhooks": [{}]})
     result = await list_webhooks(cast(AutomoxClient, client), org_uuid=_ORG_UUID)
     assert result["data"]["total_webhooks"] == 0
     assert result["data"]["webhooks"] == []
@@ -60,9 +56,7 @@ async def test_list_webhooks_next_cursor_from_next_cursor_key() -> None:
     """next_cursor is read from 'next_cursor' fallback key."""
     client = StubClient(
         get_responses={
-            f"/organizations/{_ORG_UUID}/webhooks": [
-                {"data": [], "next_cursor": "cursor-xyz"}
-            ]
+            f"/organizations/{_ORG_UUID}/webhooks": [{"data": [], "next_cursor": "cursor-xyz"}]
         }
     )
     result = await list_webhooks(cast(AutomoxClient, client), org_uuid=_ORG_UUID)
@@ -78,9 +72,7 @@ async def test_list_webhooks_next_cursor_from_next_cursor_key() -> None:
 async def test_get_webhook_non_mapping_response_returns_raw() -> None:
     """When the API returns a non-Mapping, raw value is surfaced."""
     client = StubClient(
-        get_responses={
-            f"/organizations/{_ORG_UUID}/webhooks/wh-nope": ["unexpected-string"]
-        }
+        get_responses={f"/organizations/{_ORG_UUID}/webhooks/wh-nope": ["unexpected-string"]}
     )
     result = await get_webhook(
         cast(AutomoxClient, client), org_uuid=_ORG_UUID, webhook_id="wh-nope"
@@ -92,12 +84,8 @@ async def test_get_webhook_non_mapping_response_returns_raw() -> None:
 
 @pytest.mark.asyncio
 async def test_get_webhook_integer_response_returns_raw() -> None:
-    client = StubClient(
-        get_responses={f"/organizations/{_ORG_UUID}/webhooks/wh-int": [42]}
-    )
-    result = await get_webhook(
-        cast(AutomoxClient, client), org_uuid=_ORG_UUID, webhook_id="wh-int"
-    )
+    client = StubClient(get_responses={f"/organizations/{_ORG_UUID}/webhooks/wh-int": [42]})
+    result = await get_webhook(cast(AutomoxClient, client), org_uuid=_ORG_UUID, webhook_id="wh-int")
     assert result["data"]["raw"] == 42
 
 
@@ -109,9 +97,7 @@ async def test_get_webhook_integer_response_returns_raw() -> None:
 @pytest.mark.asyncio
 async def test_create_webhook_non_mapping_response() -> None:
     """When the API returns a non-Mapping on create, created=True with raw value."""
-    client = StubClient(
-        post_responses={f"/organizations/{_ORG_UUID}/webhooks": ["created-ok"]}
-    )
+    client = StubClient(post_responses={f"/organizations/{_ORG_UUID}/webhooks": ["created-ok"]})
     result = await create_webhook(
         cast(AutomoxClient, client),
         org_uuid=_ORG_UUID,
@@ -129,9 +115,7 @@ async def test_create_webhook_non_mapping_response() -> None:
 @pytest.mark.asyncio
 async def test_create_webhook_none_response() -> None:
     """None response is also non-Mapping."""
-    client = StubClient(
-        post_responses={f"/organizations/{_ORG_UUID}/webhooks": [None]}
-    )
+    client = StubClient(post_responses={f"/organizations/{_ORG_UUID}/webhooks": [None]})
     result = await create_webhook(
         cast(AutomoxClient, client),
         org_uuid=_ORG_UUID,
@@ -152,9 +136,7 @@ async def test_create_webhook_none_response() -> None:
 async def test_update_webhook_non_mapping_response() -> None:
     """When the API returns a non-Mapping on update, returns updated=True with raw."""
     client = StubClient(
-        put_responses={
-            f"/organizations/{_ORG_UUID}/webhooks/wh-001": ["ok-string"]
-        }
+        put_responses={f"/organizations/{_ORG_UUID}/webhooks/wh-001": ["ok-string"]}
     )
     result = await update_webhook(
         cast(AutomoxClient, client),
@@ -170,9 +152,7 @@ async def test_update_webhook_non_mapping_response() -> None:
 
 @pytest.mark.asyncio
 async def test_update_webhook_integer_response() -> None:
-    client = StubClient(
-        put_responses={f"/organizations/{_ORG_UUID}/webhooks/wh-002": [204]}
-    )
+    client = StubClient(put_responses={f"/organizations/{_ORG_UUID}/webhooks/wh-002": [204]})
     result = await update_webhook(
         cast(AutomoxClient, client),
         org_uuid=_ORG_UUID,
@@ -192,9 +172,7 @@ async def test_update_webhook_integer_response() -> None:
 async def test_test_webhook_non_mapping_response() -> None:
     """When the test endpoint returns a non-Mapping, tested=True with raw value."""
     client = StubClient(
-        post_responses={
-            f"/organizations/{_ORG_UUID}/webhooks/wh-001/test": ["delivery-ok"]
-        }
+        post_responses={f"/organizations/{_ORG_UUID}/webhooks/wh-001/test": ["delivery-ok"]}
     )
     result = await send_test_webhook(
         cast(AutomoxClient, client), org_uuid=_ORG_UUID, webhook_id="wh-001"
@@ -207,11 +185,7 @@ async def test_test_webhook_non_mapping_response() -> None:
 
 @pytest.mark.asyncio
 async def test_test_webhook_none_response() -> None:
-    client = StubClient(
-        post_responses={
-            f"/organizations/{_ORG_UUID}/webhooks/wh-001/test": [None]
-        }
-    )
+    client = StubClient(post_responses={f"/organizations/{_ORG_UUID}/webhooks/wh-001/test": [None]})
     result = await send_test_webhook(
         cast(AutomoxClient, client), org_uuid=_ORG_UUID, webhook_id="wh-001"
     )
@@ -229,9 +203,7 @@ async def test_rotate_secret_non_mapping_response() -> None:
     """When the rotate endpoint returns a non-Mapping, rotated=True with raw value."""
     client = StubClient(
         post_responses={
-            f"/organizations/{_ORG_UUID}/webhooks/wh-001/secret/rotate": [
-                "new-secret-string"
-            ]
+            f"/organizations/{_ORG_UUID}/webhooks/wh-001/secret/rotate": ["new-secret-string"]
         }
     )
     result = await rotate_webhook_secret(
@@ -248,9 +220,7 @@ async def test_rotate_secret_non_mapping_response() -> None:
 @pytest.mark.asyncio
 async def test_rotate_secret_none_response() -> None:
     client = StubClient(
-        post_responses={
-            f"/organizations/{_ORG_UUID}/webhooks/wh-001/secret/rotate": [None]
-        }
+        post_responses={f"/organizations/{_ORG_UUID}/webhooks/wh-001/secret/rotate": [None]}
     )
     result = await rotate_webhook_secret(
         cast(AutomoxClient, client), org_uuid=_ORG_UUID, webhook_id="wh-001"

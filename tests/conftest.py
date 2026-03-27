@@ -71,11 +71,15 @@ class StubClient:
         self.calls.append(("GET", path, params))
         return self._pop(self._get, path)
 
-    async def post(self, path: str, *, json_data: Any = None, params: Any = None, headers: Any = None) -> Any:
+    async def post(
+        self, path: str, *, json_data: Any = None, params: Any = None, headers: Any = None
+    ) -> Any:
         self.calls.append(("POST", path, json_data))
         return self._pop(self._post, path)
 
-    async def put(self, path: str, *, json_data: Any = None, params: Any = None, headers: Any = None) -> Any:
+    async def put(
+        self, path: str, *, json_data: Any = None, params: Any = None, headers: Any = None
+    ) -> Any:
         self.calls.append(("PUT", path, json_data))
         return self._pop(self._put, path)
 

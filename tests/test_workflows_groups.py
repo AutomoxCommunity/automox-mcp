@@ -3,6 +3,7 @@
 from typing import Any, cast
 
 import pytest
+from conftest import StubClient
 
 from automox_mcp.client import AutomoxClient
 from automox_mcp.workflows.groups import (
@@ -12,7 +13,6 @@ from automox_mcp.workflows.groups import (
     list_server_groups,
     update_server_group,
 )
-from conftest import StubClient
 
 _GROUP_A: dict[str, Any] = {
     "id": 10,
@@ -209,7 +209,9 @@ async def test_update_group_sends_body_to_correct_path() -> None:
 async def test_delete_group_returns_confirmation() -> None:
     client = StubClient()
     result = await delete_server_group(
-        cast(AutomoxClient, client), org_id=555, group_id=10,
+        cast(AutomoxClient, client),
+        org_id=555,
+        group_id=10,
     )
 
     assert result["data"]["deleted"] is True

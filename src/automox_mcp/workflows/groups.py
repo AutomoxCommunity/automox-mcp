@@ -150,8 +150,7 @@ async def update_server_group(
         body["policies"] = policies
 
     params: dict[str, Any] = {"o": org_id}
-    result = await client.put(
-        f"/servergroups/{group_id}", json_data=body, params=params    )
+    result = await client.put(f"/servergroups/{group_id}", json_data=body, params=params)
 
     data: dict[str, Any]
     if isinstance(result, Mapping):

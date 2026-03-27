@@ -105,9 +105,7 @@ async def test_get_success_uses_single_http_client():
 async def test_get_raises_rate_limit():
     async with AutomoxClient(org_id=42) as client:
         (http_client,) = StubAsyncClient.instances
-        http_client.responses = [
-            StubResponse(status_code=429, json_data={"message": "slow down"})
-        ]
+        http_client.responses = [StubResponse(status_code=429, json_data={"message": "slow down"})]
         with pytest.raises(AutomoxRateLimitError):
             await client.get("/retry")
 

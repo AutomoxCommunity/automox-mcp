@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -23,10 +22,9 @@ from ..utils.tooling import (
     RateLimitError,
     as_tool_response,
     enforce_rate_limit,
-    maybe_format_markdown,
     format_error,
+    maybe_format_markdown,
 )
-
 
 logger = logging.getLogger(__name__)
 

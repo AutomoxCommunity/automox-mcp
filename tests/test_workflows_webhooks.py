@@ -3,6 +3,7 @@
 from typing import Any, cast
 
 import pytest
+from conftest import StubClient
 
 from automox_mcp.client import AutomoxClient
 from automox_mcp.workflows.webhooks import (
@@ -17,7 +18,6 @@ from automox_mcp.workflows.webhooks import (
 from automox_mcp.workflows.webhooks import (
     test_webhook as send_test_webhook,
 )
-from conftest import StubClient
 
 _ORG_UUID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 
@@ -49,18 +49,22 @@ _WEBHOOK_B: dict[str, Any] = {
 
 @pytest.mark.asyncio
 async def test_list_event_types_returns_mapping() -> None:
-    client = StubClient(get_responses={
-        "/webhooks/event-types": [{"categories": {"device": ["compliant", "noncompliant"]}}],
-    })
+    client = StubClient(
+        get_responses={
+            "/webhooks/event-types": [{"categories": {"device": ["compliant", "noncompliant"]}}],
+        }
+    )
     result = await list_webhook_event_types(cast(AutomoxClient, client))
     assert "categories" in result["data"]
 
 
 @pytest.mark.asyncio
 async def test_list_event_types_wraps_list_response() -> None:
-    client = StubClient(get_responses={
-        "/webhooks/event-types": [["device.compliant", "device.noncompliant"]],
-    })
+    client = StubClient(
+        get_responses={
+            "/webhooks/event-types": [["device.compliant", "device.noncompliant"]],
+        }
+    )
     result = await list_webhook_event_types(cast(AutomoxClient, client))
     assert result["data"]["event_types"] == ["device.compliant", "device.noncompliant"]
 
@@ -72,9 +76,11 @@ async def test_list_event_types_wraps_list_response() -> None:
 
 @pytest.mark.asyncio
 async def test_list_webhooks_returns_summaries() -> None:
-    client = StubClient(get_responses={
-        f"/organizations/{_ORG_UUID}/webhooks": [{"data": [_WEBHOOK_A, _WEBHOOK_B]}],
-    })
+    client = StubClient(
+        get_responses={
+            f"/organizations/{_ORG_UUID}/webhooks": [{"data": [_WEBHOOK_A, _WEBHOOK_B]}],
+        }
+    )
     result = await list_webhooks(cast(AutomoxClient, client), org_uuid=_ORG_UUID)
 
     assert result["data"]["total_webhooks"] == 2
@@ -85,13 +91,18 @@ async def test_list_webhooks_returns_summaries() -> None:
 
 @pytest.mark.asyncio
 async def test_list_webhooks_passes_cursor() -> None:
-    client = StubClient(get_responses={
-        f"/organizations/{_ORG_UUID}/webhooks": [
-            {"data": [_WEBHOOK_A], "nextCursor": "abc123"},
-        ],
-    })
+    client = StubClient(
+        get_responses={
+            f"/organizations/{_ORG_UUID}/webhooks": [
+                {"data": [_WEBHOOK_A], "nextCursor": "abc123"},
+            ],
+        }
+    )
     result = await list_webhooks(
-        cast(AutomoxClient, client), org_uuid=_ORG_UUID, cursor="prev", limit=1,
+        cast(AutomoxClient, client),
+        org_uuid=_ORG_UUID,
+        cursor="prev",
+        limit=1,
     )
 
     assert result["data"]["next_cursor"] == "abc123"
@@ -100,9 +111,11 @@ async def test_list_webhooks_passes_cursor() -> None:
 
 @pytest.mark.asyncio
 async def test_list_webhooks_handles_flat_list() -> None:
-    client = StubClient(get_responses={
-        f"/organizations/{_ORG_UUID}/webhooks": [[_WEBHOOK_A]],
-    })
+    client = StubClient(
+        get_responses={
+            f"/organizations/{_ORG_UUID}/webhooks": [[_WEBHOOK_A]],
+        }
+    )
     result = await list_webhooks(cast(AutomoxClient, client), org_uuid=_ORG_UUID)
     assert result["data"]["total_webhooks"] == 1
 
@@ -114,11 +127,15 @@ async def test_list_webhooks_handles_flat_list() -> None:
 
 @pytest.mark.asyncio
 async def test_get_webhook_returns_detail() -> None:
-    client = StubClient(get_responses={
-        f"/organizations/{_ORG_UUID}/webhooks/wh-001": [_WEBHOOK_A],
-    })
+    client = StubClient(
+        get_responses={
+            f"/organizations/{_ORG_UUID}/webhooks/wh-001": [_WEBHOOK_A],
+        }
+    )
     result = await get_webhook(
-        cast(AutomoxClient, client), org_uuid=_ORG_UUID, webhook_id="wh-001",
+        cast(AutomoxClient, client),
+        org_uuid=_ORG_UUID,
+        webhook_id="wh-001",
     )
 
     assert result["data"]["name"] == "Deploy Hook"
@@ -133,9 +150,11 @@ async def test_get_webhook_returns_detail() -> None:
 @pytest.mark.asyncio
 async def test_create_webhook_returns_secret() -> None:
     created = {**_WEBHOOK_A, "secret": "s3cr3t-key"}
-    client = StubClient(post_responses={
-        f"/organizations/{_ORG_UUID}/webhooks": [created],
-    })
+    client = StubClient(
+        post_responses={
+            f"/organizations/{_ORG_UUID}/webhooks": [created],
+        }
+    )
     result = await create_webhook(
         cast(AutomoxClient, client),
         org_uuid=_ORG_UUID,
@@ -150,9 +169,11 @@ async def test_create_webhook_returns_secret() -> None:
 
 @pytest.mark.asyncio
 async def test_create_webhook_sends_correct_body() -> None:
-    client = StubClient(post_responses={
-        f"/organizations/{_ORG_UUID}/webhooks": [_WEBHOOK_A],
-    })
+    client = StubClient(
+        post_responses={
+            f"/organizations/{_ORG_UUID}/webhooks": [_WEBHOOK_A],
+        }
+    )
     await create_webhook(
         cast(AutomoxClient, client),
         org_uuid=_ORG_UUID,
@@ -175,9 +196,11 @@ async def test_create_webhook_sends_correct_body() -> None:
 @pytest.mark.asyncio
 async def test_update_webhook_partial_update() -> None:
     updated = {**_WEBHOOK_A, "enabled": False}
-    client = StubClient(put_responses={
-        f"/organizations/{_ORG_UUID}/webhooks/wh-001": [updated],
-    })
+    client = StubClient(
+        put_responses={
+            f"/organizations/{_ORG_UUID}/webhooks/wh-001": [updated],
+        }
+    )
     result = await update_webhook(
         cast(AutomoxClient, client),
         org_uuid=_ORG_UUID,
@@ -193,9 +216,11 @@ async def test_update_webhook_partial_update() -> None:
 
 @pytest.mark.asyncio
 async def test_update_webhook_omits_none_fields() -> None:
-    client = StubClient(put_responses={
-        f"/organizations/{_ORG_UUID}/webhooks/wh-001": [_WEBHOOK_A],
-    })
+    client = StubClient(
+        put_responses={
+            f"/organizations/{_ORG_UUID}/webhooks/wh-001": [_WEBHOOK_A],
+        }
+    )
     await update_webhook(
         cast(AutomoxClient, client),
         org_uuid=_ORG_UUID,
@@ -218,7 +243,9 @@ async def test_update_webhook_omits_none_fields() -> None:
 async def test_delete_webhook_returns_confirmation() -> None:
     client = StubClient()
     result = await delete_webhook(
-        cast(AutomoxClient, client), org_uuid=_ORG_UUID, webhook_id="wh-001",
+        cast(AutomoxClient, client),
+        org_uuid=_ORG_UUID,
+        webhook_id="wh-001",
     )
 
     assert result["data"]["deleted"] is True
@@ -233,13 +260,17 @@ async def test_delete_webhook_returns_confirmation() -> None:
 
 @pytest.mark.asyncio
 async def test_test_webhook_returns_status() -> None:
-    client = StubClient(post_responses={
-        f"/organizations/{_ORG_UUID}/webhooks/wh-001/test": [
-            {"success": True, "statusCode": 200, "responseTime": 42},
-        ],
-    })
+    client = StubClient(
+        post_responses={
+            f"/organizations/{_ORG_UUID}/webhooks/wh-001/test": [
+                {"success": True, "statusCode": 200, "responseTime": 42},
+            ],
+        }
+    )
     result = await send_test_webhook(
-        cast(AutomoxClient, client), org_uuid=_ORG_UUID, webhook_id="wh-001",
+        cast(AutomoxClient, client),
+        org_uuid=_ORG_UUID,
+        webhook_id="wh-001",
     )
 
     assert result["data"]["success"] is True
@@ -254,13 +285,17 @@ async def test_test_webhook_returns_status() -> None:
 
 @pytest.mark.asyncio
 async def test_rotate_secret_returns_new_secret() -> None:
-    client = StubClient(post_responses={
-        f"/organizations/{_ORG_UUID}/webhooks/wh-001/secret/rotate": [
-            {"secret": "new-s3cr3t"},
-        ],
-    })
+    client = StubClient(
+        post_responses={
+            f"/organizations/{_ORG_UUID}/webhooks/wh-001/secret/rotate": [
+                {"secret": "new-s3cr3t"},
+            ],
+        }
+    )
     result = await rotate_webhook_secret(
-        cast(AutomoxClient, client), org_uuid=_ORG_UUID, webhook_id="wh-001",
+        cast(AutomoxClient, client),
+        org_uuid=_ORG_UUID,
+        webhook_id="wh-001",
     )
 
     assert result["data"]["secret"] == "new-s3cr3t"

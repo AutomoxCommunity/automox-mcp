@@ -64,7 +64,7 @@ That's it. Start asking questions.
 
 ## What Can I Ask?
 
-The server exposes 45 tools across devices, policies, patches, groups, webhooks, and more. You don't need to know the tool names — just describe what you want:
+The server exposes 70 tools across devices, policies, patches, groups, webhooks, worklets, vulnerability sync, and more. You don't need to know the tool names — just describe what you want:
 
 | Ask this | What happens |
 |---|---|
@@ -75,6 +75,9 @@ The server exposes 45 tools across devices, policies, patches, groups, webhooks,
 | "Reboot the device 'Testing box'" | Searches for the device and issues a reboot command |
 | "Create a patch policy for Firefox targeting the 'MCP testing' group" | Creates the policy with sensible defaults |
 | "What did Mark Hansen do in Automox last week?" | Queries the audit trail across the date range |
+| "Find all Windows devices not seen in 30 days" | Uses advanced device search with structured queries |
+| "Show me vulnerability remediation status" | Lists action sets with issues, solutions, and progress |
+| "Search the worklet catalog for USB security" | Browses community worklets with evaluation/remediation code |
 
 For the full list of tools, parameters, and MCP resources, see the **[Tool Reference](docs/tool-reference.md)**.
 
@@ -89,7 +92,7 @@ For the full list of tools, parameters, and MCP resources, see the **[Tool Refer
 | `AUTOMOX_API_KEY` | Yes | — | Automox API key |
 | `AUTOMOX_ACCOUNT_UUID` | Yes | — | Account UUID from Secrets & Keys |
 | `AUTOMOX_ORG_ID` | Yes | — | Numeric organization ID |
-| `AUTOMOX_MCP_READ_ONLY` | No | `false` | Disable all write operations (29 of 45 tools remain) |
+| `AUTOMOX_MCP_READ_ONLY` | No | `false` | Disable all write operations (51 of 70 tools remain) |
 | `AUTOMOX_MCP_MODULES` | No | all | Comma-separated list of modules to load (see below) |
 | `AUTOMOX_MCP_TOKEN_BUDGET` | No | `4000` | Max estimated tokens per response before truncation |
 | `AUTOMOX_MCP_SANITIZE_RESPONSES` | No | `true` | Sanitize API data to mitigate prompt injection |
@@ -106,7 +109,7 @@ For the full list of tools, parameters, and MCP resources, see the **[Tool Refer
 AUTOMOX_MCP_READ_ONLY=true
 ```
 
-Disables all write operations. Only read-only tools are registered (29 of 45). Useful for auditing and monitoring.
+Disables all write operations. Only read-only tools are registered (51 of 70). Useful for auditing and monitoring.
 
 ### Modular Loading
 
@@ -116,7 +119,7 @@ Load only the tool modules you need:
 AUTOMOX_MCP_MODULES=devices,policies
 ```
 
-Available modules: `audit`, `devices`, `policies`, `users`, `groups`, `events`, `reports`, `packages`, `webhooks`, `compound`
+Available modules: `audit`, `audit_v2`, `devices`, `device_search`, `policies`, `policy_history`, `users`, `groups`, `events`, `reports`, `packages`, `webhooks`, `worklets`, `data_extracts`, `vuln_sync`, `compound`
 
 Both settings can be combined:
 
@@ -139,7 +142,7 @@ The Automox MCP server is designed for enterprise deployment with defense-in-dep
 
 **Highlights:**
 
-- **Read-only mode** (`AUTOMOX_MCP_READ_ONLY`) disables all 16 write tools
+- **Read-only mode** (`AUTOMOX_MCP_READ_ONLY`) disables all 19 write tools
 - **Module filtering** (`AUTOMOX_MCP_MODULES`) for least-privilege tool loading
 - **Correlation IDs** on every tool call, forwarded to Automox API as `X-Correlation-ID`
 - **Rate limiting** (30 calls/60s) with token budget estimation and auto-truncation

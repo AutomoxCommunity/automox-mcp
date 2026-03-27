@@ -41,13 +41,18 @@ async def get_patch_tuesday_readiness(
         reports.get_prepatch_report(client, org_id=org_id, group_id=group_id),
         policy.summarize_patch_approvals(client, org_id=org_id),
         policy.summarize_policies(
-            client, org_id=org_id, limit=200, page=0, include_inactive=False,
+            client,
+            org_id=org_id,
+            limit=200,
+            page=0,
+            include_inactive=False,
         ),
         return_exceptions=True,
     )
 
     (prepatch, approvals, catalog), errors = _settle(
-        raw_results, ("prepatch_report", "patch_approvals", "policy_catalog"),
+        raw_results,
+        ("prepatch_report", "patch_approvals", "policy_catalog"),
     )
 
     patch_policies: list[dict[str, Any]] = []
@@ -64,7 +69,8 @@ async def get_patch_tuesday_readiness(
     approval_items = approvals_data.get("approvals") or []
     if isinstance(approval_items, list):
         pending_approval_count = sum(
-            1 for a in approval_items
+            1
+            for a in approval_items
             if isinstance(a, Mapping) and a.get("status") in ("pending", "Pending")
         )
 
@@ -95,7 +101,8 @@ async def get_patch_tuesday_readiness(
                 "devices_needing_patches": prepatch_data.get("total_devices", 0),
                 "pending_approvals": pending_approval_count,
                 "active_patch_policies": sum(
-                    1 for p in patch_policies
+                    1
+                    for p in patch_policies
                     if str(p.get("status") or "").lower() not in ("inactive", "disabled")
                 ),
             },
@@ -127,13 +134,18 @@ async def get_compliance_snapshot(
             max_stale_devices=10,
         ),
         policy.summarize_policies(
-            client, org_id=org_id, limit=200, page=0, include_inactive=False,
+            client,
+            org_id=org_id,
+            limit=200,
+            page=0,
+            include_inactive=False,
         ),
         return_exceptions=True,
     )
 
     (noncompliant, health, catalog), errors = _settle(
-        raw_results, ("noncompliant_report", "device_health", "policy_catalog"),
+        raw_results,
+        ("noncompliant_report", "device_health", "policy_catalog"),
     )
 
     policy_summary: dict[str, Any] = {}
@@ -148,7 +160,9 @@ async def get_compliance_snapshot(
             pstatus = str(p.get("status", "unknown"))
             status_counts[pstatus] = status_counts.get(pstatus, 0) + 1
     policy_summary = {
-        "total_policies": catalog_data.get("total_policies_considered") or catalog_data.get("total_policies_available") or len(all_policies),
+        "total_policies": catalog_data.get("total_policies_considered")
+        or catalog_data.get("total_policies_available")
+        or len(all_policies),
         "by_type": type_counts,
         "by_status": status_counts,
     }
@@ -159,9 +173,7 @@ async def get_compliance_snapshot(
     total_devices = health_data.get("total_devices", 0)
     noncompliant_count = noncompliant_data.get("total_devices", 0)
     compliant_count = max(0, total_devices - noncompliant_count)
-    compliance_rate = (
-        round(compliant_count / total_devices * 100, 1) if total_devices > 0 else 0
-    )
+    compliance_rate = round(compliant_count / total_devices * 100, 1) if total_devices > 0 else 0
 
     return {
         "data": {
@@ -216,10 +228,15 @@ async def get_device_full_profile(
             include_queue=True,
         ),
         devices.get_device_inventory(
-            client, org_id=org_id, device_id=device_id,
+            client,
+            org_id=org_id,
+            device_id=device_id,
         ),
         packages.list_device_packages(
-            client, org_id=org_id, device_id=device_id, limit=max_packages,
+            client,
+            org_id=org_id,
+            device_id=device_id,
+            limit=max_packages,
         ),
         return_exceptions=True,
     )
@@ -257,9 +274,7 @@ async def get_device_full_profile(
             }
         inventory_summary[cat_name] = {
             "sub_category_count": len(sub_cats),
-            "item_count": sum(
-                s.get("item_count", 0) for s in sub_cats.values()
-            ),
+            "item_count": sum(s.get("item_count", 0) for s in sub_cats.values()),
             "sub_categories": sub_summaries,
         }
 
@@ -295,7 +310,9 @@ async def get_device_full_profile(
                 "note": (
                     f"Showing {len(packages_preview)} of {total_packages} packages — "
                     "use list_device_packages for full list"
-                ) if packages_truncated else None,
+                )
+                if packages_truncated
+                else None,
             },
         },
         "metadata": {

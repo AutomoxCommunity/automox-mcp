@@ -333,10 +333,17 @@ def test_main_http_non_loopback_host_allowed_with_flag(monkeypatch, caplog):
     monkeypatch.setattr(init_mod.mcp, "_instance", FakeServer())
 
     with caplog.at_level(logging.WARNING, logger="automox_mcp"):
-        init_mod.main([
-            "--transport", "http", "--host", "0.0.0.0", "--port", "8080",
-            "--allow-remote-bind",
-        ])
+        init_mod.main(
+            [
+                "--transport",
+                "http",
+                "--host",
+                "0.0.0.0",
+                "--port",
+                "8080",
+                "--allow-remote-bind",
+            ]
+        )
 
     assert any("non-loopback" in r.message for r in caplog.records)
 

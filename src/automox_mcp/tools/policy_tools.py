@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -35,11 +34,10 @@ from ..utils.tooling import (
     as_tool_response,
     check_idempotency,
     enforce_rate_limit,
-    maybe_format_markdown,
     format_error,
+    maybe_format_markdown,
     store_idempotency,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +108,6 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             workflows.summarize_policy_activity,
             PolicyHealthSummaryParams,
             params,
-
             org_uuid_field="org_uuid",
             allow_account_uuid=True,
         )
@@ -134,7 +131,6 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             workflows.summarize_policy_execution_history,
             PolicyExecutionTimelineParams,
             params,
-
             org_uuid_field="org_uuid",
             allow_account_uuid=True,
         )
@@ -169,7 +165,6 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             workflows.describe_policy_run_result,
             RunDetailParams,
             params,
-
             org_uuid_field="org_uuid",
             allow_account_uuid=True,
         )
@@ -211,7 +206,6 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             workflows.describe_policy,
             PolicyDetailParams,
             params,
-
         )
 
     @server.tool(

@@ -61,6 +61,9 @@ line-length = 100
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "ASYNC"]
 
+[tool.ruff.lint.per-file-ignores]
+"src/automox_mcp/prompts/*.py" = ["E501"]
+
 [tool.mypy]
 python_version = "3.13"
 warn_return_any = true

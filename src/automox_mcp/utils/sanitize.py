@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 import os
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
+
 
 def is_sanitization_enabled() -> bool:
     """Return True unless explicitly disabled via env var."""
@@ -68,22 +69,40 @@ _INSTRUCTION_PREFIX_RE = re.compile(
 
 # Fields where instruction-prefix stripping is safe to apply.
 # These are free-text fields where users write descriptions/notes.
-_INSTRUCTION_STRIP_FIELDS: frozenset[str] = frozenset({
-    "notes", "description", "details", "data", "message",
-    "result_reason", "stdout", "stderr",
-})
+_INSTRUCTION_STRIP_FIELDS: frozenset[str] = frozenset(
+    {
+        "notes",
+        "description",
+        "details",
+        "data",
+        "message",
+        "result_reason",
+        "stdout",
+        "stderr",
+    }
+)
 
 # Fields where instruction-prefix stripping should NOT apply because
 # users commonly use words like "IMPORTANT" or "SYSTEM" in names/tags.
 # Universal sanitization (links, images, code blocks) still applies.
-_PRESERVE_PREFIX_FIELDS: frozenset[str] = frozenset({
-    "name", "display_name", "custom_name", "hostname", "tags",
-    "policy_name", "server_name", "activity", "title",
-})
+_PRESERVE_PREFIX_FIELDS: frozenset[str] = frozenset(
+    {
+        "name",
+        "display_name",
+        "custom_name",
+        "hostname",
+        "tags",
+        "policy_name",
+        "server_name",
+        "activity",
+        "title",
+    }
+)
 
 # ---------------------------------------------------------------------------
 # Core sanitization functions
 # ---------------------------------------------------------------------------
+
 
 def sanitize_for_llm(text: str, *, field_name: str | None = None) -> str:
     """Sanitize a single string value.
@@ -113,10 +132,7 @@ def sanitize_for_llm(text: str, *, field_name: str | None = None) -> str:
     text = _TRIPLE_BACKTICK_RE.sub("`", text)
 
     # Step 5: Instruction prefix removal (free-text fields only)
-    apply_prefix_strip = (
-        field_name is not None
-        and field_name.lower() in _INSTRUCTION_STRIP_FIELDS
-    )
+    apply_prefix_strip = field_name is not None and field_name.lower() in _INSTRUCTION_STRIP_FIELDS
     if apply_prefix_strip:
         text = _INSTRUCTION_PREFIX_RE.sub("", text)
 

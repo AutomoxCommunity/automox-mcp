@@ -17,6 +17,7 @@ class StubServer:
         def decorator(func):
             self.tools[name] = func
             return func
+
         return decorator
 
 
@@ -45,9 +46,7 @@ async def test_discover_capabilities_valid_domain(server):
 
 @pytest.mark.asyncio
 async def test_discover_capabilities_unknown_domain(server):
-    result = await server.tools["discover_capabilities"](
-        domain="nonexistent"
-    )
+    result = await server.tools["discover_capabilities"](domain="nonexistent")
     data = result["data"]
     assert "error" in data
     assert "available_domains" in data
@@ -68,10 +67,23 @@ async def test_discover_capabilities_case_insensitive(server):
     assert result["data"]["domain"] == "devices"
 
 
-def test_all_ten_domains_present():
+def test_all_domains_present():
     expected = {
-        "devices", "policies", "patches", "groups", "events",
-        "reports", "audit", "webhooks", "account", "compound",
+        "devices",
+        "device_search",
+        "policies",
+        "policy_history",
+        "patches",
+        "groups",
+        "events",
+        "reports",
+        "audit",
+        "webhooks",
+        "worklets",
+        "data_extracts",
+        "vuln_sync",
+        "account",
+        "compound",
     }
     assert set(_DOMAIN_CATALOG.keys()) == expected
 

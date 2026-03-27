@@ -5,10 +5,10 @@ from __future__ import annotations
 from typing import cast
 
 import pytest
+from conftest import StubClient
 
 from automox_mcp.client import AutomoxClient
 from automox_mcp.workflows.events import list_events
-from conftest import StubClient
 
 
 @pytest.mark.asyncio

@@ -40,7 +40,6 @@ def _take(sequence: Sequence[Any], limit: int) -> Sequence[Any]:
     return sequence[:limit]
 
 
-
 async def summarize_policy_activity(
     client: AutomoxClient,
     *,
@@ -57,7 +56,8 @@ async def summarize_policy_activity(
     try:
         count_params = {"org": str(org_uuid), "days": window_days}
         run_counts = await client.get(
-            "/policy-history/policy-run-count", params=count_params,
+            "/policy-history/policy-run-count",
+            params=count_params,
         )
     except AutomoxAPIError:
         logger.warning("policy-run-count endpoint unavailable, skipping")
@@ -69,7 +69,8 @@ async def summarize_policy_activity(
         "limit": min(max_runs, 5000),
     }
     policy_runs = await client.get(
-        "/policy-history/policy-runs", params=run_params,
+        "/policy-history/policy-runs",
+        params=run_params,
     )
 
     runs: Sequence[Mapping[str, Any]] = []
@@ -607,6 +608,7 @@ async def describe_policy(
         "metadata": metadata,
     }
 
+
 async def describe_policy_run_result(
     client: AutomoxClient,
     *,
@@ -672,7 +674,9 @@ async def describe_policy_run_result(
                 "event_time": entry.get("event_time"),
                 "stdout": entry.get("stdout"),
                 "stderr": entry.get("stderr"),
-                "exit_code": entry.get("exit_code") if entry.get("exit_code") is not None else entry.get("error_code"),
+                "exit_code": entry.get("exit_code")
+                if entry.get("exit_code") is not None
+                else entry.get("error_code"),
                 "patches": entry.get("patches"),
                 "device_deleted_at": entry.get("device_deleted_at"),
             }
@@ -803,33 +807,27 @@ async def get_policy_compliance_stats(
             if not isinstance(item, Mapping):
                 continue
             compliant = item.get("compliant", 0) or 0
-            noncompliant = (
-                item.get("non_compliant", 0) or item.get("noncompliant", 0) or 0
-            )
+            noncompliant = item.get("non_compliant", 0) or item.get("noncompliant", 0) or 0
             device_count = compliant + noncompliant
 
             total_compliant += compliant
             total_noncompliant += noncompliant
             total_devices += device_count
 
-            policy_stats.append({
-                "policy_id": item.get("policy_id"),
-                "policy_name": item.get("policy_name") or item.get("name"),
-                "compliant_devices": compliant,
-                "noncompliant_devices": noncompliant,
-                "total_devices": device_count,
-                "compliance_rate_percent": (
-                    round(compliant / device_count * 100, 1)
-                    if device_count > 0
-                    else 0
-                ),
-            })
+            policy_stats.append(
+                {
+                    "policy_id": item.get("policy_id"),
+                    "policy_name": item.get("policy_name") or item.get("name"),
+                    "compliant_devices": compliant,
+                    "noncompliant_devices": noncompliant,
+                    "total_devices": device_count,
+                    "compliance_rate_percent": (
+                        round(compliant / device_count * 100, 1) if device_count > 0 else 0
+                    ),
+                }
+            )
 
-    overall_rate = (
-        round(total_compliant / total_devices * 100, 1)
-        if total_devices > 0
-        else 0
-    )
+    overall_rate = round(total_compliant / total_devices * 100, 1) if total_devices > 0 else 0
 
     return {
         "data": {

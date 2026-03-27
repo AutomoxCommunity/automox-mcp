@@ -11,6 +11,8 @@ import pytest
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
+from conftest import StubClient
+
 from automox_mcp.client import AutomoxClient  # noqa: E402
 from automox_mcp.workflows.reports import (  # noqa: E402
     _extract_devices,
@@ -18,8 +20,6 @@ from automox_mcp.workflows.reports import (  # noqa: E402
     get_noncompliant_report,
     get_prepatch_report,
 )
-from conftest import StubClient
-
 
 # ===========================================================================
 # _highest_patch_severity

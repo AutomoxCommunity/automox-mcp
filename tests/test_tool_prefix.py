@@ -5,8 +5,6 @@ from __future__ import annotations
 import os
 from unittest.mock import patch
 
-import pytest
-
 from automox_mcp.utils.tooling import get_tool_prefix
 
 
@@ -42,6 +40,7 @@ class TestApplyToolPrefix:
     def test_prefix_renames_tools(self):
         """When prefix is set, all tool names get prefixed."""
         from fastmcp import FastMCP
+
         from automox_mcp.tools import _apply_tool_prefix
 
         server = FastMCP("test")
@@ -65,6 +64,7 @@ class TestApplyToolPrefix:
     def test_prefixed_tool_name_attribute(self):
         """The tool object's .name attribute is also updated."""
         from fastmcp import FastMCP
+
         from automox_mcp.tools import _apply_tool_prefix
 
         server = FastMCP("test")

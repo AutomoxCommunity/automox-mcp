@@ -7,8 +7,6 @@ import logging
 import os
 from unittest.mock import patch
 
-import pytest
-
 from automox_mcp.utils.logging import JSONFormatter, configure_logging, get_log_format
 
 
@@ -105,6 +103,7 @@ class TestJSONFormatter:
             raise ValueError("test error")
         except ValueError:
             import sys
+
             record = self._make_record("error occurred")
             record.exc_info = sys.exc_info()
         parsed = json.loads(formatter.format(record))
@@ -116,9 +115,7 @@ class TestConfigureLogging:
         with patch.dict(os.environ, {"AUTOMOX_MCP_LOG_FORMAT": "json"}):
             configure_logging()
             root = logging.getLogger()
-            assert any(
-                isinstance(h.formatter, JSONFormatter) for h in root.handlers
-            )
+            assert any(isinstance(h.formatter, JSONFormatter) for h in root.handlers)
             # Clean up
             root.handlers.clear()
 
@@ -128,10 +125,7 @@ class TestConfigureLogging:
             configure_logging()
             configure_logging()
             root = logging.getLogger()
-            json_handlers = [
-                h for h in root.handlers
-                if isinstance(h.formatter, JSONFormatter)
-            ]
+            json_handlers = [h for h in root.handlers if isinstance(h.formatter, JSONFormatter)]
             assert len(json_handlers) == 1
             root.handlers.clear()
 
@@ -140,7 +134,5 @@ class TestConfigureLogging:
             configure_logging()
             root = logging.getLogger()
             # Should not have JSONFormatter
-            assert not any(
-                isinstance(h.formatter, JSONFormatter) for h in root.handlers
-            )
+            assert not any(isinstance(h.formatter, JSONFormatter) for h in root.handlers)
             root.handlers.clear()

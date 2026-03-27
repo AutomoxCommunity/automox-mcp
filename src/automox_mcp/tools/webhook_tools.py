@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import ipaddress
 import logging
-from urllib.parse import urlparse
-
 from collections.abc import Awaitable, Callable
 from typing import Any
+from urllib.parse import urlparse
 from uuid import UUID
 
 from fastmcp import FastMCP
@@ -23,18 +22,18 @@ from ..utils.tooling import (
     as_tool_response,
     check_idempotency,
     enforce_rate_limit,
-    maybe_format_markdown,
     format_error,
+    maybe_format_markdown,
     store_idempotency,
 )
+
 
 def _validate_webhook_url(url: str) -> None:
     """Validate a webhook URL: HTTPS, no userinfo, no private/internal IPs."""
     parsed = urlparse(url)
     if parsed.scheme.lower() != "https" or not parsed.hostname:
         raise ValueError(
-            "Webhook URL must use HTTPS with a valid hostname "
-            "(e.g. https://example.com/webhook)"
+            "Webhook URL must use HTTPS with a valid hostname (e.g. https://example.com/webhook)"
         )
     if "@" in (parsed.netloc or ""):
         raise ValueError("Webhook URL must not contain userinfo (user:pass@host)")
@@ -62,6 +61,7 @@ def _strip_secret(result: dict[str, Any]) -> dict[str, Any]:
     Used to avoid caching one-time webhook secrets in the idempotency cache.
     """
     import copy
+
     safe = copy.deepcopy(result)
     data = safe.get("data")
     if isinstance(data, dict):
@@ -76,6 +76,7 @@ def _strip_secret(result: dict[str, Any]) -> dict[str, Any]:
 
 class ListWebhookEventTypesParams(ForbidExtraModel):
     """No parameters needed."""
+
     pass
 
 
@@ -190,7 +191,6 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             workflows.list_webhook_event_types,
             None,
             {},
-
         )
 
     @server.tool(
@@ -236,7 +236,6 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             workflows.get_webhook,
             GetWebhookParams,
             params,
-
             org_uuid_field="org_uuid",
         )
 

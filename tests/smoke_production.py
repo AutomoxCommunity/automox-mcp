@@ -3,7 +3,9 @@
 
 Exercises startup, HTTP transport, correlation IDs, idempotency, markdown
 output, capability discovery, non-loopback warnings, and every read-only
-tool against a live Automox organisation.
+tool against a live Automox organisation.  Tests 35–49 cover Phase 3 tools
+(worklets, data extracts, org API keys, policy history v2, audit v2/OCSF,
+advanced device search, and vulnerability sync).
 
 Requirements:
     AUTOMOX_API_KEY, AUTOMOX_ACCOUNT_UUID, and AUTOMOX_ORG_ID must be set.
@@ -21,7 +23,6 @@ import os
 import signal
 import subprocess
 import sys
-import textwrap
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -37,9 +38,11 @@ from mcp.client.streamable_http import streamablehttp_client
 # Optional .env loading
 # ---------------------------------------------------------------------------
 try:
-    from dotenv import load_dotenv
     # Check common .env locations
     from pathlib import Path
+
+    from dotenv import load_dotenv
+
     for env_path in [
         Path.cwd() / ".env",
         Path.home() / "automox" / ".env",
@@ -113,6 +116,7 @@ def check_prereqs() -> None:
 # Test result helpers
 # ---------------------------------------------------------------------------
 
+
 def record(name: str, passed: bool, detail: str = "") -> None:
     tag = f"{GREEN}PASS{RESET}" if passed else f"{RED}FAIL{RESET}"
     log.info(f"  [{tag}] {name}" + (f" — {detail}" if detail else ""))
@@ -143,6 +147,7 @@ def summary() -> int:
 # Server lifecycle helpers
 # ---------------------------------------------------------------------------
 
+
 def start_server(
     *extra_args: str,
     port: int = SERVER_PORT,
@@ -151,8 +156,10 @@ def start_server(
     """Start the MCP server as a background process."""
     cmd = [
         *_server_cmd(),
-        "--transport", "http",
-        "--port", str(port),
+        "--transport",
+        "http",
+        "--port",
+        str(port),
         "--no-banner",
         *extra_args,
     ]
@@ -202,6 +209,7 @@ async def mcp_session(url: str = SERVER_URL):
 # Helper: call a tool and return parsed inner JSON
 # ---------------------------------------------------------------------------
 
+
 async def call_tool(
     session: ClientSession,
     name: str,
@@ -220,19 +228,22 @@ async def call_tool(
 # 1. Basic smoke test — stdio startup
 # ---------------------------------------------------------------------------
 
+
 def test_stdio_startup() -> None:
     """Send an initialize message over stdio and verify we get a response."""
     log.info(f"\n{BOLD}1. Stdio startup{RESET}")
-    init_msg = json.dumps({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "method": "initialize",
-        "params": {
-            "protocolVersion": "2025-03-26",
-            "capabilities": {},
-            "clientInfo": {"name": "smoke-test", "version": "0.1.0"},
-        },
-    })
+    init_msg = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-03-26",
+                "capabilities": {},
+                "clientInfo": {"name": "smoke-test", "version": "0.1.0"},
+            },
+        }
+    )
     try:
         result = subprocess.run(
             _server_cmd(),
@@ -257,6 +268,7 @@ def test_stdio_startup() -> None:
 # ---------------------------------------------------------------------------
 # 2–6, 8–34: HTTP transport tests (run inside an async context)
 # ---------------------------------------------------------------------------
+
 
 async def run_http_tests() -> None:
     server_proc = None
@@ -315,19 +327,30 @@ async def run_http_tests() -> None:
                     device_id = _extract_id(device_list[0], "device_id", "id")
                     req_id = f"smoke-{uuid.uuid4()}"
 
-                    resp1 = await _safe_call(session, "execute_device_command", {
-                        "device_id": device_id,
-                        "command_type": "scan",
-                        "request_id": req_id,
-                    })
-                    resp2 = await _safe_call(session, "execute_device_command", {
-                        "device_id": device_id,
-                        "command_type": "scan",
-                        "request_id": req_id,
-                    })
+                    resp1 = await _safe_call(
+                        session,
+                        "execute_device_command",
+                        {
+                            "device_id": device_id,
+                            "command_type": "scan",
+                            "request_id": req_id,
+                        },
+                    )
+                    resp2 = await _safe_call(
+                        session,
+                        "execute_device_command",
+                        {
+                            "device_id": device_id,
+                            "command_type": "scan",
+                            "request_id": req_id,
+                        },
+                    )
                     if resp1 is None:
-                        record("idempotency — cached response", False,
-                               "execute_device_command failed (API error?)")
+                        record(
+                            "idempotency — cached response",
+                            False,
+                            "execute_device_command failed (API error?)",
+                        )
                     else:
                         # The cached response should have the same correlation_id
                         cid1 = resp1.get("metadata", {}).get("correlation_id")
@@ -345,10 +368,14 @@ async def run_http_tests() -> None:
         log.info(f"\n{BOLD}5. Markdown output{RESET}")
         try:
             async with mcp_session() as session:
-                resp = await call_tool(session, "list_devices", {
-                    "limit": 3,
-                    "output_format": "markdown",
-                })
+                resp = await call_tool(
+                    session,
+                    "list_devices",
+                    {
+                        "limit": 3,
+                        "output_format": "markdown",
+                    },
+                )
                 fmt = resp.get("metadata", {}).get("format")
                 data_str = resp.get("data", "")
                 has_table = isinstance(data_str, str) and "|" in data_str and "---" in data_str
@@ -387,7 +414,7 @@ async def run_http_tests() -> None:
         except Exception as exc:
             record("discover_capabilities", False, str(exc))
 
-        # -- 8–34: Read-only tool coverage ------------------------------------
+        # -- 8–49: Read-only tool coverage ------------------------------------
         log.info(f"\n{BOLD}Read-only tool coverage{RESET}")
         await run_readonly_tools()
 
@@ -401,13 +428,15 @@ async def run_http_tests() -> None:
 # 7. Non-loopback warning (separate server instance)
 # ---------------------------------------------------------------------------
 
+
 def test_non_loopback_warning() -> None:
     log.info(f"\n{BOLD}7. Non-loopback warning{RESET}")
     warn_port = SERVER_PORT + 1
     proc = None
     try:
         proc = start_server(
-            "--host", "0.0.0.0",
+            "--host",
+            "0.0.0.0",
             "--allow-remote-bind",
             port=warn_port,
             capture_stderr=True,
@@ -431,6 +460,7 @@ def test_non_loopback_warning() -> None:
 # Read-only tool battery (tests 8–34)
 # ---------------------------------------------------------------------------
 
+
 async def run_readonly_tools() -> None:
     """Exercise every read-only tool against the production org."""
 
@@ -445,16 +475,20 @@ async def run_readonly_tools() -> None:
         # 8. list_devices
         resp = await _safe_call(session, "list_devices", {"limit": 2})
         device_list = _extract_list(resp.get("data")) if resp else []
-        record("list_devices", resp is not None and len(device_list) > 0,
-               f"count={len(device_list)}")
+        record(
+            "list_devices", resp is not None and len(device_list) > 0, f"count={len(device_list)}"
+        )
         if device_list:
             device_id = _extract_id(device_list[0], "device_id", "id")
 
         # 9. device_detail
         if device_id:
             resp = await _safe_call(session, "device_detail", {"device_id": device_id})
-            record("device_detail", resp is not None and resp.get("data") is not None,
-                   f"id={device_id}")
+            record(
+                "device_detail",
+                resp is not None and resp.get("data") is not None,
+                f"id={device_id}",
+            )
         else:
             record("device_detail", False, "skipped — no device_id")
 
@@ -468,15 +502,17 @@ async def run_readonly_tools() -> None:
 
         # 12. device_health_metrics
         resp = await _safe_call(session, "device_health_metrics", {})
-        record("device_health_metrics", resp is not None and "data" in (resp or {}),
-               _data_keys(resp))
+        record(
+            "device_health_metrics", resp is not None and "data" in (resp or {}), _data_keys(resp)
+        )
 
         # ---- Policies ----
         # 13. policy_catalog
         resp = await _safe_call(session, "policy_catalog", {"limit": 20})
         policy_list = _extract_list(resp.get("data")) if resp else []
-        record("policy_catalog", resp is not None and len(policy_list) > 0,
-               f"count={len(policy_list)}")
+        record(
+            "policy_catalog", resp is not None and len(policy_list) > 0, f"count={len(policy_list)}"
+        )
         if policy_list:
             policy_id = _extract_id(policy_list[0], "policy_id", "id")
             policy_uuid = policy_list[0].get("policy_uuid")
@@ -487,18 +523,24 @@ async def run_readonly_tools() -> None:
             # Also try to extract policy_uuid from detail if not yet found
             if not policy_uuid and resp and resp.get("data"):
                 detail_data = resp["data"]
-                policy_uuid = (detail_data.get("policy_uuid")
-                               or detail_data.get("guid")
-                               or detail_data.get("uuid"))
-            record("policy_detail", resp is not None and resp.get("data") is not None,
-                   f"id={policy_id}, uuid={policy_uuid}")
+                policy_uuid = (
+                    detail_data.get("policy_uuid")
+                    or detail_data.get("guid")
+                    or detail_data.get("uuid")
+                )
+            record(
+                "policy_detail",
+                resp is not None and resp.get("data") is not None,
+                f"id={policy_id}, uuid={policy_uuid}",
+            )
         else:
             record("policy_detail", False, "skipped — no policy_id")
 
         # 15. policy_health_overview
         resp = await _safe_call(session, "policy_health_overview", {})
-        record("policy_health_overview", resp is not None and "data" in (resp or {}),
-               _data_keys(resp))
+        record(
+            "policy_health_overview", resp is not None and "data" in (resp or {}), _data_keys(resp)
+        )
 
         # 16. policy_compliance_stats (takes no parameters)
         resp = await _safe_call(session, "policy_compliance_stats", {})
@@ -513,14 +555,19 @@ async def run_readonly_tools() -> None:
         for candidate_uuid in candidates:
             if not candidate_uuid:
                 continue
-            resp = await _safe_call(session, "policy_execution_timeline",
-                                     {"policy_uuid": candidate_uuid, "limit": 2})
+            resp = await _safe_call(
+                session, "policy_execution_timeline", {"policy_uuid": candidate_uuid, "limit": 2}
+            )
             if not timeline_tested:
                 record("policy_execution_timeline", resp is not None, _count_or_err(resp))
                 timeline_tested = True
             if resp and resp.get("data"):
                 tl_data = resp["data"]
-                runs = tl_data.get("recent_executions", []) if isinstance(tl_data, dict) else _extract_list(tl_data)
+                runs = (
+                    tl_data.get("recent_executions", [])
+                    if isinstance(tl_data, dict)
+                    else _extract_list(tl_data)
+                )
                 if runs:
                     exec_token = runs[0].get("exec_token") or runs[0].get("execution_token")
                     policy_uuid = candidate_uuid  # use this policy for run_results
@@ -532,16 +579,22 @@ async def run_readonly_tools() -> None:
         # 18. list_server_groups
         resp = await _safe_call(session, "list_server_groups", {})
         group_list = _extract_list(resp.get("data")) if resp else []
-        record("list_server_groups", resp is not None and len(group_list) > 0,
-               f"count={len(group_list)}")
+        record(
+            "list_server_groups",
+            resp is not None and len(group_list) > 0,
+            f"count={len(group_list)}",
+        )
         if group_list:
             group_id = _extract_id(group_list[0], "id", "server_group_id")
 
         # 19. get_server_group
         if group_id:
             resp = await _safe_call(session, "get_server_group", {"group_id": group_id})
-            record("get_server_group", resp is not None and resp.get("data") is not None,
-                   f"id={group_id}")
+            record(
+                "get_server_group",
+                resp is not None and resp.get("data") is not None,
+                f"id={group_id}",
+            )
         else:
             record("get_server_group", False, "skipped — no group_id")
 
@@ -553,8 +606,9 @@ async def run_readonly_tools() -> None:
         # ---- Packages ----
         # 21. list_device_packages
         if device_id:
-            resp = await _safe_call(session, "list_device_packages",
-                                     {"device_id": device_id, "limit": 2})
+            resp = await _safe_call(
+                session, "list_device_packages", {"device_id": device_id, "limit": 2}
+            )
             record("list_device_packages", resp is not None, _count_or_err(resp))
         else:
             record("list_device_packages", False, "skipped — no device_id")
@@ -566,16 +620,17 @@ async def run_readonly_tools() -> None:
         # ---- Reports ----
         # 23. noncompliant_report
         resp = await _safe_call(session, "noncompliant_report", {})
-        record("noncompliant_report", resp is not None and "data" in (resp or {}),
-               _data_keys(resp))
+        record("noncompliant_report", resp is not None and "data" in (resp or {}), _data_keys(resp))
 
         # 24. get_compliance_snapshot
         resp = await _safe_call(session, "get_compliance_snapshot", {})
-        record("get_compliance_snapshot", resp is not None and "data" in (resp or {}),
-               _data_keys(resp))
+        record(
+            "get_compliance_snapshot", resp is not None and "data" in (resp or {}), _data_keys(resp)
+        )
 
         # 25. audit_trail_user_activity (date is required)
         from datetime import date as date_cls
+
         today = date_cls.today().isoformat()
         resp = await _safe_call(session, "audit_trail_user_activity", {"date": today, "limit": 2})
         record("audit_trail_user_activity", resp is not None, _count_or_err(resp))
@@ -592,8 +647,7 @@ async def run_readonly_tools() -> None:
         # ---- More reports ----
         # 28. prepatch_report
         resp = await _safe_call(session, "prepatch_report", {})
-        record("prepatch_report", resp is not None and "data" in (resp or {}),
-               _data_keys(resp))
+        record("prepatch_report", resp is not None and "data" in (resp or {}), _data_keys(resp))
 
         # 29. patch_approvals_summary
         resp = await _safe_call(session, "patch_approvals_summary", {})
@@ -601,15 +655,21 @@ async def run_readonly_tools() -> None:
 
         # 30. get_patch_tuesday_readiness
         resp = await _safe_call(session, "get_patch_tuesday_readiness", {})
-        record("get_patch_tuesday_readiness", resp is not None and "data" in (resp or {}),
-               _data_keys(resp))
+        record(
+            "get_patch_tuesday_readiness",
+            resp is not None and "data" in (resp or {}),
+            _data_keys(resp),
+        )
 
         # ---- Compound / inventory ----
         # 31. get_device_full_profile
         if device_id:
             resp = await _safe_call(session, "get_device_full_profile", {"device_id": device_id})
-            record("get_device_full_profile", resp is not None and "data" in (resp or {}),
-                   _data_keys(resp))
+            record(
+                "get_device_full_profile",
+                resp is not None and "data" in (resp or {}),
+                _data_keys(resp),
+            )
         else:
             record("get_device_full_profile", False, "skipped — no device_id")
 
@@ -622,20 +682,131 @@ async def run_readonly_tools() -> None:
 
         # 33. get_device_inventory_categories
         if device_id:
-            resp = await _safe_call(session, "get_device_inventory_categories",
-                                     {"device_id": device_id})
+            resp = await _safe_call(
+                session, "get_device_inventory_categories", {"device_id": device_id}
+            )
             record("get_device_inventory_categories", resp is not None, _data_keys(resp))
         else:
             record("get_device_inventory_categories", False, "skipped — no device_id")
 
         # 34. policy_run_results (needs policy_uuid + exec_token)
         if policy_uuid and exec_token:
-            resp = await _safe_call(session, "policy_run_results",
-                                     {"policy_uuid": policy_uuid, "exec_token": exec_token, "limit": 2})
+            resp = await _safe_call(
+                session,
+                "policy_run_results",
+                {"policy_uuid": policy_uuid, "exec_token": exec_token, "limit": 2},
+            )
             record("policy_run_results", resp is not None, _count_or_err(resp))
         else:
-            record("policy_run_results", False,
-                   f"skipped — policy_uuid={policy_uuid}, exec_token={exec_token}")
+            record(
+                "policy_run_results",
+                False,
+                f"skipped — policy_uuid={policy_uuid}, exec_token={exec_token}",
+            )
+
+        # ================================================================
+        # Phase 3 tools (tests 35–49)
+        # ================================================================
+
+        log.info(f"\n{BOLD}Phase 3: Worklets{RESET}")
+
+        # 35. search_worklet_catalog
+        resp = await _safe_call(session, "search_worklet_catalog", {})
+        record("search_worklet_catalog", resp is not None, _count_or_err(resp))
+
+        # 36. get_worklet_detail (needs a worklet ID from catalog)
+        worklet_list = _extract_list(resp.get("data")) if resp else []
+        worklet_id = None
+        for wl in worklet_list:
+            wl_id = wl.get("id") or wl.get("wis_id") or wl.get("uuid")
+            if wl_id:
+                worklet_id = wl_id
+                break
+        if worklet_id:
+            resp = await _safe_call(
+                session, "get_worklet_detail", {"item_id": str(worklet_id)}
+            )
+            record("get_worklet_detail", resp is not None, _data_keys(resp))
+        else:
+            record("get_worklet_detail", False, "skipped — no worklet_id from catalog")
+
+        log.info(f"\n{BOLD}Phase 3: Data Extracts{RESET}")
+
+        # 37. list_data_extracts
+        resp = await _safe_call(session, "list_data_extracts", {})
+        record("list_data_extracts", resp is not None, _count_or_err(resp))
+
+        log.info(f"\n{BOLD}Phase 3: Org API Keys{RESET}")
+
+        # 38. list_org_api_keys
+        resp = await _safe_call(session, "list_org_api_keys", {})
+        record("list_org_api_keys", resp is not None, _count_or_err(resp))
+
+        log.info(f"\n{BOLD}Phase 3: Policy History v2{RESET}")
+
+        # 39. policy_runs_v2
+        resp = await _safe_call(session, "policy_runs_v2", {"limit": 5})
+        record("policy_runs_v2", resp is not None, _count_or_err(resp))
+
+        # 40. policy_run_count
+        resp = await _safe_call(session, "policy_run_count", {"days": 30})
+        record("policy_run_count", resp is not None, _data_keys(resp))
+
+        # 41. policy_runs_by_policy
+        resp = await _safe_call(session, "policy_runs_by_policy", {})
+        record("policy_runs_by_policy", resp is not None, _count_or_err(resp))
+
+        # 42. policy_history_detail (needs policy_uuid)
+        if policy_uuid:
+            resp = await _safe_call(
+                session, "policy_history_detail", {"policy_uuid": policy_uuid}
+            )
+            record("policy_history_detail", resp is not None, _data_keys(resp))
+        else:
+            record("policy_history_detail", False, "skipped — no policy_uuid")
+
+        # 43. policy_runs_for_policy (needs policy_uuid)
+        if policy_uuid:
+            resp = await _safe_call(
+                session,
+                "policy_runs_for_policy",
+                {"policy_uuid": policy_uuid, "report_days": 7},
+            )
+            record("policy_runs_for_policy", resp is not None, _count_or_err(resp))
+        else:
+            record("policy_runs_for_policy", False, "skipped — no policy_uuid")
+
+        log.info(f"\n{BOLD}Phase 3: Audit v2 (OCSF){RESET}")
+
+        # 44. audit_events_ocsf
+        resp = await _safe_call(
+            session, "audit_events_ocsf", {"date": today, "limit": 5}
+        )
+        record("audit_events_ocsf", resp is not None, _count_or_err(resp))
+
+        log.info(f"\n{BOLD}Phase 3: Advanced Device Search{RESET}")
+
+        # 45. list_saved_searches
+        resp = await _safe_call(session, "list_saved_searches", {})
+        record("list_saved_searches", resp is not None, _count_or_err(resp))
+
+        # 46. get_device_metadata_fields
+        resp = await _safe_call(session, "get_device_metadata_fields", {})
+        record("get_device_metadata_fields", resp is not None, _count_or_err(resp))
+
+        # 47. get_device_assignments
+        resp = await _safe_call(session, "get_device_assignments", {})
+        record("get_device_assignments", resp is not None, _count_or_err(resp))
+
+        log.info(f"\n{BOLD}Phase 3: Vulnerability Sync{RESET}")
+
+        # 48. list_remediation_action_sets
+        resp = await _safe_call(session, "list_remediation_action_sets", {})
+        record("list_remediation_action_sets", resp is not None, _count_or_err(resp))
+
+        # 49. get_upload_formats
+        resp = await _safe_call(session, "get_upload_formats", {})
+        record("get_upload_formats", resp is not None, _count_or_err(resp))
 
 
 def _extract_id(item: dict[str, Any], *keys: str) -> int | None:
@@ -751,6 +922,7 @@ def _data_keys(resp: dict[str, Any] | None) -> str:
 #  Main
 # ===================================================================
 
+
 def main() -> int:
     check_prereqs()
 
@@ -761,7 +933,7 @@ def main() -> int:
     # 1. Stdio startup (synchronous)
     test_stdio_startup()
 
-    # 2–6, 8–34: HTTP transport tests (async)
+    # 2–6, 8–49: HTTP transport tests (async)
     asyncio.run(run_http_tests())
 
     # 7. Non-loopback warning (separate server, synchronous)

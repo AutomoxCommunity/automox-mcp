@@ -5,14 +5,13 @@ from __future__ import annotations
 from typing import cast
 
 import pytest
+from conftest import StubClient
 
 from automox_mcp.client import AutomoxClient
 from automox_mcp.workflows.device_inventory import (
     get_device_inventory,
     get_device_inventory_categories,
 )
-from conftest import StubClient
-
 
 # ---------------------------------------------------------------------------
 # Shared fixtures / helpers

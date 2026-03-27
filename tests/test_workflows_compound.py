@@ -6,6 +6,7 @@ from typing import Any, cast
 from unittest.mock import AsyncMock
 
 import pytest
+from conftest import StubClient
 
 from automox_mcp.client import AutomoxAPIError, AutomoxClient
 from automox_mcp.workflows.compound import (
@@ -13,8 +14,6 @@ from automox_mcp.workflows.compound import (
     get_device_full_profile,
     get_patch_tuesday_readiness,
 )
-from conftest import StubClient
-
 
 # ---------------------------------------------------------------------------
 # Prepatch report / approval / policy fixtures
@@ -515,7 +514,9 @@ async def test_full_profile_returns_all_sections(monkeypatch: pytest.MonkeyPatch
     client = StubClient()
 
     result = await get_device_full_profile(
-        cast(AutomoxClient, client), org_id=555, device_id=101,
+        cast(AutomoxClient, client),
+        org_id=555,
+        device_id=101,
     )
 
     data = result["data"]
@@ -538,7 +539,9 @@ async def test_full_profile_inventory_summarizes_key_values(
     client = StubClient()
 
     result = await get_device_full_profile(
-        cast(AutomoxClient, client), org_id=555, device_id=101,
+        cast(AutomoxClient, client),
+        org_id=555,
+        device_id=101,
     )
 
     hw = result["data"]["inventory"]["categories"]["Hardware"]
@@ -555,7 +558,9 @@ async def test_full_profile_skips_unnamed_inventory_items(monkeypatch: pytest.Mo
     """Items without friendly_name or name should be excluded from key_values."""
     inv_with_unnamed = copy.deepcopy(_INVENTORY_RESPONSE)
     # Add an item with no name fields
-    inv_with_unnamed["data"]["categories"]["Hardware"]["sub_categories"]["Processor"]["items"].append(
+    inv_with_unnamed["data"]["categories"]["Hardware"]["sub_categories"]["Processor"][
+        "items"
+    ].append(
         {
             "name": None,
             "friendly_name": None,
@@ -571,7 +576,9 @@ async def test_full_profile_skips_unnamed_inventory_items(monkeypatch: pytest.Mo
     client = StubClient()
 
     result = await get_device_full_profile(
-        cast(AutomoxClient, client), org_id=555, device_id=101,
+        cast(AutomoxClient, client),
+        org_id=555,
+        device_id=101,
     )
 
     proc = result["data"]["inventory"]["categories"]["Hardware"]["sub_categories"]["Processor"]
@@ -597,7 +604,10 @@ async def test_full_profile_truncates_packages(monkeypatch: pytest.MonkeyPatch) 
     client = StubClient()
 
     result = await get_device_full_profile(
-        cast(AutomoxClient, client), org_id=555, device_id=101, max_packages=5,
+        cast(AutomoxClient, client),
+        org_id=555,
+        device_id=101,
+        max_packages=5,
     )
 
     pkg_section = result["data"]["packages"]
@@ -615,7 +625,9 @@ async def test_full_profile_no_truncation_when_within_limit(
     client = StubClient()
 
     result = await get_device_full_profile(
-        cast(AutomoxClient, client), org_id=555, device_id=101,
+        cast(AutomoxClient, client),
+        org_id=555,
+        device_id=101,
     )
 
     pkg_section = result["data"]["packages"]
@@ -633,7 +645,9 @@ async def test_full_profile_handles_partial_failure(monkeypatch: pytest.MonkeyPa
     client = StubClient()
 
     result = await get_device_full_profile(
-        cast(AutomoxClient, client), org_id=555, device_id=101,
+        cast(AutomoxClient, client),
+        org_id=555,
+        device_id=101,
     )
 
     assert result["metadata"]["data_complete"] is False
@@ -658,7 +672,9 @@ async def test_full_profile_all_sections_fail(monkeypatch: pytest.MonkeyPatch) -
     client = StubClient()
 
     result = await get_device_full_profile(
-        cast(AutomoxClient, client), org_id=555, device_id=101,
+        cast(AutomoxClient, client),
+        org_id=555,
+        device_id=101,
     )
 
     assert result["metadata"]["data_complete"] is False
@@ -677,7 +693,9 @@ async def test_full_profile_metadata_counts(monkeypatch: pytest.MonkeyPatch) -> 
     client = StubClient()
 
     result = await get_device_full_profile(
-        cast(AutomoxClient, client), org_id=555, device_id=101,
+        cast(AutomoxClient, client),
+        org_id=555,
+        device_id=101,
     )
 
     counts = result["metadata"]["counts"]

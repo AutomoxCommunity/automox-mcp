@@ -36,9 +36,7 @@ def _highest_patch_severity(patches: Any) -> str:
     for patch in items:
         if not isinstance(patch, Mapping):
             continue
-        sev = str(
-            patch.get("severity") or patch.get("cve_severity") or ""
-        ).lower().strip()
+        sev = str(patch.get("severity") or patch.get("cve_severity") or "").lower().strip()
         rank = _SEVERITY_RANK.get(sev, -1)
         if rank > max_rank:
             max_rank = rank
@@ -249,7 +247,8 @@ async def get_noncompliant_report(
 
     for _page_num in range(_MAX_PAGINATION_PAGES):
         report = await client.get(
-            "/reports/needs-attention", params=params,
+            "/reports/needs-attention",
+            params=params,
         )
 
         # Response shape: array or {"nonCompliant": {"total": N, ..., "devices": [...]}}

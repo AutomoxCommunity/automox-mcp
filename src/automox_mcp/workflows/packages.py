@@ -23,8 +23,7 @@ async def list_device_packages(
     if limit is not None:
         params["limit"] = limit
 
-    packages = await client.get(
-        f"/servers/{device_id}/packages", params=params    )
+    packages = await client.get(f"/servers/{device_id}/packages", params=params)
 
     if not isinstance(packages, list):
         packages = []

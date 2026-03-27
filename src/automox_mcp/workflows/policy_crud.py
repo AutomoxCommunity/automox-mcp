@@ -1,6 +1,5 @@
 """Policy create/update/delete workflows for Automox MCP."""
 
-
 from __future__ import annotations
 
 import logging
@@ -94,6 +93,7 @@ _DAY_GROUP_ALIASES = {
     ],
 }
 _SCHEDULE_TIME_PATTERN = re.compile(r"^(\d{1,2})(?::(\d{2}))?$")
+
 
 def normalize_policy_operations_input(raw_operations: Sequence[Any]) -> list[dict[str, Any]]:
     """Normalize loosely structured operations into the expected payload shape.
@@ -730,7 +730,6 @@ async def _prepare_policy_payload_for_update(
     return payload, existing_original, warnings
 
 
-
 async def apply_policy_changes(
     client: AutomoxClient,
     *,
@@ -916,8 +915,7 @@ async def resolve_patch_approval(
         body["notes"] = notes
 
     params = {"o": resolved_org_id}
-    response_data = await client.put(
-        f"/approvals/{approval_id}", json_data=body, params=params    )
+    response_data = await client.put(f"/approvals/{approval_id}", json_data=body, params=params)
 
     data = {
         "approval_id": approval_id,
@@ -985,7 +983,8 @@ async def execute_policy(
 
     params = {"o": resolved_org_id}
     response_data = await client.post(
-        f"/policies/{policy_id}/action", json_data=body, params=params    )
+        f"/policies/{policy_id}/action", json_data=body, params=params
+    )
 
     data = {
         "policy_id": policy_id,
@@ -1074,9 +1073,7 @@ async def clone_policy(
     response = await client.post("/policies", json_data=payload, params=params)
 
     new_policy_id = (
-        _extract_policy_id_from_response(response)
-        if isinstance(response, Mapping)
-        else None
+        _extract_policy_id_from_response(response) if isinstance(response, Mapping) else None
     )
 
     # API may return empty body — search for the clone by name to get the ID
@@ -1104,7 +1101,6 @@ async def clone_policy(
             "org_id": resolved_org_id,
         },
     }
-
 
 
 __all__ = [

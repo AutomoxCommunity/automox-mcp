@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -21,7 +20,6 @@ from ..utils.tooling import (
     format_error,
 )
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -36,9 +34,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             await enforce_rate_limit()
             client_org_id = client.org_id
             if client_org_id is None:
-                raise ToolError(
-                    "org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly."
-                )
+                raise ToolError("org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly.")
             raw_params["org_id"] = client_org_id
             result: dict[str, Any] = await func(client, **raw_params)
         except (ValidationError, ValueError) as exc:
@@ -62,9 +58,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             await enforce_rate_limit()
             client_org_id = client.org_id
             if client_org_id is None:
-                raise ToolError(
-                    "org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly."
-                )
+                raise ToolError("org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly.")
             org_uuid = await resolve_org_uuid(
                 client,
                 org_id=client_org_id,
@@ -100,7 +94,8 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         if group_id is not None:
             params["group_id"] = group_id
         return await _call_with_org_uuid(
-            workflows.compound.get_patch_tuesday_readiness, params,
+            workflows.compound.get_patch_tuesday_readiness,
+            params,
         )
 
     @server.tool(
@@ -117,7 +112,8 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         if group_id is not None:
             params["group_id"] = group_id
         return await _call(
-            workflows.compound.get_compliance_snapshot, params,
+            workflows.compound.get_compliance_snapshot,
+            params,
         )
 
     @server.tool(
@@ -136,7 +132,8 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     ) -> dict[str, Any]:
         params: dict[str, Any] = {"device_id": device_id, "max_packages": max_packages}
         return await _call(
-            workflows.compound.get_device_full_profile, params,
+            workflows.compound.get_device_full_profile,
+            params,
         )
 
 

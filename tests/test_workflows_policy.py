@@ -35,9 +35,7 @@ class StubClient:
         self._get_responses = {key: list(value) for key, value in (get_responses or {}).items()}
         self._post_responses = {key: list(value) for key, value in (post_responses or {}).items()}
         self._put_responses = {key: list(value) for key, value in (put_responses or {}).items()}
-        self.calls: list[
-            tuple[str, str, dict[str, Any] | None, dict[str, Any] | None]
-        ] = []
+        self.calls: list[tuple[str, str, dict[str, Any] | None, dict[str, Any] | None]] = []
 
     async def get(
         self,
@@ -787,9 +785,7 @@ async def test_describe_policy_basic() -> None:
     stub = StubClient(
         get_responses={
             "/policies/10": [policy],
-            "/orgs": [
-                [{"id": 42, "org_uuid": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}]
-            ],
+            "/orgs": [[{"id": 42, "org_uuid": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}]],
             "/policy-history/policy-runs?"
             "policy_uuid:equals=None"
             "&org=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"

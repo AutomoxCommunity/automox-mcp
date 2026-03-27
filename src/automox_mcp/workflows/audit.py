@@ -470,7 +470,18 @@ def _resolve_event_time(event: Mapping[str, Any]) -> str | None:
     return None
 
 
-_SENSITIVE_PAYLOAD_KEYS = {"token", "secret", "key", "password", "credential", "auth", "bearer", "passwd", "api-key", "apikey"}
+_SENSITIVE_PAYLOAD_KEYS = {
+    "token",
+    "secret",
+    "key",
+    "password",
+    "credential",
+    "auth",
+    "bearer",
+    "passwd",
+    "api-key",
+    "apikey",
+}
 
 
 def _sanitize_payload(value: Any, depth: int = 0) -> Any:

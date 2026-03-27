@@ -47,9 +47,7 @@ class JSONFormatter(logging.Formatter):
                     elif key == "status":
                         entry["status"] = value
                     elif key == "latency":
-                        entry["latency_ms"] = round(
-                            float(value.rstrip("s")) * 1000, 1
-                        )
+                        entry["latency_ms"] = round(float(value.rstrip("s")) * 1000, 1)
 
         if record.exc_info and record.exc_info[1]:
             entry["exception"] = str(record.exc_info[1])
@@ -64,9 +62,7 @@ def configure_logging() -> None:
 
     if fmt == "json":
         # Check if a JSON handler is already configured to avoid duplicates
-        already_configured = any(
-            isinstance(h.formatter, JSONFormatter) for h in root.handlers
-        )
+        already_configured = any(isinstance(h.formatter, JSONFormatter) for h in root.handlers)
         if not already_configured:
             handler = logging.StreamHandler()
             handler.setFormatter(JSONFormatter())

@@ -30,13 +30,9 @@ async def issue_device_command(
     """
     resolved_org_id = org_id or client.org_id
     if not resolved_org_id:
-        raise ValueError(
-            "org_id required - pass explicitly or set AUTOMOX_ORG_ID"
-        )
+        raise ValueError("org_id required - pass explicitly or set AUTOMOX_ORG_ID")
 
-    command_normalized = (
-        command_type.lower().replace("-", "_").replace(" ", "_")
-    )
+    command_normalized = command_type.lower().replace("-", "_").replace(" ", "_")
     command_map = {
         "scan": "GetOS",
         "get_os": "GetOS",
@@ -63,9 +59,7 @@ async def issue_device_command(
         )
 
     if command_value == "InstallUpdate" and not patch_names:
-        raise ValueError(
-            "patch_names is required when command_type is 'patch_specific'"
-        )
+        raise ValueError("patch_names is required when command_type is 'patch_specific'")
 
     body: dict[str, Any] = {"command_type_name": command_value}
     if patch_names:

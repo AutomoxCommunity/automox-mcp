@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 from uuid import UUID
 
@@ -25,8 +26,7 @@ async def invite_user_to_account(
     if zone_assignments is not None:
         body["zone_assignments"] = zone_assignments
 
-    invitation = await client.post(
-        f"/accounts/{account_id}/invitations", json_data=body    )
+    invitation = await client.post(f"/accounts/{account_id}/invitations", json_data=body)
 
     data = {
         "email": email,
@@ -69,4 +69,40 @@ async def remove_user_from_account(
     return {
         "data": data,
         "metadata": metadata,
+    }
+
+
+async def list_org_api_keys(
+    client: AutomoxClient,
+    *,
+    org_id: int,
+) -> dict[str, Any]:
+    """List API keys for the organization (names and IDs only, secrets redacted)."""
+    results = await client.get(f"/orgs/{org_id}/api_keys")
+
+    if not isinstance(results, list):
+        results = []
+
+    keys: list[dict[str, Any]] = []
+    for item in results:
+        if not isinstance(item, Mapping):
+            continue
+        entry: dict[str, Any] = {
+            "id": item.get("id"),
+            "name": item.get("name"),
+        }
+        for optional in ("created_at", "expires_at", "last_used_at", "enabled"):
+            val = item.get(optional)
+            if val is not None:
+                entry[optional] = val
+        keys.append(entry)
+
+    return {
+        "data": {
+            "total_keys": len(keys),
+            "api_keys": keys,
+        },
+        "metadata": {
+            "deprecated_endpoint": False,
+        },
     }

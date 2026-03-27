@@ -75,8 +75,10 @@ class AutomoxClient:
                 "You can find it in the Automox console URL or API responses."
             ) from exc
 
-        self.org_id = org_id if org_id is not None else (
-            int(os.environ["AUTOMOX_ORG_ID"]) if os.environ.get("AUTOMOX_ORG_ID") else None
+        self.org_id = (
+            org_id
+            if org_id is not None
+            else (int(os.environ["AUTOMOX_ORG_ID"]) if os.environ.get("AUTOMOX_ORG_ID") else None)
         )
         env_org_uuid = os.environ.get("AUTOMOX_ORG_UUID")
         self.org_uuid = (org_uuid or env_org_uuid or "").strip() or None

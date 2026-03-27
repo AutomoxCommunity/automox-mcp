@@ -807,10 +807,15 @@ async def test_describe_policy_basic() -> None:
 
 @pytest.mark.asyncio
 async def test_describe_policy_exception_wrapped() -> None:
-    """Exception from the API call is wrapped as ValueError."""
-    stub = StubClient()  # no responses → AssertionError on GET
+    """AutomoxAPIError from the API call is wrapped as ValueError."""
 
-    with pytest.raises(ValueError):
+    class _ErrorClient(StubClient):
+        async def get(self, path, **kwargs):
+            raise AutomoxAPIError("not found", status_code=404)
+
+    stub = _ErrorClient()
+
+    with pytest.raises(ValueError, match="Failed to retrieve policy 999"):
         await describe_policy(
             cast(AutomoxClient, stub),
             org_id=42,

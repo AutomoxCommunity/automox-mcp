@@ -30,26 +30,20 @@ class CorrelationMiddleware(Middleware):
         token = _correlation_id_var.set(correlation_id)
         tool_name = context.message.name
         start = time.perf_counter()
+        status = "error"
         try:
             result = await call_next(context)
-            latency = time.perf_counter() - start
-            logger.info(
-                "tool_call tool=%s correlation_id=%s status=ok latency=%.3fs",
-                tool_name,
-                correlation_id,
-                latency,
-            )
+            status = "ok"
             return result
-        except Exception:
+        finally:
             latency = time.perf_counter() - start
             logger.info(
-                "tool_call tool=%s correlation_id=%s status=error latency=%.3fs",
+                "tool_call tool=%s correlation_id=%s status=%s latency=%.3fs",
                 tool_name,
                 correlation_id,
+                status,
                 latency,
             )
-            raise
-        finally:
             _correlation_id_var.reset(token)
 
 

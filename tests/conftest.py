@@ -56,7 +56,9 @@ class StubClient:
         self.org_uuid: str | None = None
         self.account_uuid: str = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 
-    def _pop(self, store: dict[str, list[Any]], path: str, default: Any = None) -> Any:
+    _SENTINEL = object()
+
+    def _pop(self, store: dict[str, list[Any]], path: str, default: Any = _SENTINEL) -> Any:
         """Match *path* against stored responses, supporting prefix matching."""
         responses = store.get(path)
         if responses:
@@ -65,7 +67,7 @@ class StubClient:
         for key, resps in store.items():
             if path.startswith(key) and resps:
                 return copy.deepcopy(resps.pop(0))
-        return default if default is not None else {}
+        return {} if default is self._SENTINEL else default
 
     async def get(self, path: str, *, params: Any = None, headers: Any = None) -> Any:
         self.calls.append(("GET", path, params))

@@ -13,6 +13,8 @@ from automox_mcp.utils.tooling import (
 )
 from automox_mcp.workflows.policy import _normalize_status, _take
 
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+
 
 def test_as_tool_response_normalizes_metadata():
     original = {
@@ -101,8 +103,7 @@ def test_format_error_redacts_sensitive_values_on_fallback():
 
 @pytest.mark.asyncio
 async def test_create_server_registers_core_tools(monkeypatch):
-    repo_root = Path(__file__).resolve().parents[1]
-    monkeypatch.syspath_prepend(str(repo_root / "src"))
+    monkeypatch.syspath_prepend(str(_REPO_ROOT / "src"))
     monkeypatch.setenv("AUTOMOX_API_KEY", "test-key")
     monkeypatch.setenv("AUTOMOX_ACCOUNT_UUID", "test-account")
     monkeypatch.setenv("AUTOMOX_ORG_ID", "123")

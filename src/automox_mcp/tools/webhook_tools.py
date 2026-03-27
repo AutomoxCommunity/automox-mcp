@@ -50,8 +50,16 @@ def _validate_webhook_url(url: str) -> None:
             raise
         # Not a bare IP — hostname is fine; DNS resolution is Automox's responsibility
     # Block well-known cloud metadata endpoints by hostname
-    _BLOCKED_HOSTS = {"metadata.google.internal", "metadata.google"}
-    if hostname.lower() in _BLOCKED_HOSTS:
+    _BLOCKED_HOSTS = {
+        "metadata.google.internal",
+        "metadata.google",
+        "metadata.azure.com",
+        "management.azure.com",
+        "instance-data",
+        "metadata.oraclecloud.com",
+    }
+    lower_host = hostname.lower()
+    if lower_host in _BLOCKED_HOSTS or lower_host.endswith(".internal"):
         raise ValueError("Webhook URL must not target cloud metadata endpoints")
 
 

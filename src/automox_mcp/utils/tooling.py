@@ -10,9 +10,42 @@ from collections import deque
 from collections.abc import Mapping, Sequence
 from typing import Any, cast
 
-from automox_mcp.client import AutomoxAPIError
-from automox_mcp.schemas import PaginationMetadata, ToolResponse
-from automox_mcp.utils.sanitize import is_sanitization_enabled, sanitize_dict, sanitize_for_llm
+from ..client import AutomoxAPIError
+from ..middleware import get_correlation_id
+from ..schemas import PaginationMetadata, ToolResponse
+from .sanitize import is_sanitization_enabled, sanitize_dict, sanitize_for_llm
+
+_VALID_MODULES: frozenset[str] = frozenset({
+    "audit",
+    "audit_v2",
+    "devices",
+    "device_search",
+    "policies",
+    "policy_history",
+    "users",
+    "groups",
+    "events",
+    "reports",
+    "packages",
+    "webhooks",
+    "worklets",
+    "data_extracts",
+    "vuln_sync",
+    "compound",
+})
+
+SENSITIVE_KEYWORDS: tuple[str, ...] = (
+    "token",
+    "secret",
+    "key",
+    "password",
+    "credential",
+    "auth",
+    "bearer",
+    "passwd",
+    "api-key",
+    "apikey",
+)
 
 
 def is_read_only() -> bool:
@@ -30,30 +63,13 @@ def get_enabled_modules() -> set[str] | None:
     """Return the set of enabled module names, or None if all are enabled.
 
     Controlled by ``AUTOMOX_MCP_MODULES`` (comma-separated).  Valid names:
-    audit, devices, policies, users, groups, events, reports, packages,
-    webhooks, compound.
+    audit, audit_v2, devices, device_search, policies, policy_history,
+    users, groups, events, reports, packages, webhooks, worklets,
+    data_extracts, vuln_sync, compound.
     """
     raw = os.environ.get("AUTOMOX_MCP_MODULES", "").strip()
     if not raw:
         return None
-    _VALID_MODULES = {
-        "audit",
-        "audit_v2",
-        "devices",
-        "device_search",
-        "policies",
-        "policy_history",
-        "users",
-        "groups",
-        "events",
-        "reports",
-        "packages",
-        "webhooks",
-        "worklets",
-        "data_extracts",
-        "vuln_sync",
-        "compound",
-    }
     modules = {m.strip().lower() for m in raw.split(",") if m.strip()}
     unknown = modules - _VALID_MODULES
     if unknown:
@@ -213,21 +229,7 @@ def _redact_sensitive_fields(payload: Any) -> Any:
         redacted: dict[Any, Any] = {}
         for key, value in payload.items():
             lower_key = str(key).lower()
-            if any(
-                sensitive in lower_key
-                for sensitive in (
-                    "token",
-                    "secret",
-                    "key",
-                    "password",
-                    "credential",
-                    "auth",
-                    "bearer",
-                    "passwd",
-                    "api-key",
-                    "apikey",
-                )
-            ):
+            if any(sensitive in lower_key for sensitive in SENSITIVE_KEYWORDS):
                 redacted[key] = "***redacted***"
             else:
                 redacted[key] = _redact_sensitive_fields(value)
@@ -322,8 +324,6 @@ def _apply_token_budget(
 
 def as_tool_response(result: Mapping[str, Any]) -> dict[str, Any]:
     """Convert a workflow result to a standardized tool response."""
-    from ..middleware import get_correlation_id
-
     metadata_input = result.get("metadata") or {}
     if not isinstance(metadata_input, Mapping):
         metadata_input = {}
@@ -389,6 +389,7 @@ def maybe_format_markdown(result: dict[str, Any], output_format: str | None) -> 
 __all__ = [
     "RateLimitError",
     "RateLimiter",
+    "SENSITIVE_KEYWORDS",
     "as_tool_response",
     "check_idempotency",
     "enforce_rate_limit",

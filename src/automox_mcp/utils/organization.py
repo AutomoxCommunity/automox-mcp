@@ -6,7 +6,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 from uuid import UUID
 
-from automox_mcp.client import AutomoxClient
+from ..client import AutomoxClient
 
 
 def _coerce_int(value: Any) -> int | None:

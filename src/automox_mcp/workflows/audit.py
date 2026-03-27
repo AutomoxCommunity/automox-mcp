@@ -13,7 +13,7 @@ from pydantic import EmailStr, TypeAdapter, ValidationError
 
 from ..client import AutomoxAPIError, AutomoxClient
 from ..utils import resolve_org_uuid
-from ..utils.tooling import _redact_sensitive_fields
+from ..utils.tooling import SENSITIVE_KEYWORDS, _redact_sensitive_fields
 
 _EMAIL_VALIDATOR: TypeAdapter[EmailStr] = TypeAdapter(EmailStr)
 
@@ -470,18 +470,7 @@ def _resolve_event_time(event: Mapping[str, Any]) -> str | None:
     return None
 
 
-_SENSITIVE_PAYLOAD_KEYS = {
-    "token",
-    "secret",
-    "key",
-    "password",
-    "credential",
-    "auth",
-    "bearer",
-    "passwd",
-    "api-key",
-    "apikey",
-}
+_SENSITIVE_PAYLOAD_KEYS = set(SENSITIVE_KEYWORDS)
 
 
 def _sanitize_payload(value: Any, depth: int = 0) -> Any:

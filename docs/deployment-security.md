@@ -9,13 +9,13 @@ This guide is informed by the [Wiz MCP Security Best Practices](https://www.wiz.
 Sample `Dockerfile` following security best practices:
 
 ```dockerfile
-FROM python:3.12-slim AS builder
+FROM python:3.13-slim AS builder
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
 COPY src/ src/
 RUN pip install --no-cache-dir uv && uv sync --frozen --no-dev
 
-FROM python:3.12-slim
+FROM python:3.13-slim
 RUN groupadd -r automox && useradd -r -g automox -s /sbin/nologin automox
 COPY --from=builder /app/.venv /app/.venv
 ENV PATH="/app/.venv/bin:$PATH"
@@ -76,6 +76,11 @@ spec:
             secretKeyRef:
               name: automox-credentials
               key: org-id
+        - name: AUTOMOX_MCP_API_KEYS
+          valueFrom:
+            secretKeyRef:
+              name: automox-credentials
+              key: mcp-api-keys
         - name: AUTOMOX_MCP_LOG_FORMAT
           value: "json"
         - name: AUTOMOX_MCP_TRANSPORT
@@ -146,12 +151,29 @@ The gateway should maintain a binary allowlist of approved MCP servers by packag
 
 ## Authentication and Authorization
 
-The `automox-mcp` server has no built-in authentication. Options by transport:
+### Built-in Endpoint Authentication (V-108)
+
+The server supports Bearer-token authentication for HTTP/SSE transports. Generate a key and configure it:
+
+```bash
+# Generate a secure key
+automox-mcp --generate-key
+
+# Via environment variable (comma-separated, optional label prefix)
+AUTOMOX_MCP_API_KEYS="alice:amx_mcp_abc123,bob:amx_mcp_def456"
+
+# Or via key file (one per line, supports comments)
+AUTOMOX_MCP_API_KEY_FILE=/etc/automox-mcp/keys.txt
+```
+
+When configured, all HTTP/SSE requests must include `Authorization: Bearer <key>`. Unauthenticated requests receive `401 Unauthorized`. This is transport-level authentication — it controls who may connect to the MCP endpoint, independent of the Automox API key.
+
+### Recommendations by Transport
 
 | Transport | Recommendation |
 |-----------|---------------|
 | `stdio` | No network exposure — suitable for local/developer use |
-| `sse` / `http` | Place behind an authenticating reverse proxy that validates OAuth2/OIDC tokens. Requires `--allow-remote-bind` or `AUTOMOX_MCP_ALLOW_REMOTE_BIND=true` for non-loopback addresses |
+| `sse` / `http` | Enable `AUTOMOX_MCP_API_KEYS` for built-in auth. For defense-in-depth, also place behind a reverse proxy with OAuth2/OIDC. Requires `--allow-remote-bind` for non-loopback addresses |
 | Multi-user | Deploy separate server instances per API key/role, or use an MCP gateway that maps user identity to server instances |
 
 ## Human-in-the-Loop Configuration
@@ -197,7 +219,8 @@ Each release also includes a CycloneDX SBOM (`sbom.cdx.json`) attached to the Gi
 - [ ] Server running as non-root in a container with dropped capabilities
 - [ ] Egress restricted to `console.automox.com:443`
 - [ ] TLS terminated at gateway or reverse proxy
-- [ ] Authentication enforced at gateway or reverse proxy
+- [ ] MCP endpoint authentication enabled (`AUTOMOX_MCP_API_KEYS` or `AUTOMOX_MCP_API_KEY_FILE`) and/or enforced at gateway/reverse proxy
+- [ ] API key file permissions restricted to owner only (`chmod 600`) — the server warns at startup if group/world-readable (V-118)
 - [ ] Structured JSON logs (`AUTOMOX_MCP_LOG_FORMAT=json`) forwarded to SIEM
 - [ ] Release artifact verified via Sigstore before deployment
 - [ ] MCP client configured with confirmation dialogs for write operations

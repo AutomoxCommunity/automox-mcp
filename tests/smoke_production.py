@@ -20,6 +20,7 @@ import asyncio
 import json
 import logging
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -91,8 +92,6 @@ SERVER_URL = f"http://127.0.0.1:{SERVER_PORT}/mcp"
 REQUIRED_ENV = ("AUTOMOX_API_KEY", "AUTOMOX_ACCOUNT_UUID", "AUTOMOX_ORG_ID")
 
 # Resolve the automox-mcp console script in the venv
-import shutil
-
 _AUTOMOX_MCP_BIN = shutil.which("automox-mcp") or os.path.join(
     os.path.dirname(sys.executable), "automox-mcp"
 )

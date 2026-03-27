@@ -159,7 +159,7 @@ def test_sanitize_errors_mapping_filters_empty_values():
     assert result == {"code": "ERR"}
 
 
-def test_sanitize_errors_list_of_mappings(lines=None):
+def test_sanitize_errors_list_of_mappings():
     """Lines 97-107: list input with Mapping items."""
     errors = [
         {"detail": "field required", "token": "leak"},
@@ -179,7 +179,7 @@ def test_sanitize_errors_list_items_with_no_allowed_keys_are_dropped():
     assert result == [{"message": "keep me"}]
 
 
-def test_sanitize_errors_list_of_primitives(lines=None):
+def test_sanitize_errors_list_of_primitives():
     """Line 108-109: non-Mapping list items that have content are kept."""
     result = _sanitize_errors(["error one", "error two"])
     assert result == ["error one", "error two"]
@@ -201,7 +201,7 @@ def test_sanitize_errors_list_all_filtered_returns_none():
     assert result is None
 
 
-def test_sanitize_errors_scalar_with_content(lines=None):
+def test_sanitize_errors_scalar_with_content():
     """Line 111-112: non-mapping, non-sequence scalar that has content."""
     result = _sanitize_errors(42)
     assert result == 42

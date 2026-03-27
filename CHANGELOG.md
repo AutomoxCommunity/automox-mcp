@@ -9,6 +9,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### Phase 5: Hardening & Quality
+
+- **Unicode normalization in sanitizer** (V-108a) — `sanitize_for_llm()` now applies NFKC normalization and strips zero-width/invisible characters before pattern matching, defeating homoglyph bypass attacks (Cyrillic lookalikes, full-width characters, zero-width joiners).
+- **Reference-style markdown stripping** (V-117) — Sanitizer now catches `![alt][ref]`, `[text][ref]`, and `[ref]: url` patterns in addition to inline markdown syntax.
+- **Unlabeled code block removal** (V-119) — Fenced code blocks without a language label are now stripped, closing a gap where only labelled shell/script blocks were removed.
+- **Key file permission check** (V-118) — `AUTOMOX_MCP_API_KEY_FILE` now warns at startup if the file is group- or world-readable, recommending `chmod 600`.
+- **Expanded cloud metadata blocklist** (V-114) — Webhook URL validator now blocks Azure (`metadata.azure.com`, `management.azure.com`), Oracle Cloud (`metadata.oraclecloud.com`), and generic (`instance-data`, `*.internal`) metadata endpoints alongside existing Google entries.
+- **Canonical sensitive keywords** — `SENSITIVE_KEYWORDS` tuple promoted to public API in `utils/tooling.py`; `audit.py` now imports it instead of maintaining a duplicate definition.
+
+#### Phase 4: MCP Endpoint Authentication
+
+- **Built-in Bearer-token authentication** (V-108) for HTTP/SSE transports via `AUTOMOX_MCP_API_KEYS` (comma-separated env var) or `AUTOMOX_MCP_API_KEY_FILE` (one key per line with `#` comments and `label:key` format). When configured, all HTTP/SSE requests must include `Authorization: Bearer <key>`; unauthenticated requests receive `401 Unauthorized`. No effect on stdio transport.
+- **`--generate-key` CLI flag** — Prints a cryptographically secure MCP endpoint API key (`amx_mcp_{32 hex chars}`) and exits.
+- **New module**: `auth.py` — Key parsing, loading from env/file sources, `StaticTokenVerifier` integration with FastMCP, and `generate_api_key()` utility.
+
+### Fixed
+
+- **Redundant `set_defaults`** — Removed duplicate `parser.set_defaults(show_banner=...)` in `__init__.py` where the same default was already set via the argument definition.
+- **`conftest.py` StubClient default for DELETE** — `_pop()` sentinel logic fixed so DELETE stubs correctly return `None` when no canned response remains, matching the docstring contract.
+- **Test prompts incorrectly async** — Six `test_prompts.py` tests were `@pytest.mark.asyncio` / `async def` but never awaited; converted to synchronous.
+- **`pytest-asyncio` mode** — Added `asyncio_mode = "auto"` to `pyproject.toml` for automatic async test detection.
+- **Unused import** — Removed unused `uuid.UUID` import from `device_search.py`.
+- **Ruff/mypy clean** — Resolved 5 ruff errors (import sorting, line length, E402, ASYNC240, F401) and 1 mypy `arg-type` error across source and test files.
+
+### Changed
+
+- Remote-bind warnings now distinguish auth-enabled vs auth-disabled deployments; `--allow-remote-bind` help text updated to reference `AUTOMOX_MCP_API_KEYS`.
+- `SECURITY.md` — "Authentication" removed from Scope and Limitations; replaced with RBAC-only note referencing V-108.
+- `docs/deployment-security.md` — New "Built-in Endpoint Authentication" section; Kubernetes example includes `AUTOMOX_MCP_API_KEYS` secret; pre-production checklist updated.
+- `docs/tool-reference.md` — "Endpoint Authentication" added to Enterprise Features section.
+- `README.md` — `AUTOMOX_MCP_API_KEYS` and `AUTOMOX_MCP_API_KEY_FILE` added to configuration table; new "Endpoint Authentication" section; security highlights updated to 26 items (V-108).
+
+### Security
+
+- **V-108**: MCP endpoint Bearer-token authentication for HTTP/SSE transports. Uses FastMCP's `StaticTokenVerifier` to validate tokens from `Authorization: Bearer` headers. Keys loaded from `AUTOMOX_MCP_API_KEYS` or `AUTOMOX_MCP_API_KEY_FILE`; labelled keys (`client:token`) produce named client IDs for audit trails.
+- **V-108a**: Unicode NFKC normalization and zero-width character stripping in `sanitize_for_llm()` to prevent homoglyph bypass of instruction-prefix detection.
+- **V-112**: `policy.py` broad `except Exception` narrowed to `except (AutomoxAPIError, httpx.RequestError)` — raw upstream error strings no longer leak to the LLM via `ToolError`.
+- **V-114**: Webhook URL validator cloud metadata blocklist expanded from 2 to 6+ hostnames (Azure, Oracle Cloud, generic `*.internal`).
+- **V-117**: Reference-style markdown images/links now stripped by sanitizer.
+- **V-118**: API key file permissions checked at load time; warning logged if group/world-readable.
+- **V-119**: Unlabeled fenced code blocks now removed by sanitizer (previously only labelled shell/script blocks).
+
 #### Phase 3: Advanced Workflows & Remediation (25 new tools, 6 prompts)
 
 - **Worklet Catalog** (2 tools)

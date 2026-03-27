@@ -1086,8 +1086,8 @@ async def clone_policy(
                     if isinstance(p, Mapping) and p.get("name") == clone_name:
                         new_policy_id = p.get("id")
                         break
-        except Exception:
-            pass  # Best-effort — return None if lookup fails
+        except (AutomoxAPIError, ValueError, TypeError) as exc:
+            logger.debug("Best-effort clone ID lookup failed: %s", exc)
 
     return {
         "data": {

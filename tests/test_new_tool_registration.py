@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 from unittest.mock import patch
 
-import pytest
 from conftest import StubClient
 from fastmcp import FastMCP
 
@@ -120,18 +119,14 @@ def test_valid_modules_includes_new_modules() -> None:
     }
 
 
-def test_unknown_modules_warned() -> None:
+def test_unknown_modules_warned(caplog) -> None:
+    import logging
+
     from automox_mcp.utils.tooling import get_enabled_modules
 
     with patch.dict(os.environ, {"AUTOMOX_MCP_MODULES": "worklets,fake_module"}):
-        with pytest.warns(match="") if False else pytest.raises(Exception) if False else _noop():
+        with caplog.at_level(logging.WARNING):
             enabled = get_enabled_modules()
-    assert "fake_module" not in enabled or True  # warning logged, not an error
-
-
-class _noop:
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *a):
-        pass
+    assert "worklets" in enabled
+    assert "fake_module" in enabled  # unknown modules are still returned
+    assert "fake_module" in caplog.text  # but a warning is logged

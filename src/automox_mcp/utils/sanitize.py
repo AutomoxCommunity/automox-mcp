@@ -13,6 +13,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import unicodedata
 from collections.abc import Mapping
 from typing import Any
 
@@ -45,8 +46,22 @@ _CODE_BLOCK_RE = re.compile(
     re.DOTALL | re.IGNORECASE,
 )
 
+# Unlabeled fenced code blocks (any content between triple backticks)
+_UNLABELED_CODE_BLOCK_RE = re.compile(r"```[^\S\n]*\n.*?```", re.DOTALL)
+
 # Triple backticks (that aren't part of a code block we already removed)
 _TRIPLE_BACKTICK_RE = re.compile(r"```")
+
+# Zero-width and invisible Unicode characters used for homoglyph bypass
+_INVISIBLE_CHARS_RE = re.compile(
+    r"[\u200b\u200c\u200d\u200e\u200f\ufeff\u00ad\u2060\u2061\u2062\u2063\u2064\u180e]"
+)
+
+# Markdown reference-style images/links: ![alt][ref] or [text][ref]
+_REF_IMAGE_RE = re.compile(r"!\[([^\]]*)\]\[[^\]]+\]")
+_REF_LINK_RE = re.compile(r"\[([^\]]*)\]\[[^\]]+\]")
+# Reference definitions: [ref]: url
+_REF_DEF_RE = re.compile(r"^\[[^\]]+\]:\s+\S+", re.MULTILINE)
 
 # Instruction prefixes — matched only at line start, case-insensitive.
 # This is a best-effort defense; supplement with gateway-level guardrails
@@ -121,12 +136,22 @@ def sanitize_for_llm(text: str, *, field_name: str | None = None) -> str:
 
     original = text
 
-    # Step 1-2: Markdown images and links
-    text = _IMAGE_RE.sub(r"\1", text)
-    text = _LINK_RE.sub(r"\1", text)
+    # Step 0: Normalize Unicode to NFKC and strip invisible characters.
+    # Defeats homoglyph attacks (Cyrillic/full-width lookalikes) and
+    # zero-width character insertion used to evade prefix detection.
+    text = unicodedata.normalize("NFKC", text)
+    text = _INVISIBLE_CHARS_RE.sub("", text)
 
-    # Step 3: Shell/script code blocks
+    # Step 1-2: Markdown images and links (inline and reference-style)
+    text = _IMAGE_RE.sub(r"\1", text)
+    text = _REF_IMAGE_RE.sub(r"\1", text)
+    text = _LINK_RE.sub(r"\1", text)
+    text = _REF_LINK_RE.sub(r"\1", text)
+    text = _REF_DEF_RE.sub("", text)
+
+    # Step 3: Fenced code blocks (labelled shell/script, then unlabeled)
     text = _CODE_BLOCK_RE.sub("", text)
+    text = _UNLABELED_CODE_BLOCK_RE.sub("", text)
 
     # Step 4: Escape remaining triple backticks
     text = _TRIPLE_BACKTICK_RE.sub("`", text)

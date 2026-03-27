@@ -35,8 +35,7 @@ def test_prompt_count(server: FastMCP) -> None:
     assert len(pm._prompts) == 6
 
 
-@pytest.mark.asyncio
-async def test_investigate_device_prompt_renders(server: FastMCP) -> None:
+def test_investigate_device_prompt_renders(server: FastMCP) -> None:
     pm = server._prompt_manager
     prompt = pm._prompts["investigate_noncompliant_device"]
     result = prompt.fn(device_id="12345")
@@ -44,8 +43,7 @@ async def test_investigate_device_prompt_renders(server: FastMCP) -> None:
     assert "device_detail" in result
 
 
-@pytest.mark.asyncio
-async def test_patch_tuesday_prompt_renders(server: FastMCP) -> None:
+def test_patch_tuesday_prompt_renders(server: FastMCP) -> None:
     pm = server._prompt_manager
     prompt = pm._prompts["prepare_patch_tuesday"]
     result = prompt.fn()
@@ -53,8 +51,7 @@ async def test_patch_tuesday_prompt_renders(server: FastMCP) -> None:
     assert "patch_approvals_summary" in result
 
 
-@pytest.mark.asyncio
-async def test_audit_policy_prompt_renders(server: FastMCP) -> None:
+def test_audit_policy_prompt_renders(server: FastMCP) -> None:
     pm = server._prompt_manager
     prompt = pm._prompts["audit_policy_execution"]
     result = prompt.fn(policy_id="999")
@@ -62,8 +59,7 @@ async def test_audit_policy_prompt_renders(server: FastMCP) -> None:
     assert "policy_execution_timeline" in result
 
 
-@pytest.mark.asyncio
-async def test_onboard_group_prompt_renders(server: FastMCP) -> None:
+def test_onboard_group_prompt_renders(server: FastMCP) -> None:
     pm = server._prompt_manager
     prompt = pm._prompts["onboard_device_group"]
     result = prompt.fn(group_name="Production Servers")
@@ -71,8 +67,7 @@ async def test_onboard_group_prompt_renders(server: FastMCP) -> None:
     assert "create_server_group" in result
 
 
-@pytest.mark.asyncio
-async def test_triage_failure_prompt_renders(server: FastMCP) -> None:
+def test_triage_failure_prompt_renders(server: FastMCP) -> None:
     pm = server._prompt_manager
     prompt = pm._prompts["triage_failed_policy_run"]
     result = prompt.fn(policy_id="555")
@@ -80,8 +75,7 @@ async def test_triage_failure_prompt_renders(server: FastMCP) -> None:
     assert "policy_run_results" in result
 
 
-@pytest.mark.asyncio
-async def test_security_posture_prompt_renders(server: FastMCP) -> None:
+def test_security_posture_prompt_renders(server: FastMCP) -> None:
     pm = server._prompt_manager
     prompt = pm._prompts["review_security_posture"]
     result = prompt.fn()

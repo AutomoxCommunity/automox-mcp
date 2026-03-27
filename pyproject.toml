@@ -72,6 +72,7 @@ packages = ["automox_mcp"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+asyncio_mode = "auto"
 
 [tool.bandit]
 targets = ["src/"]

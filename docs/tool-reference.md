@@ -1,6 +1,6 @@
 # Tool Reference
 
-Complete reference for all 70 tools, 6 workflow prompts, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
+Complete reference for all 71 tools, 6 workflow prompts, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
 
 > **Tip:** You don't need to memorize this. Call `discover_capabilities` from your AI assistant to get a live summary of available tools organized by domain.
 
@@ -202,7 +202,7 @@ Most tools accept optional parameters for filtering and pagination:
 
 ### Special Parameters
 
-- **Write tools** (all 16): accept an optional `request_id` parameter (UUID string) for idempotency. Supplying the same `request_id` on a repeat call returns the cached response without re-executing the operation (TTL: 300 seconds).
+- **Write tools** (all 18): accept an optional `request_id` parameter (UUID string) for idempotency. Supplying the same `request_id` on a repeat call returns the cached response without re-executing the operation (TTL: 300 seconds).
 - **List tools** (13 tools): accept an optional `output_format` parameter. Use `"json"` (default) for the standard structured response or `"markdown"` for a compact table suited to quick scanning.
 
 ### Execution Tools
@@ -254,3 +254,20 @@ list_devices(output_format="markdown")
 ### Capability Discovery
 
 The `discover_capabilities` meta-tool returns all available tools organized by domain. It is always available regardless of `AUTOMOX_MCP_MODULES` and is useful for discovering what the server can do without consulting documentation.
+
+### Endpoint Authentication
+
+For HTTP/SSE deployments, the server supports Bearer-token authentication at the transport level. When configured, every request must include a valid `Authorization: Bearer <key>` header.
+
+```bash
+# Generate a key
+automox-mcp --generate-key
+
+# Configure via env var (comma-separated, optional label prefix)
+AUTOMOX_MCP_API_KEYS="alice:amx_mcp_abc123,bob:amx_mcp_def456"
+
+# Or via key file (one per line, supports # comments and label:key format)
+AUTOMOX_MCP_API_KEY_FILE=/etc/automox-mcp/keys.txt
+```
+
+This is independent of the Automox API key (`AUTOMOX_API_KEY`) and has no effect on stdio transport. See [Deployment Security Guide](deployment-security.md) for full details.

@@ -11,6 +11,8 @@ from typing import Any
 
 import httpx
 
+from .middleware import get_correlation_id
+
 logger = logging.getLogger(__name__)
 
 # Automox API responses are always objects or arrays at the top level
@@ -103,6 +105,7 @@ class AutomoxClient:
             timeout=timeout,
             auth=self._bearer_auth,
         )
+        self._base_url_str = str(self._http.base_url)
 
     def _bearer_auth(self, request: httpx.Request) -> httpx.Request:
         """Inject the Bearer token per-request to avoid storing it in shared headers."""
@@ -203,11 +206,6 @@ class AutomoxClient:
         json_data: Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
     ) -> AutomoxResponse:
-        target = str(self._http.base_url)
-
-        # Inject correlation ID from middleware context
-        from .middleware import get_correlation_id
-
         merged_headers: dict[str, str] = dict(headers) if headers else {}
         correlation_id = get_correlation_id()
         if correlation_id:
@@ -216,7 +214,7 @@ class AutomoxClient:
         logger.debug(
             "Request: %s %s%s correlation_id=%s",
             method,
-            target,
+            self._base_url_str,
             path,
             correlation_id,
         )
@@ -225,13 +223,13 @@ class AutomoxClient:
             response = await self._http.request(
                 method,
                 path,
-                params=params,
+                params=params,  # type: ignore[arg-type]
                 json=json_data,
                 headers=merged_headers or None,
             )
         except httpx.RequestError as exc:
             raise AutomoxAPIError(
-                f"network error calling Automox API at {target}", status_code=0
+                f"network error calling Automox API at {self._base_url_str}", status_code=0
             ) from exc
 
         if response.status_code == 429:

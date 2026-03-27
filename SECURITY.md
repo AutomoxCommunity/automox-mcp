@@ -42,9 +42,10 @@ The following attack surfaces have been identified and mitigated:
 
 Tool responses pass Automox API data back to the LLM after sanitization. The `sanitize_for_llm()` module:
 
-- Strips markdown link and image syntax that could exfiltrate data
-- Removes fenced code blocks containing shell/script commands
-- Removes instruction-like prefixes from free-text fields (notes, descriptions)
+- **Unicode normalization** (NFKC) and zero-width character stripping to defeat homoglyph attacks (V-108a)
+- Strips inline and reference-style markdown link/image syntax that could exfiltrate data (V-117)
+- Removes fenced code blocks (labelled and unlabeled) containing shell/script commands (V-119)
+- Removes instruction-like prefixes from free-text fields (notes, descriptions) (V-104)
 - Preserves names and tags where users commonly use words like "IMPORTANT" or "SYSTEM"
 - Configurable via `AUTOMOX_MCP_SANITIZE_RESPONSES` (default: enabled)
 
@@ -52,7 +53,7 @@ For sensitive deployments, we recommend using an MCP gateway with inline guardra
 
 ### Privilege Escalation
 
-- `AUTOMOX_MCP_READ_ONLY` mode disables all 16 write tools
+- `AUTOMOX_MCP_READ_ONLY` mode disables all 18 write tools
 - `AUTOMOX_MCP_MODULES` limits which tool domains load (principle of least functionality)
 - Pagination capped at 50 pages to prevent resource exhaustion (V-011)
 - Report limits bounded to 500 results (V-004)
@@ -60,9 +61,9 @@ For sensitive deployments, we recommend using an MCP gateway with inline guardra
 ### Network Exposure
 
 - Non-loopback HTTP/SSE binding requires explicit opt-in via `--allow-remote-bind` or `AUTOMOX_MCP_ALLOW_REMOTE_BIND=true` (V-106); server exits with an error otherwise
-- No built-in authentication — an authenticating reverse proxy or MCP gateway is required for non-local deployments
+- Built-in Bearer-token endpoint authentication for HTTP/SSE transports via `AUTOMOX_MCP_API_KEYS` or `AUTOMOX_MCP_API_KEY_FILE` (V-108); for additional defense-in-depth, an authenticating reverse proxy or MCP gateway is recommended
 - Tool name prefixing (`AUTOMOX_MCP_TOOL_PREFIX`) prevents cross-server collisions
-- Webhook URLs validated against private/loopback/link-local IPs and cloud metadata endpoints to prevent SSRF (V-103)
+- Webhook URLs validated against private/loopback/link-local IPs and cloud metadata endpoints (Google, Azure, Oracle Cloud, generic `*.internal`) to prevent SSRF (V-103, V-114)
 
 ### Denial of Service
 
@@ -99,13 +100,19 @@ For sensitive deployments, we recommend using an MCP gateway with inline guardra
 | V-105 | Redact data at sanitization depth limit | `utils/sanitize.py` |
 | V-106 | Require `--allow-remote-bind` for non-loopback binding | `__init__.py` |
 | V-107 | Expanded sensitive field redaction patterns | `utils/tooling.py` |
+| V-108 | MCP endpoint Bearer-token authentication for HTTP/SSE | `auth.py`, `server.py`, `__init__.py` |
+| V-108a | Unicode NFKC normalization + zero-width char stripping in sanitizer | `utils/sanitize.py` |
+| V-112 | Narrowed policy.py exception handler; no raw error leakage to LLM | `workflows/policy.py` |
+| V-114 | Expanded cloud metadata blocklist (Azure, Oracle, *.internal) | `tools/webhook_tools.py` |
+| V-117 | Reference-style markdown image/link stripping | `utils/sanitize.py` |
+| V-118 | API key file permission check (warn on group/world-readable) | `auth.py` |
+| V-119 | Unlabeled fenced code block removal | `utils/sanitize.py` |
 
 ## Scope and Limitations
 
 This server does **not** provide:
 
-- **Authentication** — Deploy behind an authenticating reverse proxy or MCP gateway
-- **Authorization / RBAC** — The server operates with a single API key; multi-user access control is the gateway's responsibility
+- **Authorization / RBAC** — The server operates with a single Automox API key; multi-user access control is the gateway's responsibility. MCP endpoint authentication (V-108) controls *who may connect*, not *what they may do*.
 - **TLS termination** — Use a reverse proxy (nginx, Envoy, Caddy) or MCP gateway
 - **Container isolation** — Run in a container with dropped capabilities and read-only filesystem
 - **Egress filtering** — Restrict outbound traffic to `console.automox.com:443` at the network layer

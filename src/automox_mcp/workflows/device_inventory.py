@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Mapping, Sequence
 from typing import Any
@@ -46,17 +47,26 @@ async def get_device_inventory(
     if not resolved_org_id:
         raise ValueError("org_id required - pass explicitly or set AUTOMOX_ORG_ID")
 
-    org_uuid_str = await resolve_org_uuid(
-        client,
-        org_id=resolved_org_id,
-        allow_account_uuid=False,
+    results = await asyncio.gather(
+        resolve_org_uuid(
+            client,
+            org_id=resolved_org_id,
+            allow_account_uuid=False,
+        ),
+        _resolve_device_uuid(
+            client,
+            device_id=device_id,
+            org_id=resolved_org_id,
+        ),
+        return_exceptions=True,
     )
-
-    device_uuid_str = await _resolve_device_uuid(
-        client,
-        device_id=device_id,
-        org_id=resolved_org_id,
-    )
+    org_uuid_result, device_uuid_result = results
+    if isinstance(org_uuid_result, BaseException):
+        raise org_uuid_result
+    if isinstance(device_uuid_result, BaseException):
+        raise device_uuid_result
+    org_uuid_str: str = org_uuid_result
+    device_uuid_str: str | None = device_uuid_result
     if not device_uuid_str:
         raise ValueError(
             f"Could not resolve UUID for device {device_id}. "
@@ -144,17 +154,26 @@ async def get_device_inventory_categories(
     if not resolved_org_id:
         raise ValueError("org_id required - pass explicitly or set AUTOMOX_ORG_ID")
 
-    org_uuid_str = await resolve_org_uuid(
-        client,
-        org_id=resolved_org_id,
-        allow_account_uuid=False,
+    results = await asyncio.gather(
+        resolve_org_uuid(
+            client,
+            org_id=resolved_org_id,
+            allow_account_uuid=False,
+        ),
+        _resolve_device_uuid(
+            client,
+            device_id=device_id,
+            org_id=resolved_org_id,
+        ),
+        return_exceptions=True,
     )
-
-    device_uuid_str = await _resolve_device_uuid(
-        client,
-        device_id=device_id,
-        org_id=resolved_org_id,
-    )
+    org_uuid_result, device_uuid_result = results
+    if isinstance(org_uuid_result, BaseException):
+        raise org_uuid_result
+    if isinstance(device_uuid_result, BaseException):
+        raise device_uuid_result
+    org_uuid_str: str = org_uuid_result
+    device_uuid_str: str | None = device_uuid_result
     if not device_uuid_str:
         raise ValueError(
             f"Could not resolve UUID for device {device_id}. "

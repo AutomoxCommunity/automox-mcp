@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from typing import Any
-from uuid import UUID
 
 from ..client import AutomoxClient
 from ..utils import resolve_org_uuid

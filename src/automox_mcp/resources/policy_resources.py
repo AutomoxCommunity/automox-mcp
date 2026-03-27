@@ -202,7 +202,9 @@ def register_policy_resources(server: FastMCP) -> None:
                 "operations": ["create", "update"],
                 "notes": [
                     "Updates require the policy 'id' field",
-                    "schedule_days uses a bitmask (Monday=2, Tuesday=4, Wednesday=8, Thursday=16, Friday=32, Saturday=64, Sunday=128)",
+                    "schedule_days uses a bitmask "
+                    "(Monday=2, Tuesday=4, Wednesday=8, Thursday=16, "
+                    "Friday=32, Saturday=64, Sunday=128)",
                     "You can use friendly schedule syntax with a 'schedule' block",
                     "Filter names can be specified using 'filter_name' or 'filter_names' shortcuts",
                 ],

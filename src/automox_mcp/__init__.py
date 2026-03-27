@@ -96,18 +96,28 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         help=(
             "Allow binding HTTP/SSE transports to non-loopback addresses. "
             "Required when --host is not 127.0.0.1/::1/localhost. "
-            "The server has no built-in authentication — use an "
-            "authenticating reverse proxy to restrict access."
+            "Set AUTOMOX_MCP_API_KEYS or AUTOMOX_MCP_API_KEY_FILE to enable "
+            "built-in Bearer-token authentication, or use a reverse proxy."
         ),
     )
-    parser.set_defaults(show_banner=_env_flag("AUTOMOX_MCP_SHOW_BANNER"))
-
+    parser.add_argument(
+        "--generate-key",
+        action="store_true",
+        help="Generate a cryptographically secure MCP endpoint API key and exit.",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: Sequence[str] | None = None) -> None:
     """Initialize and run the MCP server using the configured transport."""
     args = _parse_args(argv)
+
+    # --generate-key: print a new API key and exit (no server startup needed).
+    if args.generate_key:
+        from .auth import generate_api_key
+
+        print(generate_api_key())
+        return
 
     transport_env = _env_str("AUTOMOX_MCP_TRANSPORT")
     transport = args.transport or (transport_env or "stdio")
@@ -144,20 +154,38 @@ def main(argv: Sequence[str] | None = None) -> None:
         resolved_host = str(transport_kwargs.get("host", "127.0.0.1"))
         _LOOPBACK = {"127.0.0.1", "::1", "localhost"}
         if resolved_host not in _LOOPBACK:
+            from .auth import is_auth_configured
+
+            auth_active = is_auth_configured()
+
             if not args.allow_remote_bind:
+                auth_hint = (
+                    "Set AUTOMOX_MCP_API_KEYS or AUTOMOX_MCP_API_KEY_FILE to enable "
+                    "built-in Bearer-token authentication, or use a reverse proxy."
+                )
                 raise SystemExit(
                     f"Refusing to bind {transport} transport to non-loopback address "
-                    f"{resolved_host}. The MCP server has NO built-in authentication.\n"
+                    f"{resolved_host}.\n"
                     f"Pass --allow-remote-bind (or set AUTOMOX_MCP_ALLOW_REMOTE_BIND=true) "
-                    f"to override, and use an authenticating reverse proxy to restrict access."
+                    f"to override.\n{auth_hint}"
                 )
-            logger.warning(
-                "Binding %s transport to non-loopback address %s — the MCP server "
-                "has NO built-in authentication. Use an authenticating reverse proxy "
-                "or firewall rules to restrict access.",
-                transport,
-                resolved_host,
-            )
+
+            if auth_active:
+                logger.info(
+                    "Binding %s transport to non-loopback address %s with "
+                    "MCP endpoint authentication enabled.",
+                    transport,
+                    resolved_host,
+                )
+            else:
+                logger.warning(
+                    "Binding %s transport to non-loopback address %s WITHOUT "
+                    "MCP endpoint authentication. Set AUTOMOX_MCP_API_KEYS or "
+                    "AUTOMOX_MCP_API_KEY_FILE to require Bearer tokens, or use "
+                    "an authenticating reverse proxy.",
+                    transport,
+                    resolved_host,
+                )
 
     mcp.run(transport=transport, show_banner=args.show_banner, **transport_kwargs)
 

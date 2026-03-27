@@ -8,6 +8,8 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 from uuid import UUID
 
+import httpx
+
 from ..client import AutomoxAPIError, AutomoxClient, AutomoxResponse
 from ..utils import resolve_org_uuid
 
@@ -508,14 +510,11 @@ async def describe_policy(
     params = {"o": resolved_org_id}
     try:
         policy_response = await client.get(f"/policies/{policy_id}", params=params)
-    except Exception as e:
-        # Provide detailed error with the exact request that failed
+    except (AutomoxAPIError, httpx.RequestError) as e:
         raise ValueError(
             f"Failed to retrieve policy {policy_id} from organization {resolved_org_id}. "
-            f"Request: GET /policies/{policy_id}?o={resolved_org_id}. "
             f"The policy may not exist in this organization, may have been deleted, "
-            f"or may belong to a different org/zone. Use policy_catalog to verify. "
-            f"Error: {e}"
+            f"or may belong to a different org/zone. Use policy_catalog to verify."
         ) from e
 
     policy_data = policy_response if isinstance(policy_response, Mapping) else {}

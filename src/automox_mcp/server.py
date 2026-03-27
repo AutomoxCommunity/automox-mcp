@@ -10,6 +10,7 @@ from typing import Any, cast
 
 from fastmcp import FastMCP
 
+from .auth import create_auth_provider
 from .client import AutomoxClient
 from .middleware import CorrelationMiddleware
 from .prompts import register_prompts
@@ -131,12 +132,13 @@ def _get_env(name: str) -> str | None:
 def _validate_env() -> None:
     """Validate required environment variables are present and well-formed."""
     required_vars = ["AUTOMOX_API_KEY", "AUTOMOX_ACCOUNT_UUID", "AUTOMOX_ORG_ID"]
-    missing = [var for var in required_vars if _get_env(var) is None]
+    env_values = {var: _get_env(var) for var in required_vars}
+    missing = [var for var, val in env_values.items() if val is None]
     if missing:
         raise RuntimeError(f"Missing required environment variables: {missing}")
 
     # AUTOMOX_ORG_ID must be a positive integer
-    org_id_raw = _get_env("AUTOMOX_ORG_ID")
+    org_id_raw = env_values["AUTOMOX_ORG_ID"]
     if org_id_raw is not None:
         try:
             org_id_int = int(org_id_raw)
@@ -158,6 +160,7 @@ def _load_env_file() -> None:
 
 
 def create_server() -> FastMCP:
+    """Create and configure the Automox MCP server with all tools, resources, and prompts."""
     _patch_stdio_transport()
     _load_env_file()
     _validate_env()
@@ -175,9 +178,12 @@ def create_server() -> FastMCP:
         yield
         await client.aclose()
 
+    auth = create_auth_provider()
+
     server: FastMCP = FastMCP(
         name="Automox MCP",
         lifespan=_lifespan,
+        auth=auth,
         middleware=[CorrelationMiddleware()],
         instructions=(
             "Curated Automox workflows for policy health, device insights, remediation, "

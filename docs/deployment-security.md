@@ -143,7 +143,22 @@ The gateway can inspect tool calls and responses:
 
 ### Rate Limiting
 
-The server has a built-in rate limiter (30 calls/60s), but the gateway should enforce its own per-client limits to detect runaway scripts or abuse.
+The server has a built-in rate limiter (30 calls/60s) for Automox API calls, but the gateway should enforce its own per-client limits to detect runaway scripts or abuse.
+
+**Important (S-002):** The built-in rate limiter does not cover MCP endpoint authentication attempts. The reverse proxy or gateway **must** rate-limit authentication failures to prevent brute-force attacks on static API keys. Example nginx configuration:
+
+```nginx
+limit_req_zone $binary_remote_addr zone=mcp_auth:10m rate=10r/s;
+
+server {
+    location / {
+        limit_req zone=mcp_auth burst=20 nodelay;
+        proxy_pass http://127.0.0.1:8000;
+    }
+}
+```
+
+Generated API keys use 128-bit entropy (`secrets.token_hex(16)`), making brute-force infeasible. However, operator-chosen keys configured via `AUTOMOX_MCP_API_KEYS` may have lower entropy.
 
 ### Server Allowlist
 
@@ -294,6 +309,7 @@ Each release also includes a CycloneDX SBOM (`sbom.cdx.json`) attached to the Gi
 - [ ] MCP client configured with confirmation dialogs for write operations
 - [ ] Resource quotas (CPU/RAM) set on container
 - [ ] Tool prefix configured if running alongside other MCP servers (`AUTOMOX_MCP_TOOL_PREFIX`)
+- [ ] Reverse proxy rate-limits authentication attempts (S-002)
 - [ ] `AUTOMOX_MCP_ALLOW_REMOTE_BIND` set only when non-loopback binding is intentional
 
 ## References

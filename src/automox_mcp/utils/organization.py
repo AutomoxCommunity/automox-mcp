@@ -47,6 +47,8 @@ async def resolve_org_uuid(
         uuid_text = str(explicit_uuid).strip()
         if not uuid_text:
             raise ValueError("org_uuid cannot be blank")
+        # S-004: Validate UUID format before caching to prevent malformed values
+        UUID(uuid_text)
         client.org_uuid = uuid_text
         return uuid_text
 

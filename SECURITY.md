@@ -66,13 +66,14 @@ For sensitive deployments, we recommend using an MCP gateway with inline guardra
 - Built-in Bearer-token endpoint authentication for HTTP/SSE transports via `AUTOMOX_MCP_API_KEYS` or `AUTOMOX_MCP_API_KEY_FILE` (V-108); for additional defense-in-depth, an authenticating reverse proxy or MCP gateway is recommended
 - **OAuth 2.1 / JWT authentication** for enterprise IdP integration (V-122): validate JWTs from external authorization servers (Keycloak, Auth0, Azure AD, Okta) with audience binding, issuer validation, and automatic JWKS key rotation; serves RFC 9728 Protected Resource Metadata at `/.well-known/oauth-protected-resource`
 - Tool name prefixing (`AUTOMOX_MCP_TOOL_PREFIX`) prevents cross-server collisions
-- Webhook URLs validated against private/loopback/link-local IPs and cloud metadata endpoints (Google, Azure, Oracle Cloud, generic `*.internal`) to prevent SSRF (V-103, V-114)
+- Webhook URLs validated against private/loopback/link-local IPs and cloud metadata endpoints (Google, Azure, Oracle Cloud, generic `*.internal`) to prevent SSRF (V-103, V-114). **Accepted risk (S-001):** DNS resolution is checked at validation time but the Automox backend performs its own resolution at delivery time; a DNS rebinding attack between those two points is theoretically possible. This is inherent to the split-validation architecture and mitigated by the backend's own controls
 
 ### Denial of Service
 
-- Rate limiter: 30 calls per 60 seconds
+- Rate limiter: 30 calls per 60 seconds (applies to Automox API calls, not MCP endpoint authentication)
 - Token budget estimation with auto-truncation (configurable via `AUTOMOX_MCP_TOKEN_BUDGET`)
 - Resource quotas (CPU/RAM) are the deployer's responsibility (see [Deployment Security Guide](docs/deployment-security.md))
+- **Authentication brute-force protection (S-002):** The built-in rate limiter does not cover MCP endpoint authentication attempts. Deploy a reverse proxy with request rate limiting (e.g., nginx `limit_req`, Envoy circuit breaker) to throttle failed authentication attempts. Generated keys use 128-bit entropy (`secrets.token_hex(16)`) making brute-force infeasible, but operator-chosen keys may be weaker
 
 ## Security Features Reference
 
@@ -119,12 +120,18 @@ For sensitive deployments, we recommend using an MCP gateway with inline guardra
 | V-126 | Best-effort DNS resolution check for webhook SSRF | `tools/webhook_tools.py` |
 | V-127 | Refuse world-readable API key files | `auth.py` |
 | V-128 | Literal/UUID type constraints on policy windows parameters | `tools/policy_windows_tools.py` |
+| S-001 | Documented DNS TOCTOU accepted risk in webhook SSRF validation | `tools/webhook_tools.py` |
+| S-002 | Documented auth brute-force rate limiting as deployer responsibility | `SECURITY.md`, `docs/deployment-security.md` |
+| S-003 | Documented SENSITIVE_KEYWORDS narrowing rationale | `utils/tooling.py` |
+| S-004 | UUID format validation before caching on client | `utils/organization.py` |
+| S-005 | Patch names format/length validation via Pydantic | `schemas.py` |
 
 ## Scope and Limitations
 
 This server does **not** provide:
 
 - **Authorization / RBAC** — The server operates with a single Automox API key; multi-user access control is the gateway's responsibility. MCP endpoint authentication (V-108, V-122) controls *who may connect*, not *what they may do*. OAuth scopes can be enforced via `AUTOMOX_MCP_OAUTH_SCOPES`.
+- **Authentication brute-force protection** — The server does not rate-limit authentication attempts; deploy a reverse proxy with rate limiting (S-002)
 - **TLS termination** — Use a reverse proxy (nginx, Envoy, Caddy) or MCP gateway
 - **Container isolation** — Run in a container with dropped capabilities and read-only filesystem
 - **Egress filtering** — Restrict outbound traffic to `console.automox.com:443` at the network layer

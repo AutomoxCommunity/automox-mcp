@@ -42,6 +42,11 @@ _VALID_MODULES: frozenset[str] = frozenset(
     }
 )
 
+# S-003: "key" and "auth" were intentionally removed to prevent over-redaction
+# of legitimate Automox fields like "registry_key" and "author".  This is safe
+# because _redact_sensitive_fields is only applied to error payloads already
+# filtered through _ALLOWED_ERROR_KEYS (code, detail, message, title, error),
+# so auth-related field names never appear in the redaction input.
 SENSITIVE_KEYWORDS: tuple[str, ...] = (
     "token",
     "secret",

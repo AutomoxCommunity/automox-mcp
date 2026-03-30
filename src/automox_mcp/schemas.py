@@ -478,7 +478,10 @@ class IssueDeviceCommandParams(OrgIdContextMixin, ForbidExtraModel):
         "scan", "get_os", "refresh", "patch", "patch_all", "patch_specific", "reboot"
     ] = Field(description="Command to execute on the device")
     patch_names: str | None = Field(
-        None, description="Comma-separated patch names (required for patch_specific command)"
+        None,
+        description="Comma-separated patch names (required for patch_specific command)",
+        max_length=2000,
+        pattern=r"^[a-zA-Z0-9 _.,:;()\[\]+\-/]+$",
     )
 
 

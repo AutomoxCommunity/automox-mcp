@@ -54,7 +54,7 @@ def _validate_webhook_url(url: str) -> None:
         # that resolve to private/internal IPs (V-126: SSRF defense-in-depth)
         try:
             resolved = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
-            for family, _type, _proto, _canonname, sockaddr in resolved:
+            for _family, _type, _proto, _canonname, sockaddr in resolved:
                 resolved_addr = ipaddress.ip_address(sockaddr[0])
                 if (
                     resolved_addr.is_private
@@ -62,9 +62,7 @@ def _validate_webhook_url(url: str) -> None:
                     or resolved_addr.is_link_local
                     or resolved_addr.is_reserved
                 ):
-                    raise ValueError(
-                        "Webhook URL hostname resolves to a private/internal address"
-                    )
+                    raise ValueError("Webhook URL hostname resolves to a private/internal address")
         except (socket.gaierror, OSError):
             # DNS resolution failed — allow through; Automox's backend will
             # perform its own resolution when delivering webhooks

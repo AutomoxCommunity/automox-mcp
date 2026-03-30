@@ -15,25 +15,27 @@ from ..middleware import get_correlation_id
 from ..schemas import PaginationMetadata, ToolResponse
 from .sanitize import is_sanitization_enabled, sanitize_dict, sanitize_for_llm
 
-_VALID_MODULES: frozenset[str] = frozenset({
-    "audit",
-    "audit_v2",
-    "devices",
-    "device_search",
-    "policies",
-    "policy_history",
-    "users",
-    "groups",
-    "events",
-    "reports",
-    "packages",
-    "webhooks",
-    "worklets",
-    "data_extracts",
-    "vuln_sync",
-    "compound",
-    "policy_windows",
-})
+_VALID_MODULES: frozenset[str] = frozenset(
+    {
+        "audit",
+        "audit_v2",
+        "devices",
+        "device_search",
+        "policies",
+        "policy_history",
+        "users",
+        "groups",
+        "events",
+        "reports",
+        "packages",
+        "webhooks",
+        "worklets",
+        "data_extracts",
+        "vuln_sync",
+        "compound",
+        "policy_windows",
+    }
+)
 
 SENSITIVE_KEYWORDS: tuple[str, ...] = (
     "token",

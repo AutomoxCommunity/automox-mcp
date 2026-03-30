@@ -97,9 +97,7 @@ class TestHostValidation:
         assert resp.status_code == 421
 
     def test_multiple_allowed_hosts(self):
-        client = _make_client(
-            allowed_hosts=["127.0.0.1:8000", "localhost:8000"]
-        )
+        client = _make_client(allowed_hosts=["127.0.0.1:8000", "localhost:8000"])
         assert client.get("/", headers={"host": "127.0.0.1:8000"}).status_code == 200
         assert client.get("/", headers={"host": "localhost:8000"}).status_code == 200
         assert client.get("/", headers={"host": "0.0.0.0:8000"}).status_code == 421

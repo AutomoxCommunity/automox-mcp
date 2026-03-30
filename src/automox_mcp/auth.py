@@ -40,6 +40,7 @@ logger = logging.getLogger(__name__)
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _env_str(name: str) -> str | None:
     value = os.environ.get(name)
     if value is None:
@@ -59,6 +60,7 @@ def env_list(name: str) -> list[str]:
 # ---------------------------------------------------------------------------
 # Static API key parsing
 # ---------------------------------------------------------------------------
+
 
 def _parse_key_entry(entry: str) -> tuple[str, dict[str, Any]] | None:
     """Parse a single key entry into ``(token, metadata)`` or *None*.
@@ -112,9 +114,7 @@ def _load_keys_from_file() -> dict[str, dict[str, Any]]:
 
     path = Path(path_str).resolve()
     if not path.is_file():
-        raise RuntimeError(
-            f"AUTOMOX_MCP_API_KEY_FILE points to a non-existent file: {path_str}"
-        )
+        raise RuntimeError(f"AUTOMOX_MCP_API_KEY_FILE points to a non-existent file: {path_str}")
 
     # V-127: Refuse world-readable key files; warn on group-readable
     try:
@@ -145,6 +145,7 @@ def _load_keys_from_file() -> dict[str, dict[str, Any]]:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def load_api_keys() -> dict[str, dict[str, Any]]:
     """Load MCP endpoint API keys from all configured sources.
@@ -274,8 +275,7 @@ def _create_jwt_auth() -> Any | None:
         return provider
 
     logger.info(
-        "MCP endpoint authentication enabled — mode=jwt, "
-        "issuer=%s, audience=%s",
+        "MCP endpoint authentication enabled — mode=jwt, issuer=%s, audience=%s",
         issuer,
         audience or "(from token)",
     )

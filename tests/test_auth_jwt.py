@@ -170,9 +170,7 @@ class TestAuthProviderPriority:
         self._clear_all(monkeypatch)
         monkeypatch.setenv("AUTOMOX_MCP_API_KEYS", "test-token")
         monkeypatch.setenv("AUTOMOX_MCP_OAUTH_ISSUER", "https://auth.example.com")
-        monkeypatch.setenv(
-            "AUTOMOX_MCP_OAUTH_JWKS_URI", "https://auth.example.com/jwks"
-        )
+        monkeypatch.setenv("AUTOMOX_MCP_OAUTH_JWKS_URI", "https://auth.example.com/jwks")
 
         provider = create_auth_provider()
         assert type(provider).__name__ == "StaticTokenVerifier"
@@ -180,9 +178,7 @@ class TestAuthProviderPriority:
     def test_jwt_used_when_no_static_keys(self, monkeypatch):
         self._clear_all(monkeypatch)
         monkeypatch.setenv("AUTOMOX_MCP_OAUTH_ISSUER", "https://auth.example.com")
-        monkeypatch.setenv(
-            "AUTOMOX_MCP_OAUTH_JWKS_URI", "https://auth.example.com/jwks"
-        )
+        monkeypatch.setenv("AUTOMOX_MCP_OAUTH_JWKS_URI", "https://auth.example.com/jwks")
 
         provider = create_auth_provider()
         assert type(provider).__name__ == "JWTVerifier"

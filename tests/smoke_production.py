@@ -723,9 +723,7 @@ async def run_readonly_tools() -> None:
                 worklet_id = wl_id
                 break
         if worklet_id:
-            resp = await _safe_call(
-                session, "get_worklet_detail", {"item_id": str(worklet_id)}
-            )
+            resp = await _safe_call(session, "get_worklet_detail", {"item_id": str(worklet_id)})
             record("get_worklet_detail", resp is not None, _data_keys(resp))
         else:
             record("get_worklet_detail", False, "skipped — no worklet_id from catalog")
@@ -758,9 +756,7 @@ async def run_readonly_tools() -> None:
 
         # 42. policy_history_detail (needs policy_uuid)
         if policy_uuid:
-            resp = await _safe_call(
-                session, "policy_history_detail", {"policy_uuid": policy_uuid}
-            )
+            resp = await _safe_call(session, "policy_history_detail", {"policy_uuid": policy_uuid})
             record("policy_history_detail", resp is not None, _data_keys(resp))
         else:
             record("policy_history_detail", False, "skipped — no policy_uuid")
@@ -779,9 +775,7 @@ async def run_readonly_tools() -> None:
         log.info(f"\n{BOLD}Phase 3: Audit v2 (OCSF){RESET}")
 
         # 44. audit_events_ocsf
-        resp = await _safe_call(
-            session, "audit_events_ocsf", {"date": today, "limit": 5}
-        )
+        resp = await _safe_call(session, "audit_events_ocsf", {"date": today, "limit": 5})
         record("audit_events_ocsf", resp is not None, _count_or_err(resp))
 
         log.info(f"\n{BOLD}Phase 3: Advanced Device Search{RESET}")
@@ -827,18 +821,14 @@ async def run_readonly_tools() -> None:
 
         # 51. get_policy_window (needs a window_uuid from search)
         if window_uuid:
-            resp = await _safe_call(
-                session, "get_policy_window", {"window_uuid": window_uuid}
-            )
+            resp = await _safe_call(session, "get_policy_window", {"window_uuid": window_uuid})
             record("get_policy_window", resp is not None, _data_keys(resp))
         else:
             record("get_policy_window", True, "skipped — no windows in org (OK)")
 
         # 52. check_window_active (needs a window_uuid)
         if window_uuid:
-            resp = await _safe_call(
-                session, "check_window_active", {"window_uuid": window_uuid}
-            )
+            resp = await _safe_call(session, "check_window_active", {"window_uuid": window_uuid})
             record("check_window_active", resp is not None, _data_keys(resp))
         else:
             record("check_window_active", True, "skipped — no windows in org (OK)")

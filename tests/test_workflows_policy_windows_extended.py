@@ -1,6 +1,6 @@
 """Extended edge-case tests for policy windows workflows."""
 
-from typing import Any, cast
+from typing import cast
 
 import pytest
 from conftest import StubClient

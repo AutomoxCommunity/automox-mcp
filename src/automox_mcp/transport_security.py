@@ -23,14 +23,15 @@ from __future__ import annotations
 
 import logging
 import os
+from collections.abc import MutableMapping
 from typing import Any
-
-from .auth import env_list
 
 from starlette.middleware import Middleware as ASGIMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 from starlette.types import ASGIApp, Receive, Scope, Send
+
+from .auth import env_list
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Security response headers middleware
 # ---------------------------------------------------------------------------
+
 
 class SecurityHeadersMiddleware:
     """ASGI middleware that injects security-related HTTP response headers.
@@ -59,20 +61,22 @@ class SecurityHeadersMiddleware:
             await self.app(scope, receive, send)
             return
 
-        async def send_with_headers(message: dict[str, Any]) -> None:
+        async def send_with_headers(message: MutableMapping[str, Any]) -> None:
             if message["type"] == "http.response.start":
                 headers = list(message.get("headers", []))
-                headers.extend([
-                    (b"x-content-type-options", b"nosniff"),
-                    (b"x-frame-options", b"DENY"),
-                    (b"cache-control", b"no-store"),
-                    (b"referrer-policy", b"strict-origin-when-cross-origin"),
-                    (b"permissions-policy", b"microphone=(), camera=(), geolocation=()"),
-                    (
-                        b"content-security-policy",
-                        b"default-src 'none'; frame-ancestors 'none'",
-                    ),
-                ])
+                headers.extend(
+                    [
+                        (b"x-content-type-options", b"nosniff"),
+                        (b"x-frame-options", b"DENY"),
+                        (b"cache-control", b"no-store"),
+                        (b"referrer-policy", b"strict-origin-when-cross-origin"),
+                        (b"permissions-policy", b"microphone=(), camera=(), geolocation=()"),
+                        (
+                            b"content-security-policy",
+                            b"default-src 'none'; frame-ancestors 'none'",
+                        ),
+                    ]
+                )
                 message = {**message, "headers": headers}
             await send(message)
 
@@ -82,6 +86,7 @@ class SecurityHeadersMiddleware:
 # ---------------------------------------------------------------------------
 # DNS rebinding protection middleware
 # ---------------------------------------------------------------------------
+
 
 class DNSRebindingProtectionMiddleware:
     """ASGI middleware that validates Host and Origin headers.

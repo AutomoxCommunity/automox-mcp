@@ -103,8 +103,7 @@ def test_valid_modules_includes_new_modules() -> None:
         os.environ,
         {
             "AUTOMOX_MCP_MODULES": (
-                "worklets,data_extracts,vuln_sync,"
-                "audit_v2,device_search,policy_history"
+                "worklets,data_extracts,vuln_sync,audit_v2,device_search,policy_history"
             )
         },
     ):

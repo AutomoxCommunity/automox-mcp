@@ -4,15 +4,13 @@ from __future__ import annotations
 
 import logging
 import os
-from collections.abc import Awaitable, Callable
 from typing import Any, Literal
 
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
-from pydantic import BaseModel, ValidationError
 
 from .. import workflows
-from ..client import AutomoxAPIError, AutomoxClient
+from ..client import AutomoxClient
 from ..schemas import (
     InviteUserParams,
     ListOrgApiKeysParams,
@@ -20,12 +18,8 @@ from ..schemas import (
     ZoneAssignment,
 )
 from ..utils.tooling import (
-    RateLimitError,
-    as_tool_response,
+    call_tool_workflow,
     check_idempotency,
-    enforce_rate_limit,
-    format_error,
-    format_validation_error,
     maybe_format_markdown,
     store_idempotency,
 )
@@ -35,32 +29,6 @@ logger = logging.getLogger(__name__)
 
 def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient) -> None:
     """Register account-related tools."""
-
-    async def _call(
-        func: Callable[..., Awaitable[dict[str, Any]]],
-        params_model: type[BaseModel] | None,
-        raw_params: dict[str, Any],
-    ) -> dict[str, Any]:
-        try:
-            await enforce_rate_limit()
-            params = dict(raw_params)
-            payload = params
-            if params_model is not None:
-                model = params_model(**params)
-                payload = model.model_dump(mode="python", exclude_none=True)
-            result: dict[str, Any] = await func(client, **payload)
-        except (ValidationError, ValueError) as exc:
-            raise ToolError(format_validation_error(exc)) from exc
-        except RateLimitError as exc:
-            raise ToolError(str(exc)) from exc
-        except AutomoxAPIError as exc:
-            raise ToolError(format_error(exc)) from exc
-        except ToolError:
-            raise
-        except Exception as exc:
-            logger.exception("Unexpected error in tool call")
-            raise ToolError("An internal error occurred. Check server logs for details.") from exc
-        return as_tool_response(result)
 
     def _resolve_account_id(explicit: str | None = None) -> str:
         if explicit:
@@ -96,10 +64,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "account_rbac_role": account_rbac_role,
                 "zone_assignments": zone_assignments,
             }
-            result = await _call(
+            result = await call_tool_workflow(
+                client,
                 workflows.invite_user_to_account,
-                InviteUserParams,
                 params,
+                params_model=InviteUserParams,
             )
             await store_idempotency(request_id, "invite_user_to_account", result)
             return result
@@ -121,10 +90,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "account_id": _resolve_account_id(None),
                 "user_id": user_id,
             }
-            result = await _call(
+            result = await call_tool_workflow(
+                client,
                 workflows.remove_user_from_account,
-                RemoveUserFromAccountParams,
                 params,
+                params_model=RemoveUserFromAccountParams,
             )
             await store_idempotency(request_id, "remove_user_from_account", result)
             return result
@@ -142,10 +112,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         org_id = client.org_id
         if org_id is None:
             raise ToolError("org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly.")
-        result = await _call(
+        result = await call_tool_workflow(
+            client,
             workflows.list_org_api_keys,
-            ListOrgApiKeysParams,
             {"org_id": org_id},
+            params_model=ListOrgApiKeysParams,
         )
         return maybe_format_markdown(result, output_format)
 

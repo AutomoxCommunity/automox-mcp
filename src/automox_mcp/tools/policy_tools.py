@@ -3,22 +3,17 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable, Callable
 from typing import Any
 
 from fastmcp import FastMCP
-from fastmcp.exceptions import ToolError
-from pydantic import BaseModel, ValidationError
 
 from .. import workflows
-from ..client import AutomoxAPIError, AutomoxClient
+from ..client import AutomoxClient
 from ..schemas import (
     ClonePolicyParams,
     DeletePolicyToolParams,
     ExecutePolicyParams,
     GetPolicyStatsParams,
-    OrgIdContextMixin,
-    OrgIdRequiredMixin,
     PatchApprovalDecisionParams,
     PatchApprovalSummaryParams,
     PolicyChangeRequestParams,
@@ -28,14 +23,9 @@ from ..schemas import (
     PolicySummaryParams,
     RunDetailParams,
 )
-from ..utils import resolve_org_uuid
 from ..utils.tooling import (
-    RateLimitError,
-    as_tool_response,
+    call_tool_workflow,
     check_idempotency,
-    enforce_rate_limit,
-    format_error,
-    format_validation_error,
     maybe_format_markdown,
     store_idempotency,
 )
@@ -45,50 +35,6 @@ logger = logging.getLogger(__name__)
 
 def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient) -> None:
     """Register policy-related tools."""
-
-    async def _call(
-        func: Callable[..., Awaitable[dict[str, Any]]],
-        params_model: type[BaseModel],
-        raw_params: dict[str, Any],
-        org_uuid_field: str | None = None,
-        allow_account_uuid: bool = False,
-    ) -> dict[str, Any]:
-        try:
-            await enforce_rate_limit()
-            client_org_id = client.org_id
-            params = dict(raw_params)
-            if org_uuid_field is not None:
-                raw_org_id = params.get("org_id")
-                resolved_uuid = await resolve_org_uuid(
-                    client,
-                    explicit_uuid=params.get(org_uuid_field),
-                    org_id=raw_org_id if raw_org_id is not None else client_org_id,
-                    allow_account_uuid=allow_account_uuid,
-                )
-                params[org_uuid_field] = resolved_uuid
-            if issubclass(params_model, (OrgIdContextMixin, OrgIdRequiredMixin)):
-                params.setdefault("org_id", client_org_id)
-                if params.get("org_id") is None:
-                    raise ToolError(
-                        "org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly."
-                    )
-            model = params_model(**params)
-            payload = model.model_dump(mode="python", exclude_none=True)
-            if isinstance(model, (OrgIdContextMixin, OrgIdRequiredMixin)):
-                payload["org_id"] = model.org_id
-            result: dict[str, Any] = await func(client, **payload)
-        except (ValidationError, ValueError) as exc:
-            raise ToolError(format_validation_error(exc)) from exc
-        except RateLimitError as exc:
-            raise ToolError(str(exc)) from exc
-        except AutomoxAPIError as exc:
-            raise ToolError(format_error(exc)) from exc
-        except ToolError:
-            raise
-        except Exception as exc:
-            logger.exception("Unexpected error in tool call")
-            raise ToolError("An internal error occurred. Check server logs for details.") from exc
-        return as_tool_response(result)
 
     @server.tool(
         name="policy_health_overview", description="Summarize recent Automox policy activity."
@@ -105,10 +51,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "top_failures": top_failures,
             "max_runs": max_runs,
         }
-        return await _call(
+        return await call_tool_workflow(
+            client,
             workflows.summarize_policy_activity,
-            PolicyHealthSummaryParams,
             params,
+            params_model=PolicyHealthSummaryParams,
             org_uuid_field="org_uuid",
             allow_account_uuid=True,
         )
@@ -128,10 +75,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "report_days": report_days,
             "limit": limit,
         }
-        return await _call(
+        return await call_tool_workflow(
+            client,
             workflows.summarize_policy_execution_history,
-            PolicyExecutionTimelineParams,
             params,
+            params_model=PolicyExecutionTimelineParams,
             org_uuid_field="org_uuid",
             allow_account_uuid=True,
         )
@@ -162,10 +110,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "limit": limit,
             "max_output_length": max_output_length,
         }
-        return await _call(
+        return await call_tool_workflow(
+            client,
             workflows.describe_policy_run_result,
-            RunDetailParams,
             params,
+            params_model=RunDetailParams,
             org_uuid_field="org_uuid",
             allow_account_uuid=True,
         )
@@ -184,10 +133,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "page": page,
             "include_inactive": include_inactive,
         }
-        result = await _call(
+        result = await call_tool_workflow(
+            client,
             workflows.summarize_policies,
-            PolicySummaryParams,
             params,
+            params_model=PolicySummaryParams,
         )
 
         return maybe_format_markdown(result, output_format)
@@ -203,10 +153,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "policy_id": policy_id,
             "include_recent_runs": include_recent_runs,
         }
-        return await _call(
+        return await call_tool_workflow(
+            client,
             workflows.describe_policy,
-            PolicyDetailParams,
             params,
+            params_model=PolicyDetailParams,
         )
 
     @server.tool(
@@ -217,10 +168,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         ),
     )
     async def policy_compliance_stats() -> dict[str, Any]:
-        return await _call(
+        return await call_tool_workflow(
+            client,
             workflows.get_policy_compliance_stats,
-            GetPolicyStatsParams,
             {},
+            params_model=GetPolicyStatsParams,
         )
 
     @server.tool(
@@ -236,10 +188,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "status": status,
             "limit": limit,
         }
-        result = await _call(
+        result = await call_tool_workflow(
+            client,
             workflows.summarize_patch_approvals,
-            PatchApprovalSummaryParams,
             params,
+            params_model=PatchApprovalSummaryParams,
         )
 
         return maybe_format_markdown(result, output_format)
@@ -266,10 +219,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "decision": decision,
                 "notes": notes,
             }
-            result = await _call(
+            result = await call_tool_workflow(
+                client,
                 workflows.resolve_patch_approval,
-                PatchApprovalDecisionParams,
                 params,
+                params_model=PatchApprovalDecisionParams,
             )
             await store_idempotency(request_id, "decide_patch_approval", result)
             return result
@@ -288,10 +242,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 return cached
 
             params = {"policy_id": policy_id}
-            result = await _call(
+            result = await call_tool_workflow(
+                client,
                 workflows.delete_policy,
-                DeletePolicyToolParams,
                 params,
+                params_model=DeletePolicyToolParams,
             )
             await store_idempotency(request_id, "delete_policy", result)
             return result
@@ -319,10 +274,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 params["name"] = name
             if server_groups is not None:
                 params["server_groups"] = server_groups
-            result = await _call(
+            result = await call_tool_workflow(
+                client,
                 workflows.clone_policy,
-                ClonePolicyParams,
                 params,
+                params_model=ClonePolicyParams,
             )
             await store_idempotency(request_id, "clone_policy", result)
             return result
@@ -346,10 +302,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "operations": normalized_operations,
                 "preview": preview,
             }
-            result = await _call(
+            result = await call_tool_workflow(
+                client,
                 workflows.apply_policy_changes,
-                PolicyChangeRequestParams,
                 params,
+                params_model=PolicyChangeRequestParams,
             )
             await store_idempotency(request_id, "apply_policy_changes", result)
             return result
@@ -377,10 +334,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "action": action,
                 "device_id": device_id,
             }
-            result = await _call(
+            result = await call_tool_workflow(
+                client,
                 workflows.execute_policy,
-                ExecutePolicyParams,
                 params,
+                params_model=ExecutePolicyParams,
             )
             await store_idempotency(request_id, "execute_policy_now", result)
             return result

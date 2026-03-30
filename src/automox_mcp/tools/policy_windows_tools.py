@@ -3,25 +3,18 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable, Callable
 from typing import Any, Literal
 from uuid import UUID
 
 from fastmcp import FastMCP
-from fastmcp.exceptions import ToolError
-from pydantic import BaseModel, Field, ValidationError, field_validator
+from pydantic import Field, field_validator
 
 from .. import workflows
-from ..client import AutomoxAPIError, AutomoxClient
+from ..client import AutomoxClient
 from ..schemas import ForbidExtraModel
-from ..utils import resolve_org_uuid
 from ..utils.tooling import (
-    RateLimitError,
-    as_tool_response,
+    call_tool_workflow,
     check_idempotency,
-    enforce_rate_limit,
-    format_error,
-    format_validation_error,
     maybe_format_markdown,
     store_idempotency,
 )
@@ -134,44 +127,6 @@ logger = logging.getLogger(__name__)
 def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient) -> None:
     """Register policy windows (maintenance windows) tools."""
 
-    async def _call(
-        func: Callable[..., Awaitable[dict[str, Any]]],
-        params_model: type[BaseModel] | None,
-        raw_params: dict[str, Any],
-        org_uuid_field: str | None = None,
-    ) -> dict[str, Any]:
-        try:
-            await enforce_rate_limit()
-            client_org_id = client.org_id
-            params = dict(raw_params)
-            if org_uuid_field is not None:
-                raw_org_id = params.get("org_id")
-                resolved_uuid = await resolve_org_uuid(
-                    client,
-                    explicit_uuid=params.get(org_uuid_field),
-                    org_id=raw_org_id if raw_org_id is not None else client_org_id,
-                    allow_account_uuid=True,
-                )
-                params[org_uuid_field] = resolved_uuid
-            if params_model is not None:
-                model = params_model(**params)
-                payload = model.model_dump(mode="json", exclude_none=True)
-            else:
-                payload = {k: v for k, v in params.items() if v is not None}
-            result: dict[str, Any] = await func(client, **payload)
-        except (ValidationError, ValueError) as exc:
-            raise ToolError(format_validation_error(exc)) from exc
-        except RateLimitError as exc:
-            raise ToolError(str(exc)) from exc
-        except AutomoxAPIError as exc:
-            raise ToolError(format_error(exc)) from exc
-        except ToolError:
-            raise
-        except Exception as exc:
-            logger.exception("Unexpected error in tool call")
-            raise ToolError("An internal error occurred. Check server logs for details.") from exc
-        return as_tool_response(result)
-
     # ------ Read-only tools (always registered) ------
 
     @server.tool(
@@ -203,11 +158,13 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "sort": sort,
             "direction": direction,
         }
-        result = await _call(
+        result = await call_tool_workflow(
+            client,
             workflows.search_policy_windows,
-            SearchPolicyWindowsParams,
             params,
+            params_model=SearchPolicyWindowsParams,
             org_uuid_field="org_uuid",
+            dump_mode="json",
         )
         return maybe_format_markdown(result, output_format)
 
@@ -223,11 +180,13 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "org_uuid": org_uuid,
             "window_uuid": window_uuid,
         }
-        return await _call(
+        return await call_tool_workflow(
+            client,
             workflows.get_policy_window,
-            GetPolicyWindowParams,
             params,
+            params_model=GetPolicyWindowParams,
             org_uuid_field="org_uuid",
+            dump_mode="json",
         )
 
     @server.tool(
@@ -245,11 +204,13 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "org_uuid": org_uuid,
             "group_uuids": group_uuids,
         }
-        return await _call(
+        return await call_tool_workflow(
+            client,
             workflows.check_group_exclusion_status,
-            CheckGroupExclusionStatusParams,
             params,
+            params_model=CheckGroupExclusionStatusParams,
             org_uuid_field="org_uuid",
+            dump_mode="json",
         )
 
     @server.tool(
@@ -268,11 +229,13 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "org_uuid": org_uuid,
             "window_uuid": window_uuid,
         }
-        return await _call(
+        return await call_tool_workflow(
+            client,
             workflows.check_window_active,
-            CheckWindowActiveParams,
             params,
+            params_model=CheckWindowActiveParams,
             org_uuid_field="org_uuid",
+            dump_mode="json",
         )
 
     @server.tool(
@@ -293,11 +256,13 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "group_uuid": group_uuid,
             "date": date,
         }
-        return await _call(
+        return await call_tool_workflow(
+            client,
             workflows.get_group_scheduled_windows,
-            GetGroupScheduledWindowsParams,
             params,
+            params_model=GetGroupScheduledWindowsParams,
             org_uuid_field="org_uuid",
+            dump_mode="json",
         )
 
     @server.tool(
@@ -318,11 +283,13 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "device_uuid": device_uuid,
             "date": date,
         }
-        return await _call(
+        return await call_tool_workflow(
+            client,
             workflows.get_device_scheduled_windows,
-            GetDeviceScheduledWindowsParams,
             params,
+            params_model=GetDeviceScheduledWindowsParams,
             org_uuid_field="org_uuid",
+            dump_mode="json",
         )
 
     # ------ Write tools (gated by read_only) ------
@@ -369,11 +336,13 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "dtstart": dtstart,
                 "status": status,
             }
-            result = await _call(
+            result = await call_tool_workflow(
+                client,
                 workflows.create_policy_window,
-                CreatePolicyWindowParams,
                 params,
+                params_model=CreatePolicyWindowParams,
                 org_uuid_field="org_uuid",
+                dump_mode="json",
             )
             await store_idempotency(request_id, "create_policy_window", result)
             return result
@@ -419,11 +388,13 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "group_uuids": group_uuids,
                 "status": status,
             }
-            result = await _call(
+            result = await call_tool_workflow(
+                client,
                 workflows.update_policy_window,
-                UpdatePolicyWindowParams,
                 params,
+                params_model=UpdatePolicyWindowParams,
                 org_uuid_field="org_uuid",
+                dump_mode="json",
             )
             await store_idempotency(request_id, "update_policy_window", result)
             return result
@@ -446,11 +417,13 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "org_uuid": org_uuid,
                 "window_uuid": window_uuid,
             }
-            result = await _call(
+            result = await call_tool_workflow(
+                client,
                 workflows.delete_policy_window,
-                DeletePolicyWindowParams,
                 params,
+                params_model=DeletePolicyWindowParams,
                 org_uuid_field="org_uuid",
+                dump_mode="json",
             )
             await store_idempotency(request_id, "delete_policy_window", result)
             return result

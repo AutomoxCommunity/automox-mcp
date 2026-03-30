@@ -3,31 +3,22 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable, Callable
 from typing import Any
 
 from fastmcp import FastMCP
-from fastmcp.exceptions import ToolError
-from pydantic import BaseModel, ValidationError
 
-from ..client import AutomoxAPIError, AutomoxClient
+from ..client import AutomoxClient
 from ..schemas import (
     GetActionSetIssuesParams,
     GetActionSetParams,
     GetActionSetSolutionsParams,
     GetActionSetUploadFormatsParams,
     ListActionSetsParams,
-    OrgIdContextMixin,
-    OrgIdRequiredMixin,
     UploadActionSetParams,
 )
 from ..utils.tooling import (
-    RateLimitError,
-    as_tool_response,
+    call_tool_workflow,
     check_idempotency,
-    enforce_rate_limit,
-    format_error,
-    format_validation_error,
     maybe_format_markdown,
     store_idempotency,
 )
@@ -59,39 +50,6 @@ logger = logging.getLogger(__name__)
 def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient) -> None:
     """Register vulnerability sync / remediations tools."""
 
-    async def _call(
-        func: Callable[..., Awaitable[dict[str, Any]]],
-        params_model: type[BaseModel],
-        raw_params: dict[str, Any],
-    ) -> dict[str, Any]:
-        try:
-            await enforce_rate_limit()
-            client_org_id = client.org_id
-            params = dict(raw_params)
-            if issubclass(params_model, (OrgIdContextMixin, OrgIdRequiredMixin)):
-                params.setdefault("org_id", client_org_id)
-                if params.get("org_id") is None:
-                    raise ToolError(
-                        "org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly."
-                    )
-            model = params_model(**params)
-            payload = model.model_dump(mode="python", exclude_none=True)
-            if isinstance(model, (OrgIdContextMixin, OrgIdRequiredMixin)):
-                payload["org_id"] = model.org_id
-            result: dict[str, Any] = await func(client, **payload)
-        except (ValidationError, ValueError) as exc:
-            raise ToolError(format_validation_error(exc)) from exc
-        except RateLimitError as exc:
-            raise ToolError(str(exc)) from exc
-        except AutomoxAPIError as exc:
-            raise ToolError(format_error(exc)) from exc
-        except ToolError:
-            raise
-        except Exception as exc:
-            logger.exception("Unexpected error in tool call")
-            raise ToolError("An internal error occurred. Check server logs for details.") from exc
-        return as_tool_response(result)
-
     @server.tool(
         name="list_remediation_action_sets",
         description=(
@@ -102,10 +60,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     async def list_remediation_action_sets(
         output_format: str | None = "json",
     ) -> dict[str, Any]:
-        result = await _call(
+        result = await call_tool_workflow(
+            client,
             _list_remediation_action_sets,
-            ListActionSetsParams,
             {},
+            params_model=ListActionSetsParams,
         )
         return maybe_format_markdown(result, output_format)
 
@@ -117,10 +76,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         action_set_id: int,
         output_format: str | None = "json",
     ) -> dict[str, Any]:
-        result = await _call(
+        result = await call_tool_workflow(
+            client,
             _get_action_set_detail,
-            GetActionSetParams,
             {"action_set_id": action_set_id},
+            params_model=GetActionSetParams,
         )
         return maybe_format_markdown(result, output_format)
 
@@ -135,10 +95,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         action_set_id: int,
         output_format: str | None = "json",
     ) -> dict[str, Any]:
-        result = await _call(
+        result = await call_tool_workflow(
+            client,
             _get_action_set_actions,
-            GetActionSetParams,
             {"action_set_id": action_set_id},
+            params_model=GetActionSetParams,
         )
         return maybe_format_markdown(result, output_format)
 
@@ -153,10 +114,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         action_set_id: int,
         output_format: str | None = "json",
     ) -> dict[str, Any]:
-        result = await _call(
+        result = await call_tool_workflow(
+            client,
             _get_action_set_issues,
-            GetActionSetIssuesParams,
             {"action_set_id": action_set_id},
+            params_model=GetActionSetIssuesParams,
         )
         return maybe_format_markdown(result, output_format)
 
@@ -171,10 +133,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         action_set_id: int,
         output_format: str | None = "json",
     ) -> dict[str, Any]:
-        result = await _call(
+        result = await call_tool_workflow(
+            client,
             _get_action_set_solutions,
-            GetActionSetSolutionsParams,
             {"action_set_id": action_set_id},
+            params_model=GetActionSetSolutionsParams,
         )
         return maybe_format_markdown(result, output_format)
 
@@ -185,10 +148,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     async def get_upload_formats(
         output_format: str | None = "json",
     ) -> dict[str, Any]:
-        result = await _call(
+        result = await call_tool_workflow(
+            client,
             _get_upload_formats,
-            GetActionSetUploadFormatsParams,
             {},
+            params_model=GetActionSetUploadFormatsParams,
         )
         return maybe_format_markdown(result, output_format)
 
@@ -208,10 +172,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             cached = await check_idempotency(request_id, "upload_action_set")
             if cached is not None:
                 return cached
-            result = await _call(
+            result = await call_tool_workflow(
+                client,
                 _upload_action_set,
-                UploadActionSetParams,
                 {"action_set_data": action_set_data},
+                params_model=UploadActionSetParams,
             )
             await store_idempotency(request_id, "upload_action_set", result)
             return result

@@ -3,15 +3,12 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable, Callable
 from typing import Any, Literal
 
 from fastmcp import FastMCP
-from fastmcp.exceptions import ToolError
-from pydantic import BaseModel, ValidationError
 
 from .. import workflows
-from ..client import AutomoxAPIError, AutomoxClient
+from ..client import AutomoxClient
 from ..schemas import (
     DeviceDetailParams,
     DeviceHealthSummaryParams,
@@ -21,16 +18,10 @@ from ..schemas import (
     DeviceSearchParams,
     DevicesNeedingAttentionParams,
     IssueDeviceCommandParams,
-    OrgIdContextMixin,
-    OrgIdRequiredMixin,
 )
 from ..utils.tooling import (
-    RateLimitError,
-    as_tool_response,
+    call_tool_workflow,
     check_idempotency,
-    enforce_rate_limit,
-    format_error,
-    format_validation_error,
     maybe_format_markdown,
     store_idempotency,
 )
@@ -40,39 +31,6 @@ logger = logging.getLogger(__name__)
 
 def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient) -> None:
     """Register device-related tools."""
-
-    async def _call(
-        func: Callable[..., Awaitable[dict[str, Any]]],
-        params_model: type[BaseModel],
-        raw_params: dict[str, Any],
-    ) -> dict[str, Any]:
-        try:
-            await enforce_rate_limit()
-            client_org_id = client.org_id
-            params = dict(raw_params)
-            if issubclass(params_model, (OrgIdContextMixin, OrgIdRequiredMixin)):
-                params.setdefault("org_id", client_org_id)
-                if params.get("org_id") is None:
-                    raise ToolError(
-                        "org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly."
-                    )
-            model = params_model(**params)
-            payload = model.model_dump(mode="python", exclude_none=True)
-            if isinstance(model, (OrgIdContextMixin, OrgIdRequiredMixin)):
-                payload["org_id"] = model.org_id
-            result: dict[str, Any] = await func(client, **payload)
-        except (ValidationError, ValueError) as exc:
-            raise ToolError(format_validation_error(exc)) from exc
-        except RateLimitError as exc:
-            raise ToolError(str(exc)) from exc
-        except AutomoxAPIError as exc:
-            raise ToolError(format_error(exc)) from exc
-        except ToolError:
-            raise
-        except Exception as exc:
-            logger.exception("Unexpected error in tool call")
-            raise ToolError("An internal error occurred. Check server logs for details.") from exc
-        return as_tool_response(result)
 
     @server.tool(
         name="list_devices",
@@ -98,10 +56,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "policy_status": policy_status,
             "managed": managed,
         }
-        result = await _call(
+        result = await call_tool_workflow(
+            client,
             workflows.list_device_inventory,
-            DeviceInventoryOverviewParams,
             params,
+            params_model=DeviceInventoryOverviewParams,
         )
 
         return maybe_format_markdown(result, output_format)
@@ -124,7 +83,9 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "include_queue": include_queue,
             "include_raw_details": include_raw_details,
         }
-        return await _call(workflows.describe_device, DeviceDetailParams, params)
+        return await call_tool_workflow(
+            client, workflows.describe_device, params, params_model=DeviceDetailParams
+        )
 
     @server.tool(
         name="devices_needing_attention",
@@ -139,10 +100,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "group_id": group_id,
             "limit": limit,
         }
-        result = await _call(
+        result = await call_tool_workflow(
+            client,
             workflows.list_devices_needing_attention,
-            DevicesNeedingAttentionParams,
             params,
+            params_model=DevicesNeedingAttentionParams,
         )
 
         return maybe_format_markdown(result, output_format)
@@ -175,10 +137,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "group_id": group_id,
             "limit": limit,
         }
-        result = await _call(
+        result = await call_tool_workflow(
+            client,
             workflows.search_devices,
-            DeviceSearchParams,
             params,
+            params_model=DeviceSearchParams,
         )
 
         return maybe_format_markdown(result, output_format)
@@ -203,10 +166,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "limit": limit,
             "max_stale_devices": max_stale_devices,
         }
-        return await _call(
+        return await call_tool_workflow(
+            client,
             workflows.summarize_device_health,
-            DeviceHealthSummaryParams,
             params,
+            params_model=DeviceHealthSummaryParams,
         )
 
     @server.tool(
@@ -224,10 +188,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         params: dict[str, Any] = {"device_id": device_id}
         if category is not None:
             params["category"] = category
-        return await _call(
+        return await call_tool_workflow(
+            client,
             workflows.get_device_inventory,
-            DeviceInventoryParams,
             params,
+            params_model=DeviceInventoryParams,
         )
 
     @server.tool(
@@ -242,10 +207,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         device_id: int,
     ) -> dict[str, Any]:
         params = {"device_id": device_id}
-        return await _call(
+        return await call_tool_workflow(
+            client,
             workflows.get_device_inventory_categories,
-            DeviceIdOnlyParams,
             params,
+            params_model=DeviceIdOnlyParams,
         )
 
     if not read_only:
@@ -270,10 +236,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "command_type": command_type,
                 "patch_names": patch_names,
             }
-            result = await _call(
+            result = await call_tool_workflow(
+                client,
                 workflows.issue_device_command,
-                IssueDeviceCommandParams,
                 params,
+                params_model=IssueDeviceCommandParams,
             )
             await store_idempotency(request_id, "execute_device_command", result)
             return result

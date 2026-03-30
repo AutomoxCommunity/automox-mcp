@@ -3,31 +3,22 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable, Callable
 from typing import Any
 
 from fastmcp import FastMCP
-from fastmcp.exceptions import ToolError
-from pydantic import BaseModel, ValidationError
 
 from .. import workflows
-from ..client import AutomoxAPIError, AutomoxClient
+from ..client import AutomoxClient
 from ..schemas import (
     CreateServerGroupParams,
     DeleteServerGroupParams,
     GetServerGroupParams,
     ListServerGroupsParams,
-    OrgIdContextMixin,
-    OrgIdRequiredMixin,
     UpdateServerGroupParams,
 )
 from ..utils.tooling import (
-    RateLimitError,
-    as_tool_response,
+    call_tool_workflow,
     check_idempotency,
-    enforce_rate_limit,
-    format_error,
-    format_validation_error,
     maybe_format_markdown,
     store_idempotency,
 )
@@ -37,47 +28,6 @@ logger = logging.getLogger(__name__)
 
 def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient) -> None:
     """Register server group management tools."""
-
-    async def _call(
-        func: Callable[..., Awaitable[dict[str, Any]]],
-        params_model: type[BaseModel],
-        raw_params: dict[str, Any],
-        *,
-        inject_org_id: bool = False,
-    ) -> dict[str, Any]:
-        try:
-            await enforce_rate_limit()
-            client_org_id = client.org_id
-            params = dict(raw_params)
-            if issubclass(params_model, (OrgIdContextMixin, OrgIdRequiredMixin)):
-                params.setdefault("org_id", client_org_id)
-                if params.get("org_id") is None:
-                    raise ToolError(
-                        "org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly."
-                    )
-            model = params_model(**params)
-            payload = model.model_dump(mode="python", exclude_none=True)
-            if isinstance(model, (OrgIdContextMixin, OrgIdRequiredMixin)):
-                payload["org_id"] = model.org_id
-            elif inject_org_id:
-                if client_org_id is None:
-                    raise ToolError(
-                        "org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly."
-                    )
-                payload["org_id"] = client_org_id
-            result: dict[str, Any] = await func(client, **payload)
-        except (ValidationError, ValueError) as exc:
-            raise ToolError(format_validation_error(exc)) from exc
-        except RateLimitError as exc:
-            raise ToolError(str(exc)) from exc
-        except AutomoxAPIError as exc:
-            raise ToolError(format_error(exc)) from exc
-        except ToolError:
-            raise
-        except Exception as exc:
-            logger.exception("Unexpected error in tool call")
-            raise ToolError("An internal error occurred. Check server logs for details.") from exc
-        return as_tool_response(result)
 
     @server.tool(
         name="list_server_groups",
@@ -94,10 +44,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "page": page,
             "limit": limit,
         }
-        result = await _call(
+        result = await call_tool_workflow(
+            client,
             workflows.list_server_groups,
-            ListServerGroupsParams,
             params,
+            params_model=ListServerGroupsParams,
             inject_org_id=True,
         )
 
@@ -113,10 +64,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         params = {
             "group_id": group_id,
         }
-        return await _call(
+        return await call_tool_workflow(
+            client,
             workflows.get_server_group,
-            GetServerGroupParams,
             params,
+            params_model=GetServerGroupParams,
             inject_org_id=True,
         )
 
@@ -148,10 +100,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "notes": notes,
                 "policies": policies,
             }
-            result = await _call(
+            result = await call_tool_workflow(
+                client,
                 workflows.create_server_group,
-                CreateServerGroupParams,
                 params,
+                params_model=CreateServerGroupParams,
                 inject_org_id=True,
             )
             await store_idempotency(request_id, "create_server_group", result)
@@ -185,10 +138,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "notes": notes,
                 "policies": policies,
             }
-            result = await _call(
+            result = await call_tool_workflow(
+                client,
                 workflows.update_server_group,
-                UpdateServerGroupParams,
                 params,
+                params_model=UpdateServerGroupParams,
                 inject_org_id=True,
             )
             await store_idempotency(request_id, "update_server_group", result)
@@ -210,10 +164,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             params = {
                 "group_id": group_id,
             }
-            result = await _call(
+            result = await call_tool_workflow(
+                client,
                 workflows.delete_server_group,
-                DeleteServerGroupParams,
                 params,
+                params_model=DeleteServerGroupParams,
             )
             await store_idempotency(request_id, "delete_server_group", result)
             return result

@@ -3,28 +3,19 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable, Callable
 from typing import Any
 
 from fastmcp import FastMCP
-from fastmcp.exceptions import ToolError
-from pydantic import BaseModel, ValidationError
 
-from ..client import AutomoxAPIError, AutomoxClient
+from ..client import AutomoxClient
 from ..schemas import (
     CreateDataExtractParams,
     GetDataExtractParams,
     ListDataExtractsParams,
-    OrgIdContextMixin,
-    OrgIdRequiredMixin,
 )
 from ..utils.tooling import (
-    RateLimitError,
-    as_tool_response,
+    call_tool_workflow,
     check_idempotency,
-    enforce_rate_limit,
-    format_error,
-    format_validation_error,
     maybe_format_markdown,
     store_idempotency,
 )
@@ -44,39 +35,6 @@ logger = logging.getLogger(__name__)
 def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient) -> None:
     """Register data extract tools."""
 
-    async def _call(
-        func: Callable[..., Awaitable[dict[str, Any]]],
-        params_model: type[BaseModel],
-        raw_params: dict[str, Any],
-    ) -> dict[str, Any]:
-        try:
-            await enforce_rate_limit()
-            client_org_id = client.org_id
-            params = dict(raw_params)
-            if issubclass(params_model, (OrgIdContextMixin, OrgIdRequiredMixin)):
-                params.setdefault("org_id", client_org_id)
-                if params.get("org_id") is None:
-                    raise ToolError(
-                        "org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly."
-                    )
-            model = params_model(**params)
-            payload = model.model_dump(mode="python", exclude_none=True)
-            if isinstance(model, (OrgIdContextMixin, OrgIdRequiredMixin)):
-                payload["org_id"] = model.org_id
-            result: dict[str, Any] = await func(client, **payload)
-        except (ValidationError, ValueError) as exc:
-            raise ToolError(format_validation_error(exc)) from exc
-        except RateLimitError as exc:
-            raise ToolError(str(exc)) from exc
-        except AutomoxAPIError as exc:
-            raise ToolError(format_error(exc)) from exc
-        except ToolError:
-            raise
-        except Exception as exc:
-            logger.exception("Unexpected error in tool call")
-            raise ToolError("An internal error occurred. Check server logs for details.") from exc
-        return as_tool_response(result)
-
     @server.tool(
         name="list_data_extracts",
         description=(
@@ -87,10 +45,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     async def list_data_extracts(
         output_format: str | None = "json",
     ) -> dict[str, Any]:
-        result = await _call(
+        result = await call_tool_workflow(
+            client,
             _list_data_extracts,
-            ListDataExtractsParams,
             {},
+            params_model=ListDataExtractsParams,
         )
         return maybe_format_markdown(result, output_format)
 
@@ -102,10 +61,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         extract_id: str,
         output_format: str | None = "json",
     ) -> dict[str, Any]:
-        result = await _call(
+        result = await call_tool_workflow(
+            client,
             _get_data_extract,
-            GetDataExtractParams,
             {"extract_id": extract_id},
+            params_model=GetDataExtractParams,
         )
         return maybe_format_markdown(result, output_format)
 
@@ -125,10 +85,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             cached = await check_idempotency(request_id, "create_data_extract")
             if cached is not None:
                 return cached
-            result = await _call(
+            result = await call_tool_workflow(
+                client,
                 _create_data_extract,
-                CreateDataExtractParams,
                 {"extract_data": extract_data},
+                params_model=CreateDataExtractParams,
             )
             await store_idempotency(request_id, "create_data_extract", result)
             return result

@@ -3,27 +3,18 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable, Callable
 from typing import Any
 
 from fastmcp import FastMCP
-from fastmcp.exceptions import ToolError
-from pydantic import BaseModel, ValidationError
 
 from .. import workflows
-from ..client import AutomoxAPIError, AutomoxClient
+from ..client import AutomoxClient
 from ..schemas import (
     GetNeedsAttentionReportParams,
     GetPrepatchReportParams,
-    OrgIdContextMixin,
-    OrgIdRequiredMixin,
 )
 from ..utils.tooling import (
-    RateLimitError,
-    as_tool_response,
-    enforce_rate_limit,
-    format_error,
-    format_validation_error,
+    call_tool_workflow,
     maybe_format_markdown,
 )
 
@@ -32,47 +23,6 @@ logger = logging.getLogger(__name__)
 
 def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient) -> None:
     """Register report-related tools."""
-
-    async def _call(
-        func: Callable[..., Awaitable[dict[str, Any]]],
-        params_model: type[BaseModel],
-        raw_params: dict[str, Any],
-        *,
-        inject_org_id: bool = False,
-    ) -> dict[str, Any]:
-        try:
-            await enforce_rate_limit()
-            client_org_id = client.org_id
-            params = dict(raw_params)
-            if issubclass(params_model, (OrgIdContextMixin, OrgIdRequiredMixin)):
-                params.setdefault("org_id", client_org_id)
-                if params.get("org_id") is None:
-                    raise ToolError(
-                        "org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly."
-                    )
-            model = params_model(**params)
-            payload = model.model_dump(mode="python", exclude_none=True)
-            if isinstance(model, (OrgIdContextMixin, OrgIdRequiredMixin)):
-                payload["org_id"] = model.org_id
-            elif inject_org_id:
-                if client_org_id is None:
-                    raise ToolError(
-                        "org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly."
-                    )
-                payload["org_id"] = client_org_id
-            result: dict[str, Any] = await func(client, **payload)
-        except (ValidationError, ValueError) as exc:
-            raise ToolError(format_validation_error(exc)) from exc
-        except RateLimitError as exc:
-            raise ToolError(str(exc)) from exc
-        except AutomoxAPIError as exc:
-            raise ToolError(format_error(exc)) from exc
-        except ToolError:
-            raise
-        except Exception as exc:
-            logger.exception("Unexpected error in tool call")
-            raise ToolError("An internal error occurred. Check server logs for details.") from exc
-        return as_tool_response(result)
 
     @server.tool(
         name="prepatch_report",
@@ -92,10 +42,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "limit": limit,
             "offset": offset,
         }
-        result = await _call(
+        result = await call_tool_workflow(
+            client,
             workflows.get_prepatch_report,
-            GetPrepatchReportParams,
             params,
+            params_model=GetPrepatchReportParams,
             inject_org_id=True,
         )
 
@@ -119,10 +70,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "limit": limit,
             "offset": offset,
         }
-        result = await _call(
+        result = await call_tool_workflow(
+            client,
             workflows.get_noncompliant_report,
-            GetNeedsAttentionReportParams,
             params,
+            params_model=GetNeedsAttentionReportParams,
             inject_org_id=True,
         )
 

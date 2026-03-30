@@ -3,83 +3,20 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable, Callable
 from typing import Any
 
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
-from pydantic import ValidationError
 
 from .. import workflows
-from ..client import AutomoxAPIError, AutomoxClient
-from ..utils import resolve_org_uuid
-from ..utils.tooling import (
-    RateLimitError,
-    as_tool_response,
-    enforce_rate_limit,
-    format_error,
-    format_validation_error,
-)
+from ..client import AutomoxClient
+from ..utils.tooling import call_tool_workflow
 
 logger = logging.getLogger(__name__)
 
 
 def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient) -> None:
     """Register compound tools."""
-
-    async def _call(
-        func: Callable[..., Awaitable[dict[str, Any]]],
-        raw_params: dict[str, Any],
-    ) -> dict[str, Any]:
-        try:
-            await enforce_rate_limit()
-            client_org_id = client.org_id
-            if client_org_id is None:
-                raise ToolError("org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly.")
-            raw_params["org_id"] = client_org_id
-            result: dict[str, Any] = await func(client, **raw_params)
-        except (ValidationError, ValueError) as exc:
-            raise ToolError(format_validation_error(exc)) from exc
-        except RateLimitError as exc:
-            raise ToolError(str(exc)) from exc
-        except AutomoxAPIError as exc:
-            raise ToolError(format_error(exc)) from exc
-        except ToolError:
-            raise
-        except Exception as exc:
-            logger.exception("Unexpected error in tool call")
-            raise ToolError("An internal error occurred. Check server logs for details.") from exc
-        return as_tool_response(result)
-
-    async def _call_with_org_uuid(
-        func: Callable[..., Awaitable[dict[str, Any]]],
-        raw_params: dict[str, Any],
-    ) -> dict[str, Any]:
-        try:
-            await enforce_rate_limit()
-            client_org_id = client.org_id
-            if client_org_id is None:
-                raise ToolError("org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly.")
-            org_uuid = await resolve_org_uuid(
-                client,
-                org_id=client_org_id,
-                allow_account_uuid=True,
-            )
-            raw_params["org_id"] = client_org_id
-            raw_params["org_uuid"] = str(org_uuid)
-            result: dict[str, Any] = await func(client, **raw_params)
-        except (ValidationError, ValueError) as exc:
-            raise ToolError(format_validation_error(exc)) from exc
-        except RateLimitError as exc:
-            raise ToolError(str(exc)) from exc
-        except AutomoxAPIError as exc:
-            raise ToolError(format_error(exc)) from exc
-        except ToolError:
-            raise
-        except Exception as exc:
-            logger.exception("Unexpected error in tool call")
-            raise ToolError("An internal error occurred. Check server logs for details.") from exc
-        return as_tool_response(result)
 
     @server.tool(
         name="get_patch_tuesday_readiness",
@@ -94,9 +31,16 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         params: dict[str, Any] = {}
         if group_id is not None:
             params["group_id"] = group_id
-        return await _call_with_org_uuid(
+        client_org_id = client.org_id
+        if client_org_id is None:
+            raise ToolError("org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly.")
+        params["org_id"] = client_org_id
+        return await call_tool_workflow(
+            client,
             workflows.compound.get_patch_tuesday_readiness,
             params,
+            org_uuid_field="org_uuid",
+            allow_account_uuid=True,
         )
 
     @server.tool(
@@ -112,7 +56,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         params: dict[str, Any] = {}
         if group_id is not None:
             params["group_id"] = group_id
-        return await _call(
+        client_org_id = client.org_id
+        if client_org_id is None:
+            raise ToolError("org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly.")
+        params["org_id"] = client_org_id
+        return await call_tool_workflow(
+            client,
             workflows.compound.get_compliance_snapshot,
             params,
         )
@@ -132,7 +81,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         max_packages: int = 25,
     ) -> dict[str, Any]:
         params: dict[str, Any] = {"device_id": device_id, "max_packages": max_packages}
-        return await _call(
+        client_org_id = client.org_id
+        if client_org_id is None:
+            raise ToolError("org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly.")
+        params["org_id"] = client_org_id
+        return await call_tool_workflow(
+            client,
             workflows.compound.get_device_full_profile,
             params,
         )

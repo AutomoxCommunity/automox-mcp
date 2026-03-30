@@ -5,26 +5,19 @@ from __future__ import annotations
 import ipaddress
 import logging
 import socket
-from collections.abc import Awaitable, Callable
 from typing import Any
 from urllib.parse import urlparse
 from uuid import UUID
 
 from fastmcp import FastMCP
-from fastmcp.exceptions import ToolError
-from pydantic import BaseModel, Field, ValidationError, model_validator
+from pydantic import Field, model_validator
 
 from .. import workflows
-from ..client import AutomoxAPIError, AutomoxClient
+from ..client import AutomoxClient
 from ..schemas import ForbidExtraModel
-from ..utils import resolve_org_uuid
 from ..utils.tooling import (
-    RateLimitError,
-    as_tool_response,
+    call_tool_workflow,
     check_idempotency,
-    enforce_rate_limit,
-    format_error,
-    format_validation_error,
     maybe_format_markdown,
     store_idempotency,
 )
@@ -165,44 +158,6 @@ logger = logging.getLogger(__name__)
 def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient) -> None:
     """Register webhook management tools."""
 
-    async def _call(
-        func: Callable[..., Awaitable[dict[str, Any]]],
-        params_model: type[BaseModel] | None,
-        raw_params: dict[str, Any],
-        org_uuid_field: str | None = None,
-    ) -> dict[str, Any]:
-        try:
-            await enforce_rate_limit()
-            client_org_id = client.org_id
-            params = dict(raw_params)
-            if org_uuid_field is not None:
-                raw_org_id = params.get("org_id")
-                resolved_uuid = await resolve_org_uuid(
-                    client,
-                    explicit_uuid=params.get(org_uuid_field),
-                    org_id=raw_org_id if raw_org_id is not None else client_org_id,
-                    allow_account_uuid=True,
-                )
-                params[org_uuid_field] = resolved_uuid
-            if params_model is not None:
-                model = params_model(**params)
-                payload = model.model_dump(mode="python", exclude_none=True)
-            else:
-                payload = {k: v for k, v in params.items() if v is not None}
-            result: dict[str, Any] = await func(client, **payload)
-        except (ValidationError, ValueError) as exc:
-            raise ToolError(format_validation_error(exc)) from exc
-        except RateLimitError as exc:
-            raise ToolError(str(exc)) from exc
-        except AutomoxAPIError as exc:
-            raise ToolError(format_error(exc)) from exc
-        except ToolError:
-            raise
-        except Exception as exc:
-            logger.exception("Unexpected error in tool call")
-            raise ToolError("An internal error occurred. Check server logs for details.") from exc
-        return as_tool_response(result)
-
     # ------ Read-only tools (always registered) ------
 
     @server.tool(
@@ -213,9 +168,9 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         ),
     )
     async def list_webhook_event_types() -> dict[str, Any]:
-        return await _call(
+        return await call_tool_workflow(
+            client,
             workflows.list_webhook_event_types,
-            None,
             {},
         )
 
@@ -237,10 +192,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "limit": limit,
             "cursor": cursor,
         }
-        result = await _call(
+        result = await call_tool_workflow(
+            client,
             workflows.list_webhooks,
-            ListWebhooksParams,
             params,
+            params_model=ListWebhooksParams,
             org_uuid_field="org_uuid",
         )
 
@@ -258,10 +214,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "org_uuid": org_uuid,
             "webhook_id": webhook_id,
         }
-        return await _call(
+        return await call_tool_workflow(
+            client,
             workflows.get_webhook,
-            GetWebhookParams,
             params,
+            params_model=GetWebhookParams,
             org_uuid_field="org_uuid",
         )
 
@@ -295,10 +252,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "url": url,
                 "event_types": event_types,
             }
-            result = await _call(
+            result = await call_tool_workflow(
+                client,
                 workflows.create_webhook,
-                CreateWebhookParams,
                 params,
+                params_model=CreateWebhookParams,
                 org_uuid_field="org_uuid",
             )
             # Cache without the one-time secret to avoid keeping it in memory.
@@ -335,10 +293,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "enabled": enabled,
                 "event_types": event_types,
             }
-            result = await _call(
+            result = await call_tool_workflow(
+                client,
                 workflows.update_webhook,
-                UpdateWebhookParams,
                 params,
+                params_model=UpdateWebhookParams,
                 org_uuid_field="org_uuid",
             )
             await store_idempotency(request_id, "update_webhook", result)
@@ -362,10 +321,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "org_uuid": org_uuid,
                 "webhook_id": webhook_id,
             }
-            result = await _call(
+            result = await call_tool_workflow(
+                client,
                 workflows.delete_webhook,
-                DeleteWebhookParams,
                 params,
+                params_model=DeleteWebhookParams,
                 org_uuid_field="org_uuid",
             )
             await store_idempotency(request_id, "delete_webhook", result)
@@ -392,10 +352,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "org_uuid": org_uuid,
                 "webhook_id": webhook_id,
             }
-            result = await _call(
+            result = await call_tool_workflow(
+                client,
                 workflows.test_webhook,
-                TestWebhookParams,
                 params,
+                params_model=TestWebhookParams,
                 org_uuid_field="org_uuid",
             )
             await store_idempotency(request_id, "test_webhook", result)
@@ -422,10 +383,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "org_uuid": org_uuid,
                 "webhook_id": webhook_id,
             }
-            result = await _call(
+            result = await call_tool_workflow(
+                client,
                 workflows.rotate_webhook_secret,
-                RotateWebhookSecretParams,
                 params,
+                params_model=RotateWebhookSecretParams,
                 org_uuid_field="org_uuid",
             )
             cache_safe = _strip_secret(result)

@@ -3,20 +3,13 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Awaitable, Callable
 from typing import Any
 
 from fastmcp import FastMCP
-from fastmcp.exceptions import ToolError
-from pydantic import ValidationError
 
-from ..client import AutomoxAPIError, AutomoxClient
+from ..client import AutomoxClient
 from ..utils.tooling import (
-    RateLimitError,
-    as_tool_response,
-    enforce_rate_limit,
-    format_error,
-    format_validation_error,
+    call_tool_workflow,
     maybe_format_markdown,
 )
 from ..workflows.device_search import (
@@ -44,26 +37,6 @@ logger = logging.getLogger(__name__)
 def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient) -> None:
     """Register advanced device search tools."""
 
-    async def _call_workflow(
-        func: Callable[..., Awaitable[dict[str, Any]]],
-        kwargs: dict[str, Any],
-    ) -> dict[str, Any]:
-        try:
-            await enforce_rate_limit()
-            result: dict[str, Any] = await func(client, **kwargs)
-        except (ValidationError, ValueError) as exc:
-            raise ToolError(format_validation_error(exc)) from exc
-        except RateLimitError as exc:
-            raise ToolError(str(exc)) from exc
-        except AutomoxAPIError as exc:
-            raise ToolError(format_error(exc)) from exc
-        except ToolError:
-            raise
-        except Exception as exc:
-            logger.exception("Unexpected error in tool call")
-            raise ToolError("An internal error occurred. Check server logs for details.") from exc
-        return as_tool_response(result)
-
     @server.tool(
         name="list_saved_searches",
         description=(
@@ -74,7 +47,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     async def list_saved_searches(
         output_format: str | None = "json",
     ) -> dict[str, Any]:
-        result = await _call_workflow(_list_saved_searches, {})
+        result = await call_tool_workflow(client, _list_saved_searches, {})
         return maybe_format_markdown(result, output_format)
 
     @server.tool(
@@ -91,7 +64,8 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         limit: int | None = None,
         output_format: str | None = "json",
     ) -> dict[str, Any]:
-        result = await _call_workflow(
+        result = await call_tool_workflow(
+            client,
             _advanced_device_search,
             {"query": query, "page": page, "limit": limit},
         )
@@ -109,7 +83,8 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         prefix: str,
         output_format: str | None = "json",
     ) -> dict[str, Any]:
-        result = await _call_workflow(
+        result = await call_tool_workflow(
+            client,
             _device_search_typeahead,
             {"field": field, "prefix": prefix},
         )
@@ -125,7 +100,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     async def get_device_metadata_fields(
         output_format: str | None = "json",
     ) -> dict[str, Any]:
-        result = await _call_workflow(_get_device_metadata_fields, {})
+        result = await call_tool_workflow(client, _get_device_metadata_fields, {})
         return maybe_format_markdown(result, output_format)
 
     @server.tool(
@@ -135,7 +110,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     async def get_device_assignments(
         output_format: str | None = "json",
     ) -> dict[str, Any]:
-        result = await _call_workflow(_get_device_assignments, {})
+        result = await call_tool_workflow(client, _get_device_assignments, {})
         return maybe_format_markdown(result, output_format)
 
     @server.tool(
@@ -149,7 +124,8 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         device_uuid: str,
         output_format: str | None = "json",
     ) -> dict[str, Any]:
-        result = await _call_workflow(
+        result = await call_tool_workflow(
+            client,
             _get_device_by_uuid,
             {"device_uuid": device_uuid},
         )

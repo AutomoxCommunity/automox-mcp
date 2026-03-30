@@ -21,6 +21,7 @@ from automox_mcp.tools import (
     report_tools,
     webhook_tools,
 )
+from automox_mcp.utils import tooling as _utils_tooling
 
 # ---------------------------------------------------------------------------
 # Shared test infrastructure
@@ -657,7 +658,7 @@ class TestEventToolsErrorHandling:
         async def fake_enforce():
             raise RateLimitError("rate limited")
 
-        monkeypatch.setattr(event_tools, "enforce_rate_limit", fake_enforce)
+        monkeypatch.setattr(_utils_tooling, "enforce_rate_limit", fake_enforce)
 
         server = StubServer()
         event_tools.register(server, client=FakeClient(org_id=42))
@@ -764,7 +765,7 @@ class TestReportToolsErrorHandling:
         async def fake_enforce():
             raise RateLimitError("rate limited")
 
-        monkeypatch.setattr(report_tools, "enforce_rate_limit", fake_enforce)
+        monkeypatch.setattr(_utils_tooling, "enforce_rate_limit", fake_enforce)
 
         server = StubServer()
         report_tools.register(server, client=FakeClient(org_id=42))
@@ -910,7 +911,7 @@ class TestAuditToolsErrorHandling:
         async def fake_enforce():
             raise RateLimitError("rate limited")
 
-        monkeypatch.setattr(audit_tools, "enforce_rate_limit", fake_enforce)
+        monkeypatch.setattr(_utils_tooling, "enforce_rate_limit", fake_enforce)
 
         server = StubServer()
         audit_tools.register(server, client=FakeClient(org_id=42))
@@ -1004,7 +1005,7 @@ class TestCompoundToolsErrorHandling:
         async def fake_enforce():
             raise RateLimitError("rate limited")
 
-        monkeypatch.setattr(compound_tools, "enforce_rate_limit", fake_enforce)
+        monkeypatch.setattr(_utils_tooling, "enforce_rate_limit", fake_enforce)
 
         server = StubServer()
         compound_tools.register(server, client=FakeClient(org_id=42))
@@ -1103,7 +1104,7 @@ class TestPackageToolsErrorHandling:
         async def fake_enforce():
             raise RateLimitError("rate limited")
 
-        monkeypatch.setattr(package_tools, "enforce_rate_limit", fake_enforce)
+        monkeypatch.setattr(_utils_tooling, "enforce_rate_limit", fake_enforce)
 
         server = StubServer()
         package_tools.register(server, client=FakeClient(org_id=42))
@@ -1176,7 +1177,7 @@ class TestGroupToolsErrorHandling:
         async def fake_enforce():
             raise RateLimitError("rate limited")
 
-        monkeypatch.setattr(group_tools, "enforce_rate_limit", fake_enforce)
+        monkeypatch.setattr(_utils_tooling, "enforce_rate_limit", fake_enforce)
 
         server = StubServer()
         group_tools.register(server, client=FakeClient(org_id=42))
@@ -1270,7 +1271,7 @@ class TestDeviceToolsErrorHandling:
         async def fake_enforce():
             raise RateLimitError("rate limited")
 
-        monkeypatch.setattr(device_tools, "enforce_rate_limit", fake_enforce)
+        monkeypatch.setattr(_utils_tooling, "enforce_rate_limit", fake_enforce)
 
         server = StubServer()
         device_tools.register(server, client=FakeClient(org_id=42))
@@ -1378,7 +1379,7 @@ class TestAccountToolsErrorHandling:
         async def fake_enforce():
             raise RateLimitError("rate limited")
 
-        monkeypatch.setattr(account_tools, "enforce_rate_limit", fake_enforce)
+        monkeypatch.setattr(_utils_tooling, "enforce_rate_limit", fake_enforce)
         monkeypatch.setenv("AUTOMOX_ACCOUNT_UUID", "cccccccc-cccc-cccc-cccc-cccccccccccc")
 
         server = StubServer()
@@ -1462,7 +1463,9 @@ class TestCompoundToolsOrgUuidErrorHandling:
         async def fake_readiness(client, **kwargs):
             raise AutomoxAPIError("Server error", status_code=500, payload={})
 
-        async def fake_resolve(client, *, org_id, allow_account_uuid=False):
+        async def fake_resolve(
+            client, *, explicit_uuid=None, org_id=None, allow_account_uuid=False
+        ):
             return "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 
         monkeypatch.setattr(
@@ -1470,7 +1473,9 @@ class TestCompoundToolsOrgUuidErrorHandling:
             "get_patch_tuesday_readiness",
             fake_readiness,
         )
-        monkeypatch.setattr(compound_tools, "resolve_org_uuid", fake_resolve)
+        monkeypatch.setattr(
+            "automox_mcp.utils.organization.resolve_org_uuid", fake_resolve
+        )
 
         server = StubServer()
         compound_tools.register(server, client=FakeClient(org_id=42))
@@ -1490,7 +1495,7 @@ class TestCompoundToolsOrgUuidErrorHandling:
         async def fake_enforce():
             raise RateLimitError("rate limited")
 
-        monkeypatch.setattr(compound_tools, "enforce_rate_limit", fake_enforce)
+        monkeypatch.setattr(_utils_tooling, "enforce_rate_limit", fake_enforce)
 
         server = StubServer()
         compound_tools.register(server, client=FakeClient(org_id=42))
@@ -1509,7 +1514,9 @@ class TestCompoundToolsOrgUuidErrorHandling:
         async def fake_readiness(client, **kwargs):
             raise KeyError("missing key")
 
-        async def fake_resolve(client, *, org_id, allow_account_uuid=False):
+        async def fake_resolve(
+            client, *, explicit_uuid=None, org_id=None, allow_account_uuid=False
+        ):
             return "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 
         monkeypatch.setattr(
@@ -1517,7 +1524,9 @@ class TestCompoundToolsOrgUuidErrorHandling:
             "get_patch_tuesday_readiness",
             fake_readiness,
         )
-        monkeypatch.setattr(compound_tools, "resolve_org_uuid", fake_resolve)
+        monkeypatch.setattr(
+            "automox_mcp.utils.organization.resolve_org_uuid", fake_resolve
+        )
 
         server = StubServer()
         compound_tools.register(server, client=FakeClient(org_id=42))
@@ -1588,7 +1597,7 @@ class TestPolicyToolsErrorHandling:
         async def fake_enforce():
             raise RateLimitError("rate limited")
 
-        monkeypatch.setattr(policy_tools, "enforce_rate_limit", fake_enforce)
+        monkeypatch.setattr(_utils_tooling, "enforce_rate_limit", fake_enforce)
 
         org_uuid = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
         server = StubServer()

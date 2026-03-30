@@ -47,13 +47,13 @@ async def test_policy_tool_creates_client(monkeypatch):
 
     monkeypatch.setattr(policy_tools.workflows, "summarize_policy_activity", fake_workflow)
 
-    fake_client = FakeClient(org_uuid=str(UUID("56c0ba07-69f2-4f7c-b0a1-2bb0ed68578e")))
+    fake_client = FakeClient(org_uuid=str(UUID("00000000-face-0000-0000-000000000001")))
 
     server = StubServer()
     policy_tools.register(server, client=fake_client)
     tool_fn = server.tools["policy_health_overview"]
 
-    await tool_fn(org_uuid=str(UUID("56c0ba07-69f2-4f7c-b0a1-2bb0ed68578e")))
+    await tool_fn(org_uuid=str(UUID("00000000-face-0000-0000-000000000001")))
 
 
 @pytest.mark.asyncio
@@ -129,7 +129,7 @@ async def test_device_tool_creates_client(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_account_tools_use_env_fallback(monkeypatch):
-    account_uuid = "56c0ba07-69f2-4f7c-b0a1-2bb0ed68578e"
+    account_uuid = "00000000-face-0000-0000-000000000001"
 
     async def fake_invite(client, **kwargs):
         assert str(kwargs["account_id"]) == account_uuid

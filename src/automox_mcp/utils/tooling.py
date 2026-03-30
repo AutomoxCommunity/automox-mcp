@@ -304,7 +304,8 @@ def format_validation_error(exc: Exception) -> str:
 
 _CHARS_PER_TOKEN = 4
 try:
-    _DEFAULT_TOKEN_BUDGET = int(os.environ.get("AUTOMOX_MCP_TOKEN_BUDGET", "4000"))
+    _raw_budget = int(os.environ.get("AUTOMOX_MCP_TOKEN_BUDGET", "4000"))
+    _DEFAULT_TOKEN_BUDGET = _raw_budget if _raw_budget > 0 else 4000
 except (ValueError, TypeError):
     _DEFAULT_TOKEN_BUDGET = 4000
 

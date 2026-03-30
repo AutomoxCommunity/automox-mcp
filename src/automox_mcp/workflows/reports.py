@@ -152,8 +152,10 @@ async def get_prepatch_report(
         if single_page:
             break
 
-        total = summary.get("total") or 0
-        if len(device_list) >= total or not page_devices:
+        total = summary.get("total")
+        if not page_devices:
+            break
+        if total is not None and len(device_list) >= total:
             break
 
         params["offset"] = params["offset"] + page_size
@@ -261,8 +263,10 @@ async def get_noncompliant_report(
         if single_page:
             break
 
-        total = summary.get("total") or 0
-        if len(device_list) >= total or not page_devices:
+        total = summary.get("total")
+        if not page_devices:
+            break
+        if total is not None and len(device_list) >= total:
             break
 
         params["offset"] = params["offset"] + page_size

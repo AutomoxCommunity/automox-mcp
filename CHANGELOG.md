@@ -5,6 +5,14 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.2] - 2026-03-30
+
+### Fixed
+
+- **Report pagination silently stops after first page** — `get_prepatch_report` and `get_noncompliant_report` now correctly paginate when the API response omits the `total` field. Previously, `total or 0` evaluated to `0`, making `len(device_list) >= 0` always true and breaking the loop after one page.
+- **`AUTOMOX_ORG_ID` whitespace crash** — `AutomoxClient` now strips whitespace from `AUTOMOX_ORG_ID` before parsing, matching the existing behavior for `AUTOMOX_API_KEY` and `AUTOMOX_ACCOUNT_UUID`. Previously, a whitespace-only value caused an unhandled `ValueError`.
+- **Zero/negative token budget accepted** — `AUTOMOX_MCP_TOKEN_BUDGET` now falls back to the default (4000) when set to zero or a negative value, preventing every response from triggering truncation warnings.
+
 ## [1.0.1] - 2026-03-30
 
 ### Fixed

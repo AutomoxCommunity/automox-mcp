@@ -83,7 +83,7 @@ For sensitive deployments, we recommend using an MCP gateway with inline guardra
 | V-003 | HTTPS-only webhook URL enforcement | `tools/webhook_tools.py` |
 | V-004 | Report limit bounds (le=500) | `schemas.py` |
 | V-005 | Debug logging excludes request parameters | `client.py` |
-| V-006 | Generic error messages to MCP clients | All `tools/*.py` modules |
+| V-006 | Generic error messages to MCP clients | `utils/tooling.py` (`call_tool_workflow`) |
 | V-007 | AUTOMOX_ORG_ID validated as positive integer | `server.py` |
 | V-008 | Narrowed exception handlers in policy workflows | `workflows/policy.py` |
 | V-009 | PolicyDefinition rejects unknown fields | `schemas.py` |
@@ -114,7 +114,7 @@ For sensitive deployments, we recommend using an MCP gateway with inline guardra
 | V-121 | HTTP security response headers (X-Frame-Options, CSP, etc.) | `transport_security.py` |
 | V-122 | OAuth 2.1 / JWT authentication with RFC 9728 metadata | `auth.py` |
 | V-123 | Reject missing Host header in DNS rebinding middleware | `transport_security.py` |
-| V-124 | Sanitize ValidationError/ValueError messages before ToolError | All `tools/*.py`, `utils/tooling.py` |
+| V-124 | Sanitize ValidationError/ValueError messages before ToolError | `utils/tooling.py` (`call_tool_workflow`) |
 | V-125 | Warn on non-HTTPS OAuth issuer URL (MITM risk for JWKS) | `auth.py` |
 | V-126 | Best-effort DNS resolution check for webhook SSRF | `tools/webhook_tools.py` |
 | V-127 | Refuse world-readable API key files | `auth.py` |

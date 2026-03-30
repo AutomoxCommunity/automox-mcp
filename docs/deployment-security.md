@@ -180,6 +180,7 @@ AUTOMOX_MCP_OAUTH_ISSUER="https://auth.example.com/realms/main"
 AUTOMOX_MCP_OAUTH_JWKS_URI="https://auth.example.com/realms/main/protocol/openid-connect/certs"
 
 # Audience claim — tokens MUST be issued for this audience (prevents token passthrough)
+# The server logs a warning at startup if this is not set.
 AUTOMOX_MCP_OAUTH_AUDIENCE="https://mcp.example.com"
 
 # Canonical server URL — enables RFC 9728 Protected Resource Metadata at
@@ -285,7 +286,7 @@ Each release also includes a CycloneDX SBOM (`sbom.cdx.json`) attached to the Gi
 - [ ] Egress restricted to `console.automox.com:443`
 - [ ] TLS terminated at gateway or reverse proxy
 - [ ] MCP endpoint authentication enabled — static keys (`AUTOMOX_MCP_API_KEYS`) or JWT/OIDC (`AUTOMOX_MCP_OAUTH_ISSUER`) — and/or enforced at gateway/reverse proxy
-- [ ] For JWT auth: `AUTOMOX_MCP_OAUTH_AUDIENCE` set to prevent token passthrough; `AUTOMOX_MCP_OAUTH_SERVER_URL` set for RFC 9728 metadata
+- [ ] For JWT auth: `AUTOMOX_MCP_OAUTH_AUDIENCE` set to prevent token passthrough (server warns at startup if unset); `AUTOMOX_MCP_OAUTH_SERVER_URL` set for RFC 9728 metadata
 - [ ] API key file permissions restricted to owner only (`chmod 600`) — the server refuses world-readable files and warns on group-readable (V-118, V-127)
 - [ ] DNS rebinding protection enabled (default) — custom origins added via `AUTOMOX_MCP_ALLOWED_ORIGINS` if needed
 - [ ] Structured JSON logs (`AUTOMOX_MCP_LOG_FORMAT=json`) forwarded to SIEM

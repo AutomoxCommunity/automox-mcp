@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.0.0] - 2026-03-29
 
+### Refactored
+
+#### Code Review Cleanup
+
+- **Consolidated `_call` helpers** — Replaced 17 duplicated `_call` / `_call_workflow` / `_call_with_org_uuid` error-handling envelopes across all tool modules with a single `call_tool_workflow()` in `utils/tooling.py`. All org-resolution strategies (mixin detection, `inject_org_id`, `org_uuid_field`) are handled via keyword arguments (~500 lines removed).
+- **Deduplicated `_extract_list`** — Three identical implementations in `device_search.py`, `vuln_sync.py`, and `policy_history.py` replaced with a shared `extract_list()` in `utils/response.py`.
+- **Deduplicated `_normalize_status`** — Two implementations (simple in `policy.py`, comprehensive in `devices.py`) unified into a single `normalize_status()` in `utils/response.py`. The comprehensive version (handles Mapping, Sequence, and string inputs) serves both use cases.
+- **Extracted `require_org_id` helper** — Replaced 17 instances of the 3-line `resolved_org_id = org_id or client.org_id` / `if not resolved_org_id` boilerplate across 5 workflow files with a shared `require_org_id()` in `utils/response.py`.
+- **Removed orphaned schemas** — Deleted ~40 unused schema classes (~305 lines) from `schemas.py` that were left over from the earlier full-API-wrapper design (e.g., `ListZonesParams`, `GetAccountParams`, `ListDevicesParams`, `AccountIdMixin`, `PaginationMixin`, `MCPError`, `ToolResult`).
+- **Parallelized `describe_device`** — The three independent supplementary API calls (packages, inventory, queue) now run concurrently via `asyncio.gather` instead of sequentially.
+- **JWT audience startup warning** — `auth.py` now logs a warning when `AUTOMOX_MCP_OAUTH_AUDIENCE` is not set, alerting operators that JWT validation will accept tokens regardless of audience.
+- **Smoke test docstring** — Updated `tests/smoke_production.py` module docstring to explicitly note the `execute_device_command` write operation (scan/GetOS) and its idempotent nature.
+
 ### Added
 
 #### Phase 6: MCP Security Best Practices
@@ -35,7 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **V-121**: HTTP security response headers on all HTTP/SSE responses (defence-in-depth). Prevents clickjacking (`frame-ancestors 'none'`), MIME sniffing (`nosniff`), and caching of sensitive responses (`no-store`).
 - **V-122**: OAuth 2.1 / JWT authentication with RFC 9728 Protected Resource Metadata. Prevents token passthrough via audience binding (`AUTOMOX_MCP_OAUTH_AUDIENCE`). Implements the MCP authorization specification requirements for token audience validation and protected resource metadata.
 - **V-123**: Reject requests with missing `Host` header in DNS rebinding middleware (returns 400). Prevents bypass of DNS rebinding protection through misconfigured proxies or malformed requests.
-- **V-124**: Sanitize `ValidationError`/`ValueError` messages before raising `ToolError` across all 17 tool modules. Prevents Pydantic validation errors from echoing attacker-controlled input values to the LLM.
+- **V-124**: Sanitize `ValidationError`/`ValueError` messages before raising `ToolError` in the shared `call_tool_workflow()` helper. Prevents Pydantic validation errors from echoing attacker-controlled input values to the LLM.
 - **V-125**: Warn at startup when `AUTOMOX_MCP_OAUTH_ISSUER` does not use HTTPS, as JWKS key discovery over cleartext HTTP is vulnerable to MITM attacks.
 - **V-126**: Best-effort DNS resolution check in webhook URL validation. Hostnames that resolve to private, loopback, or link-local addresses are now rejected (defense-in-depth against SSRF via DNS rebinding).
 - **V-127**: Refuse to load world-readable API key files (upgraded from warning to `RuntimeError`). Group-readable files still produce a warning.
@@ -337,7 +350,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **V-003**: Webhook `create` and `update` operations enforce HTTPS-only URLs via Pydantic `model_validator`
 - **V-004**: Report `limit` parameters (`GetPrepatchReportParams`, `GetNeedsAttentionReportParams`) bounded with `le=500` to prevent unbounded result sets
 - **V-005**: HTTP client debug logging no longer includes request parameters, preventing accidental credential exposure in log output
-- **V-006**: All 10 tool module `_call()` wrappers now log unexpected exceptions server-side and return a generic error message to MCP clients, preventing internal details (file paths, connection strings, module names) from leaking
+- **V-006**: The shared `call_tool_workflow()` helper (formerly per-module `_call()` wrappers) logs unexpected exceptions server-side and returns a generic error message to MCP clients, preventing internal details (file paths, connection strings, module names) from leaking
 - **V-007**: `AUTOMOX_ORG_ID` validated as a positive integer at server startup; non-numeric or non-positive values raise `RuntimeError` before any tools are registered
 - **V-008**: Policy workflow narrowed 3 broad `except Exception` handlers to `except (AutomoxAPIError, ValueError, TypeError, KeyError)` with structured debug logging
 - **V-009**: `PolicyDefinition` model changed from `extra="allow"` to `extra="ignore"` — unrecognized fields are silently dropped instead of passed to the Automox API

@@ -232,6 +232,13 @@ def _create_jwt_auth() -> Any | None:
         jwks_uri = candidate
 
     audience = _env_str("AUTOMOX_MCP_OAUTH_AUDIENCE")
+    if not audience:
+        logger.warning(
+            "AUTOMOX_MCP_OAUTH_AUDIENCE is not set — JWT validation will "
+            "accept any token from the configured issuer regardless of "
+            "audience. Set this variable to restrict access to tokens "
+            "intended for this resource server.",
+        )
     algorithm = _env_str("AUTOMOX_MCP_OAUTH_ALGORITHM") or "RS256"
     required_scopes = env_list("AUTOMOX_MCP_OAUTH_SCOPES") or None
     server_url = _env_str("AUTOMOX_MCP_OAUTH_SERVER_URL")

@@ -8,6 +8,11 @@ tool against a live Automox organisation.  Tests 35–49 cover Phase 3 tools
 advanced device search, and vulnerability sync).  Tests 50–55 cover policy
 windows (maintenance/exclusion windows).
 
+Note: The idempotency test issues an ``execute_device_command`` call with
+``command_type="scan"`` against a real device.  This queues a lightweight
+GetOS scan and is therefore a *write* operation, though it is idempotent
+(repeated calls with the same ``request_id`` return a cached response).
+
 Requirements:
     AUTOMOX_API_KEY, AUTOMOX_ACCOUNT_UUID, and AUTOMOX_ORG_ID must be set.
 

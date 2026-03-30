@@ -12,27 +12,13 @@ import httpx
 
 from ..client import AutomoxAPIError, AutomoxClient, AutomoxResponse
 from ..utils import resolve_org_uuid
+from ..utils.response import normalize_status as _normalize_status
+from ..utils.response import require_org_id
 
 logger = logging.getLogger(__name__)
 
 # Safety cap on auto-pagination to prevent runaway loops.
 _MAX_PAGINATION_PAGES = 50
-
-
-def _normalize_status(value: str | None) -> str:
-    """Normalize policy/device status values to consistent format."""
-    if not value:
-        return "unknown"
-    status = value.strip().lower()
-    if status in {"success", "succeeded", "completed", "complete"}:
-        return "success"
-    if status in {"partial", "partial_success"}:
-        return "partial"
-    if "fail" in status or "error" in status:
-        return "failed"
-    if "cancel" in status:
-        return "cancelled"
-    return status
 
 
 def _take(sequence: Sequence[Any], limit: int) -> Sequence[Any]:
@@ -261,9 +247,7 @@ async def summarize_policies(
 ) -> dict[str, Any]:
     """Provide a curated view of Automox policies."""
 
-    resolved_org_id = org_id or client.org_id
-    if not resolved_org_id:
-        raise ValueError("org_id required - pass explicitly or set AUTOMOX_ORG_ID")
+    resolved_org_id = require_org_id(client, org_id)
 
     params = {"o": resolved_org_id}
     if limit is not None:
@@ -503,9 +487,7 @@ async def describe_policy(
     Uses client.org_id for Console API and client.account_uuid for Policy Report API.
     """
 
-    resolved_org_id = org_id or client.org_id
-    if not resolved_org_id:
-        raise ValueError("org_id required - pass explicitly or set AUTOMOX_ORG_ID")
+    resolved_org_id = require_org_id(client, org_id)
 
     params = {"o": resolved_org_id}
     try:
@@ -719,9 +701,7 @@ async def summarize_patch_approvals(
 ) -> dict[str, Any]:
     """Summarize pending Automox patch approvals and provide decision context."""
 
-    resolved_org_id = org_id or client.org_id
-    if not resolved_org_id:
-        raise ValueError("org_id required - pass explicitly or set AUTOMOX_ORG_ID")
+    resolved_org_id = require_org_id(client, org_id)
 
     params = {"o": resolved_org_id, "limit": limit}
     approvals = await client.get("/approvals", params=params)
@@ -789,9 +769,7 @@ async def get_policy_compliance_stats(
     Returns per-policy device counts, compliance rates, and status breakdowns
     from the /policystats endpoint.
     """
-    resolved_org_id = org_id or client.org_id
-    if not resolved_org_id:
-        raise ValueError("org_id required - pass explicitly or set AUTOMOX_ORG_ID")
+    resolved_org_id = require_org_id(client, org_id)
 
     params = {"o": resolved_org_id}
     stats = await client.get("/policystats", params=params)

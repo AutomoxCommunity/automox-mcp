@@ -9,6 +9,7 @@ from typing import Any
 
 from ..client import AutomoxAPIError, AutomoxClient
 from ..utils import resolve_org_uuid
+from ..utils.response import require_org_id
 
 logger = logging.getLogger(__name__)
 
@@ -43,9 +44,7 @@ async def get_device_inventory(
     Optionally filter by category (Hardware, Health, Network, Security,
     Services, Summary, System, Users).
     """
-    resolved_org_id = org_id or client.org_id
-    if not resolved_org_id:
-        raise ValueError("org_id required - pass explicitly or set AUTOMOX_ORG_ID")
+    resolved_org_id = require_org_id(client, org_id)
 
     results = await asyncio.gather(
         resolve_org_uuid(
@@ -150,9 +149,7 @@ async def get_device_inventory_categories(
     device_id: int,
 ) -> dict[str, Any]:
     """Retrieve available inventory categories for a device."""
-    resolved_org_id = org_id or client.org_id
-    if not resolved_org_id:
-        raise ValueError("org_id required - pass explicitly or set AUTOMOX_ORG_ID")
+    resolved_org_id = require_org_id(client, org_id)
 
     results = await asyncio.gather(
         resolve_org_uuid(

@@ -4,16 +4,21 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import time
 from collections import deque
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from typing import Any, cast
+
+from pydantic import BaseModel
 
 from ..client import AutomoxAPIError
 from ..middleware import get_correlation_id
 from ..schemas import PaginationMetadata, ToolResponse
 from .sanitize import is_sanitization_enabled, sanitize_dict, sanitize_for_llm
+
+logger = logging.getLogger(__name__)
 
 _VALID_MODULES: frozenset[str] = frozenset(
     {
@@ -405,11 +410,108 @@ def maybe_format_markdown(result: dict[str, Any], output_format: str | None) -> 
     return {"data": format_as_markdown_table([]), "metadata": {"format": "markdown"}}
 
 
+async def call_tool_workflow(
+    client: Any,
+    func: Callable[..., Awaitable[dict[str, Any]]],
+    raw_params: dict[str, Any],
+    *,
+    params_model: type[BaseModel] | None = None,
+    inject_org_id: bool = False,
+    org_uuid_field: str | None = None,
+    allow_account_uuid: bool = False,
+    dump_mode: str = "python",
+) -> dict[str, Any]:
+    """Shared tool-call envelope: rate-limit, validate, invoke, format response.
+
+    Parameters
+    ----------
+    client:
+        The ``AutomoxClient`` instance.
+    func:
+        Async workflow function to call with ``(client, **payload)``.
+    raw_params:
+        Raw parameter dict from the tool caller.
+    params_model:
+        Optional Pydantic model for validation. When ``None``, *raw_params*
+        are passed through with ``None`` values stripped.
+    inject_org_id:
+        When ``True`` and the model lacks an ``OrgIdContextMixin``/
+        ``OrgIdRequiredMixin``, inject ``client.org_id`` into the payload.
+    org_uuid_field:
+        If set, resolve the org UUID (via ``resolve_org_uuid``) and inject it
+        into params under this key before validation.
+    allow_account_uuid:
+        Passed through to ``resolve_org_uuid`` when *org_uuid_field* is set.
+    dump_mode:
+        Pydantic ``model_dump`` mode (``"python"`` or ``"json"``).
+    """
+    from fastmcp.exceptions import ToolError
+    from pydantic import ValidationError
+
+    from ..schemas import OrgIdContextMixin, OrgIdRequiredMixin
+
+    try:
+        await enforce_rate_limit()
+        client_org_id = getattr(client, "org_id", None)
+        params = dict(raw_params)
+
+        # --- org UUID resolution (policy windows, webhooks, policy history) ---
+        if org_uuid_field is not None:
+            from .organization import resolve_org_uuid
+
+            raw_org_id = params.get("org_id")
+            resolved_uuid = await resolve_org_uuid(
+                client,
+                explicit_uuid=params.get(org_uuid_field),
+                org_id=raw_org_id if raw_org_id is not None else client_org_id,
+                allow_account_uuid=allow_account_uuid,
+            )
+            params[org_uuid_field] = resolved_uuid
+
+        # --- parameter validation & org_id injection ---
+        if params_model is not None:
+            if issubclass(params_model, (OrgIdContextMixin, OrgIdRequiredMixin)):
+                params.setdefault("org_id", client_org_id)
+                if params.get("org_id") is None:
+                    raise ToolError(
+                        "org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly."
+                    )
+            model = params_model(**params)
+            payload = model.model_dump(mode=dump_mode, exclude_none=True)
+            if isinstance(model, (OrgIdContextMixin, OrgIdRequiredMixin)):
+                payload["org_id"] = model.org_id
+            elif inject_org_id:
+                if client_org_id is None:
+                    raise ToolError(
+                        "org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly."
+                    )
+                payload["org_id"] = client_org_id
+        else:
+            payload = {k: v for k, v in params.items() if v is not None}
+
+        result: dict[str, Any] = await func(client, **payload)
+    except (ValidationError, ValueError) as exc:
+        raise ToolError(format_validation_error(exc)) from exc
+    except RateLimitError as exc:
+        raise ToolError(str(exc)) from exc
+    except AutomoxAPIError as exc:
+        raise ToolError(format_error(exc)) from exc
+    except ToolError:
+        raise
+    except Exception as exc:
+        logger.exception("Unexpected error in tool call")
+        raise ToolError(
+            "An internal error occurred. Check server logs for details."
+        ) from exc
+    return as_tool_response(result)
+
+
 __all__ = [
     "RateLimitError",
     "RateLimiter",
     "SENSITIVE_KEYWORDS",
     "as_tool_response",
+    "call_tool_workflow",
     "check_idempotency",
     "enforce_rate_limit",
     "format_as_markdown_table",

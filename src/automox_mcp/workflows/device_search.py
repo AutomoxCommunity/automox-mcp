@@ -7,18 +7,7 @@ from typing import Any
 
 from ..client import AutomoxClient
 from ..utils import resolve_org_uuid
-
-
-def _extract_list(response: Any) -> list[Mapping[str, Any]]:
-    """Normalize API response into a list of mappings."""
-    if isinstance(response, Sequence) and not isinstance(response, (str, bytes)):
-        return [item for item in response if isinstance(item, Mapping)]
-    if isinstance(response, Mapping):
-        data = response.get("data")
-        if isinstance(data, Sequence) and not isinstance(data, (str, bytes)):
-            return [item for item in data if isinstance(item, Mapping)]
-        return [response]
-    return []
+from ..utils.response import extract_list as _extract_list
 
 
 async def _resolve_org(client: AutomoxClient, org_id: int | None = None) -> str:

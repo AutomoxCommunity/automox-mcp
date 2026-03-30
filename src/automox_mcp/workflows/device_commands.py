@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..client import AutomoxClient
+from ..utils.response import require_org_id
 
 
 async def issue_device_command(
@@ -28,9 +29,7 @@ async def issue_device_command(
     Returns:
         Dictionary with command execution data and metadata
     """
-    resolved_org_id = org_id or client.org_id
-    if not resolved_org_id:
-        raise ValueError("org_id required - pass explicitly or set AUTOMOX_ORG_ID")
+    resolved_org_id = require_org_id(client, org_id)
 
     command_normalized = command_type.lower().replace("-", "_").replace(" ", "_")
     command_map = {

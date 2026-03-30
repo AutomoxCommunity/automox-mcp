@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from collections import Counter
@@ -10,50 +11,11 @@ from datetime import UTC, datetime
 from typing import Any, Literal, cast
 
 from ..client import AutomoxAPIError, AutomoxClient
+from ..utils.response import normalize_status as _normalize_status
+from ..utils.response import require_org_id
 from .device_inventory import get_device_inventory
 
 logger = logging.getLogger(__name__)
-
-
-def _normalize_status(value: Any) -> str:
-    """Normalize policy/device status values to consistent format."""
-    if value in (None, "", [], {}):
-        return "unknown"
-
-    if isinstance(value, Mapping):
-        for key in ("status", "policy_status", "result_status", "state"):
-            inner = value.get(key)
-            if inner not in (None, "", [], {}):
-                return _normalize_status(inner)
-        return "unknown"
-
-    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
-        statuses: list[str] = []
-        for item in value:
-            normalized = _normalize_status(item)
-            if normalized != "unknown":
-                statuses.append(normalized)
-        if not statuses:
-            return "unknown"
-        unique_statuses = set(statuses)
-        if len(unique_statuses) == 1:
-            return next(iter(unique_statuses))
-        return "mixed"
-
-    status = str(value).strip().lower()
-    if not status:
-        return "unknown"
-    if any(ch in status for ch in "{}[]"):
-        return "mixed"
-    if status in {"success", "succeeded", "completed", "complete"}:
-        return "success"
-    if status in {"partial", "partial_success"}:
-        return "partial"
-    if "fail" in status or "error" in status:
-        return "failed"
-    if "cancel" in status:
-        return "cancelled"
-    return status
 
 
 def _extract_last_check_in(device: Mapping[str, Any]) -> str | None:
@@ -437,9 +399,7 @@ async def list_devices_needing_attention(
 ) -> dict[str, Any]:
     """Highlight devices that Automox flags as needing attention."""
 
-    resolved_org_id = org_id or client.org_id
-    if not resolved_org_id:
-        raise ValueError("org_id required - pass explicitly or set AUTOMOX_ORG_ID")
+    resolved_org_id = require_org_id(client, org_id)
 
     params = {"o": resolved_org_id, "limit": limit, "offset": 0}
     if group_id is not None:
@@ -509,9 +469,7 @@ async def list_device_inventory(
 ) -> dict[str, Any]:
     """Return a list of devices in the organization with optional filtering."""
 
-    resolved_org_id = org_id or client.org_id
-    if not resolved_org_id:
-        raise ValueError("org_id required - pass explicitly or set AUTOMOX_ORG_ID")
+    resolved_org_id = require_org_id(client, org_id)
 
     params = {"o": resolved_org_id}
     if group_id is not None:
@@ -596,9 +554,7 @@ async def describe_device(
 ) -> dict[str, Any]:
     """Provide a consolidated view of an Automox device."""
 
-    resolved_org_id = org_id or client.org_id
-    if not resolved_org_id:
-        raise ValueError("org_id required - pass explicitly or set AUTOMOX_ORG_ID")
+    resolved_org_id = require_org_id(client, org_id)
 
     params = {
         "o": resolved_org_id,
@@ -609,15 +565,14 @@ async def describe_device(
     device_response = await client.get(f"/servers/{device_id}", params=params)
     device_data: Mapping[str, Any] = device_response if isinstance(device_response, Mapping) else {}
 
-    packages_preview: list[dict[str, Any]] = []
-    inventory_summary: dict[str, Any] | None = None
-    queue_preview: list[dict[str, Any]] = []
-
-    if include_packages:
+    # Fetch supplementary data in parallel where possible.
+    async def _fetch_packages() -> list[dict[str, Any]]:
+        if not include_packages:
+            return []
         pkg_params: dict[str, Any] = {"o": resolved_org_id, "limit": 10}
         packages_raw = await client.get(f"/servers/{device_id}/packages", params=pkg_params)
         if isinstance(packages_raw, Sequence):
-            packages_preview = [
+            return [
                 {
                     "name": pkg.get("name") or pkg.get("package_name"),
                     "version": pkg.get("version"),
@@ -626,8 +581,11 @@ async def describe_device(
                 for pkg in packages_raw[:10]
                 if isinstance(pkg, Mapping)
             ]
+        return []
 
-    if include_inventory:
+    async def _fetch_inventory() -> dict[str, Any] | None:
+        if not include_inventory:
+            return None
         try:
             inv_result = await get_device_inventory(
                 client,
@@ -641,20 +599,22 @@ async def describe_device(
                 sub_cats = cat_content.get("sub_categories", {})
                 item_count = sum(s.get("item_count", 0) for s in sub_cats.values())
                 categories.append({"name": cat_name, "item_count": item_count})
-            inventory_summary = {
+            return {
                 "total_categories": len(categories),
                 "total_items": inv_data.get("total_items", 0),
                 "categories": categories,
             }
         except (AutomoxAPIError, ValueError, TypeError, AttributeError) as exc:
             logger.debug("Failed to fetch device inventory for device %s: %s", device_id, exc)
-            inventory_summary = None
+            return None
 
-    if include_queue:
+    async def _fetch_queue() -> list[dict[str, Any]]:
+        if not include_queue:
+            return []
         queue_params: dict[str, Any] = {"o": resolved_org_id}
         queue_raw = await client.get(f"/servers/{device_id}/queues", params=queue_params)
         if isinstance(queue_raw, Sequence):
-            queue_preview = [
+            return [
                 {
                     "command": item.get("command") or item.get("type"),
                     "scheduled_time": item.get("scheduled_time") or item.get("scheduledAt"),
@@ -663,6 +623,11 @@ async def describe_device(
                 for item in queue_raw[:10]
                 if isinstance(item, Mapping)
             ]
+        return []
+
+    packages_preview, inventory_summary, queue_preview = await asyncio.gather(
+        _fetch_packages(), _fetch_inventory(), _fetch_queue()
+    )
 
     policy_status_summary, policy_status_total = _summarize_policy_status(
         device_data.get("policy_status")
@@ -863,9 +828,7 @@ async def search_devices(
 ) -> dict[str, Any]:
     """Search for devices using simple text and attribute filters."""
 
-    resolved_org_id = org_id or client.org_id
-    if not resolved_org_id:
-        raise ValueError("org_id required - pass explicitly or set AUTOMOX_ORG_ID")
+    resolved_org_id = require_org_id(client, org_id)
 
     params: dict[str, Any] = {"o": resolved_org_id, "limit": min(limit, 500)}
     if group_id is not None:
@@ -997,9 +960,7 @@ async def summarize_device_health(
 ) -> dict[str, Any]:
     """Aggregate high-level health signals for devices in the organization."""
 
-    resolved_org_id = org_id or client.org_id
-    if not resolved_org_id:
-        raise ValueError("org_id required - pass explicitly or set AUTOMOX_ORG_ID")
+    resolved_org_id = require_org_id(client, org_id)
 
     effective_limit = 500
     if limit is not None:

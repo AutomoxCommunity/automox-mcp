@@ -11,6 +11,7 @@ from typing import Any
 from fastmcp.exceptions import ToolError
 
 from ..client import AutomoxAPIError, AutomoxClient
+from ..utils.response import require_org_id
 
 logger = logging.getLogger(__name__)
 
@@ -739,9 +740,7 @@ async def apply_policy_changes(
 ) -> dict[str, Any]:
     """Create or update Automox policies from structured change requests."""
 
-    resolved_org_id = org_id or client.org_id
-    if not resolved_org_id:
-        raise ValueError("org_id required - pass explicitly or set AUTOMOX_ORG_ID")
+    resolved_org_id = require_org_id(client, org_id)
 
     normalized_operations = normalize_policy_operations_input(operations)
     results: list[dict[str, Any]] = []
@@ -906,9 +905,7 @@ async def resolve_patch_approval(
     if not status_value:
         raise ValueError(f"Unsupported decision '{decision}'. Use approve/deny or approve/reject.")
 
-    resolved_org_id = org_id or client.org_id
-    if not resolved_org_id:
-        raise ValueError("org_id required - pass explicitly or set AUTOMOX_ORG_ID")
+    resolved_org_id = require_org_id(client, org_id)
 
     body = {"status": status_value}
     if notes:
@@ -955,9 +952,7 @@ async def execute_policy(
     Returns:
         Dictionary with execution data and metadata
     """
-    resolved_org_id = org_id or client.org_id
-    if not resolved_org_id:
-        raise ValueError("org_id required - pass explicitly or set AUTOMOX_ORG_ID")
+    resolved_org_id = require_org_id(client, org_id)
 
     normalized_action = action.strip()
     alias_map = {
@@ -1013,9 +1008,7 @@ async def delete_policy(
     policy_id: int,
 ) -> dict[str, Any]:
     """Delete an Automox policy by ID."""
-    resolved_org_id = org_id or client.org_id
-    if not resolved_org_id:
-        raise ValueError("org_id required - pass explicitly or set AUTOMOX_ORG_ID")
+    resolved_org_id = require_org_id(client, org_id)
 
     params = {"o": resolved_org_id}
     await client.delete(f"/policies/{policy_id}", params=params)
@@ -1045,9 +1038,7 @@ async def clone_policy(
     Fetches the source policy, strips read-only fields, optionally overrides
     name and server_groups, then creates a new policy via POST.
     """
-    resolved_org_id = org_id or client.org_id
-    if not resolved_org_id:
-        raise ValueError("org_id required - pass explicitly or set AUTOMOX_ORG_ID")
+    resolved_org_id = require_org_id(client, org_id)
 
     params = {"o": resolved_org_id}
     source = await client.get(f"/policies/{policy_id}", params=params)

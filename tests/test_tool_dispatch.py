@@ -1473,9 +1473,7 @@ class TestCompoundToolsOrgUuidErrorHandling:
             "get_patch_tuesday_readiness",
             fake_readiness,
         )
-        monkeypatch.setattr(
-            "automox_mcp.utils.organization.resolve_org_uuid", fake_resolve
-        )
+        monkeypatch.setattr("automox_mcp.utils.organization.resolve_org_uuid", fake_resolve)
 
         server = StubServer()
         compound_tools.register(server, client=FakeClient(org_id=42))
@@ -1524,9 +1522,7 @@ class TestCompoundToolsOrgUuidErrorHandling:
             "get_patch_tuesday_readiness",
             fake_readiness,
         )
-        monkeypatch.setattr(
-            "automox_mcp.utils.organization.resolve_org_uuid", fake_resolve
-        )
+        monkeypatch.setattr("automox_mcp.utils.organization.resolve_org_uuid", fake_resolve)
 
         server = StubServer()
         compound_tools.register(server, client=FakeClient(org_id=42))

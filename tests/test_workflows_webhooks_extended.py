@@ -136,7 +136,7 @@ async def test_create_webhook_none_response() -> None:
 async def test_update_webhook_non_mapping_response() -> None:
     """When the API returns a non-Mapping on update, returns updated=True with raw."""
     client = StubClient(
-        put_responses={f"/organizations/{_ORG_UUID}/webhooks/wh-001": ["ok-string"]}
+        patch_responses={f"/organizations/{_ORG_UUID}/webhooks/wh-001": ["ok-string"]}
     )
     result = await update_webhook(
         cast(AutomoxClient, client),
@@ -152,7 +152,7 @@ async def test_update_webhook_non_mapping_response() -> None:
 
 @pytest.mark.asyncio
 async def test_update_webhook_integer_response() -> None:
-    client = StubClient(put_responses={f"/organizations/{_ORG_UUID}/webhooks/wh-002": [204]})
+    client = StubClient(patch_responses={f"/organizations/{_ORG_UUID}/webhooks/wh-002": [204]})
     result = await update_webhook(
         cast(AutomoxClient, client),
         org_uuid=_ORG_UUID,

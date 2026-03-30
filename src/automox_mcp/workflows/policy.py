@@ -116,7 +116,7 @@ async def summarize_policy_activity(
             for entry in policy_breakdown.values()
             if entry["failed_runs"] > 0
         ),
-        key=lambda item: (item["failed_runs"], item["total_runs"]),
+        key=lambda item: (item["failure_rate"], item["failed_runs"]),
         reverse=True,
     )[:top_failures]
 
@@ -348,6 +348,9 @@ async def summarize_policies(
     normalized_page = page if page is None else max(page, 0)
     if total_available is not None and limit is not None and normalized_page is not None:
         has_more = (normalized_page + 1) * limit < total_available
+    elif normalized_page is None:
+        # Auto-pagination already fetched everything; no more data
+        has_more = total_available is not None and returned_count_raw < total_available
     else:
         has_more = bool(limit is not None and returned_count_raw >= limit)
     next_page: int | None = None

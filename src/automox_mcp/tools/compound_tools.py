@@ -6,10 +6,14 @@ import logging
 from typing import Any
 
 from fastmcp import FastMCP
-from fastmcp.exceptions import ToolError
 
 from .. import workflows
 from ..client import AutomoxClient
+from ..schemas import (
+    ComplianceSnapshotParams,
+    DeviceFullProfileParams,
+    PatchTuesdayReadinessParams,
+)
 from ..utils.tooling import call_tool_workflow
 
 logger = logging.getLogger(__name__)
@@ -31,14 +35,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         params: dict[str, Any] = {}
         if group_id is not None:
             params["group_id"] = group_id
-        client_org_id = client.org_id
-        if client_org_id is None:
-            raise ToolError("org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly.")
-        params["org_id"] = client_org_id
         return await call_tool_workflow(
             client,
             workflows.compound.get_patch_tuesday_readiness,
             params,
+            params_model=PatchTuesdayReadinessParams,
             org_uuid_field="org_uuid",
             allow_account_uuid=True,
         )
@@ -56,14 +57,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         params: dict[str, Any] = {}
         if group_id is not None:
             params["group_id"] = group_id
-        client_org_id = client.org_id
-        if client_org_id is None:
-            raise ToolError("org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly.")
-        params["org_id"] = client_org_id
         return await call_tool_workflow(
             client,
             workflows.compound.get_compliance_snapshot,
             params,
+            params_model=ComplianceSnapshotParams,
         )
 
     @server.tool(
@@ -81,14 +79,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         max_packages: int = 25,
     ) -> dict[str, Any]:
         params: dict[str, Any] = {"device_id": device_id, "max_packages": max_packages}
-        client_org_id = client.org_id
-        if client_org_id is None:
-            raise ToolError("org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly.")
-        params["org_id"] = client_org_id
         return await call_tool_workflow(
             client,
             workflows.compound.get_device_full_profile,
             params,
+            params_model=DeviceFullProfileParams,
         )
 
 

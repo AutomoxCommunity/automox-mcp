@@ -131,14 +131,14 @@ def _get_env(name: str) -> str | None:
 
 def _validate_env() -> None:
     """Validate required environment variables are present and well-formed."""
-    required_vars = ["AUTOMOX_API_KEY", "AUTOMOX_ACCOUNT_UUID", "AUTOMOX_ORG_ID"]
+    required_vars = ["AUTOMOX_API_KEY", "AUTOMOX_ACCOUNT_UUID"]
     env_values = {var: _get_env(var) for var in required_vars}
     missing = [var for var, val in env_values.items() if val is None]
     if missing:
         raise RuntimeError(f"Missing required environment variables: {missing}")
 
-    # AUTOMOX_ORG_ID must be a positive integer
-    org_id_raw = env_values["AUTOMOX_ORG_ID"]
+    # AUTOMOX_ORG_ID must be a positive integer when provided
+    org_id_raw = _get_env("AUTOMOX_ORG_ID")
     if org_id_raw is not None:
         try:
             org_id_int = int(org_id_raw)

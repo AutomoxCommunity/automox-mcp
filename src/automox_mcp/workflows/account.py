@@ -76,9 +76,16 @@ async def list_org_api_keys(
     client: AutomoxClient,
     *,
     org_id: int,
+    page: int | None = None,
+    limit: int | None = None,
 ) -> dict[str, Any]:
     """List API keys for the organization (names and IDs only, secrets redacted)."""
-    results = await client.get(f"/orgs/{org_id}/api_keys")
+    params: dict[str, Any] = {}
+    if page is not None:
+        params["page"] = page
+    if limit is not None:
+        params["limit"] = limit
+    results = await client.get(f"/orgs/{org_id}/api_keys", params=params or None)
 
     if not isinstance(results, list):
         results = []

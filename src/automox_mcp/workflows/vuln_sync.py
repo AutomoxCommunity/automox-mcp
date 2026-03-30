@@ -33,10 +33,18 @@ async def list_remediation_action_sets(
     client: AutomoxClient,
     *,
     org_id: int,
+    page: int | None = None,
+    limit: int | None = None,
 ) -> dict[str, Any]:
     """List vulnerability remediation action sets."""
+    params: dict[str, Any] = {}
+    if page is not None:
+        params["page"] = page
+    if limit is not None:
+        params["limit"] = limit
     response = await client.get(
         f"/orgs/{org_id}/remediations/action-sets",
+        params=params or None,
     )
 
     items = _extract_list(response)
@@ -78,10 +86,18 @@ async def get_action_set_actions(
     *,
     org_id: int,
     action_set_id: int,
+    page: int | None = None,
+    limit: int | None = None,
 ) -> dict[str, Any]:
     """Get remediation actions for an action set."""
+    params: dict[str, Any] = {}
+    if page is not None:
+        params["page"] = page
+    if limit is not None:
+        params["limit"] = limit
     response = await client.get(
         f"/orgs/{org_id}/remediations/action-sets/{action_set_id}/actions",
+        params=params or None,
     )
 
     actions = _extract_list(response)
@@ -101,10 +117,18 @@ async def get_action_set_issues(
     *,
     org_id: int,
     action_set_id: int,
+    page: int | None = None,
+    limit: int | None = None,
 ) -> dict[str, Any]:
     """Get vulnerability issues for an action set."""
+    params: dict[str, Any] = {}
+    if page is not None:
+        params["page"] = page
+    if limit is not None:
+        params["limit"] = limit
     response = await client.get(
         f"/orgs/{org_id}/remediations/action-sets/{action_set_id}/issues",
+        params=params or None,
     )
 
     issues = _extract_list(response)
@@ -124,10 +148,18 @@ async def get_action_set_solutions(
     *,
     org_id: int,
     action_set_id: int,
+    page: int | None = None,
+    limit: int | None = None,
 ) -> dict[str, Any]:
     """Get solutions for an action set."""
+    params: dict[str, Any] = {}
+    if page is not None:
+        params["page"] = page
+    if limit is not None:
+        params["limit"] = limit
     response = await client.get(
         f"/orgs/{org_id}/remediations/action-sets/{action_set_id}/solutions",
+        params=params or None,
     )
 
     solutions = _extract_list(response)

@@ -69,7 +69,7 @@ class AutomoxClient:
             ) from exc
 
         try:
-            self.account_uuid = account_uuid or os.environ["AUTOMOX_ACCOUNT_UUID"]
+            self.account_uuid = (account_uuid or os.environ["AUTOMOX_ACCOUNT_UUID"]).strip()
         except KeyError as exc:
             raise ValueError(
                 "AUTOMOX_ACCOUNT_UUID environment variable is required. "

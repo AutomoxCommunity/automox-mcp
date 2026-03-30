@@ -175,7 +175,7 @@ async def update_webhook(
     if event_types is not None:
         body["eventTypes"] = event_types
 
-    result = await client.put(
+    result = await client.patch(
         f"/organizations/{org_uuid}/webhooks/{webhook_id}",
         json_data=body,
     )

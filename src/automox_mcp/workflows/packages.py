@@ -23,12 +23,21 @@ async def list_device_packages(
     if limit is not None:
         params["limit"] = limit
 
-    packages = await client.get(f"/servers/{device_id}/packages", params=params)
+    raw_response = await client.get(f"/servers/{device_id}/packages", params=params)
 
-    if not isinstance(packages, list):
+    packages: list[Any]
+    total: int
+    if isinstance(raw_response, Mapping):
+        packages = (
+            raw_response.get("data", []) if isinstance(raw_response.get("data"), list) else []
+        )
+        total = raw_response.get("total", len(packages))
+    elif isinstance(raw_response, list):
+        packages = raw_response
+        total = len(packages)
+    else:
         packages = []
-
-    total = len(packages)
+        total = 0
     summary: list[dict[str, Any]] = []
     for pkg in packages:
         if not isinstance(pkg, Mapping):
@@ -83,12 +92,21 @@ async def search_org_packages(
     if limit is not None:
         params["limit"] = limit
 
-    packages = await client.get(f"/orgs/{org_id}/packages", params=params)
+    raw_response = await client.get(f"/orgs/{org_id}/packages", params=params)
 
-    if not isinstance(packages, list):
+    packages: list[Any]
+    total: int
+    if isinstance(raw_response, Mapping):
+        packages = (
+            raw_response.get("data", []) if isinstance(raw_response.get("data"), list) else []
+        )
+        total = raw_response.get("total", len(packages))
+    elif isinstance(raw_response, list):
+        packages = raw_response
+        total = len(packages)
+    else:
         packages = []
-
-    total = len(packages)
+        total = 0
     summary: list[dict[str, Any]] = []
     for pkg in packages:
         if not isinstance(pkg, Mapping):

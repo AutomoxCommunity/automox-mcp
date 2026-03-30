@@ -45,14 +45,13 @@ _VALID_MODULES: frozenset[str] = frozenset(
 SENSITIVE_KEYWORDS: tuple[str, ...] = (
     "token",
     "secret",
-    "key",
-    "password",
-    "credential",
-    "auth",
-    "bearer",
-    "passwd",
+    "api_key",
     "api-key",
     "apikey",
+    "password",
+    "credential",
+    "bearer",
+    "passwd",
 )
 
 
@@ -319,7 +318,7 @@ def _apply_token_budget(
     budget: int | None = None,
 ) -> dict[str, Any]:
     """Add a token warning and optionally truncate list data."""
-    effective_budget = budget or _DEFAULT_TOKEN_BUDGET
+    effective_budget = budget if budget is not None else _DEFAULT_TOKEN_BUDGET
     estimated = _estimate_tokens(response_dict)
     if estimated <= effective_budget:
         return response_dict
@@ -500,9 +499,7 @@ async def call_tool_workflow(
         raise
     except Exception as exc:
         logger.exception("Unexpected error in tool call")
-        raise ToolError(
-            "An internal error occurred. Check server logs for details."
-        ) from exc
+        raise ToolError("An internal error occurred. Check server logs for details.") from exc
     return as_tool_response(result)
 
 

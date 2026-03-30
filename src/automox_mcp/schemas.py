@@ -617,3 +617,100 @@ class CreateDataExtractParams(OrgIdRequiredMixin, ForbidExtraModel):
 
 class UploadActionSetParams(OrgIdRequiredMixin, ForbidExtraModel):
     action_set_data: dict[str, Any] = Field(description="Action set upload data")
+
+
+# ============================================================================
+# POLICY HISTORY V2 SCHEMAS
+# ============================================================================
+
+
+class PolicyRunsV2Params(OrgIdRequiredMixin, ForbidExtraModel):
+    start_time: str | None = Field(None, description="Start time filter (ISO format)")
+    end_time: str | None = Field(None, description="End time filter (ISO format)")
+    policy_name: str | None = Field(None, description="Filter by policy name")
+    policy_uuid: str | None = Field(None, description="Filter by policy UUID")
+    policy_type: str | None = Field(None, description="Filter by policy type")
+    result_status: str | None = Field(None, description="Filter by result status")
+    sort: str | None = Field(None, description="Sort order")
+    page: int | None = Field(None, ge=0, description="Page number")
+    limit: int | None = Field(None, ge=1, le=5000, description="Results per page")
+
+
+class PolicyRunCountParams(OrgIdRequiredMixin, ForbidExtraModel):
+    days: int | None = Field(None, ge=1, le=365, description="Number of days to look back")
+
+
+class PolicyRunsByPolicyParams(OrgIdRequiredMixin, ForbidExtraModel):
+    pass
+
+
+class PolicyHistoryDetailParams(OrgIdRequiredMixin, ForbidExtraModel):
+    policy_uuid: str = Field(description="Policy UUID")
+
+
+class PolicyRunsForPolicyParams(OrgIdRequiredMixin, ForbidExtraModel):
+    policy_uuid: str = Field(description="Policy UUID")
+    report_days: int | None = Field(None, ge=1, le=365, description="Days to look back")
+    sort: str | None = Field(None, description="Sort order")
+
+
+class PolicyRunDetailV2Params(OrgIdRequiredMixin, ForbidExtraModel):
+    policy_uuid: str = Field(description="Policy UUID")
+    exec_token: str = Field(description="Execution token")
+    sort: str | None = Field(None, description="Sort order")
+    result_status: str | None = Field(None, description="Filter by result status")
+    device_name: str | None = Field(None, description="Filter by device name")
+    page: int | None = Field(None, ge=0, description="Page number")
+    limit: int | None = Field(None, ge=1, le=5000, description="Results per page")
+
+
+# ============================================================================
+# AUDIT V2 (OCSF) SCHEMAS
+# ============================================================================
+
+
+class AuditEventsOcsfParams(OrgIdRequiredMixin, ForbidExtraModel):
+    date: str = Field(description="Date to query (YYYY-MM-DD)")
+    category_name: str | None = Field(None, description="OCSF event category name")
+    type_name: str | None = Field(None, description="OCSF event type name")
+    cursor: str | None = Field(None, description="Pagination cursor")
+    limit: int | None = Field(None, ge=1, le=500, description="Maximum events to return")
+
+
+# ============================================================================
+# ADVANCED DEVICE SEARCH SCHEMAS
+# ============================================================================
+
+
+class AdvancedDeviceSearchParams(ForbidExtraModel):
+    query: dict[str, Any] | None = Field(None, description="Structured query for device search")
+    page: int | None = Field(None, ge=0, description="Page number")
+    limit: int | None = Field(None, ge=1, le=500, description="Results per page")
+
+
+class DeviceSearchTypeaheadParams(ForbidExtraModel):
+    field: str = Field(description="Field name to get suggestions for")
+    prefix: str = Field(description="Search prefix")
+
+
+class DeviceByUuidParams(ForbidExtraModel):
+    device_uuid: str = Field(description="Device UUID")
+
+
+# ============================================================================
+# COMPOUND TOOL SCHEMAS
+# ============================================================================
+
+
+class PatchTuesdayReadinessParams(OrgIdRequiredMixin, ForbidExtraModel):
+    group_id: int | None = Field(None, ge=1, description="Restrict to a specific server group")
+    org_uuid: str | None = Field(None, description="Organization UUID (auto-resolved)")
+
+
+class ComplianceSnapshotParams(OrgIdRequiredMixin, ForbidExtraModel):
+    group_id: int | None = Field(None, ge=1, description="Restrict to a specific server group")
+
+
+class DeviceFullProfileParams(OrgIdRequiredMixin, ForbidExtraModel):
+    device_id: int = Field(description="Device identifier", ge=1)
+    max_packages: int = Field(25, ge=0, le=500, description="Max packages to include")

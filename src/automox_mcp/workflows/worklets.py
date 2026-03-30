@@ -30,11 +30,17 @@ async def search_worklet_catalog(
     *,
     org_id: int,
     query: str | None = None,
+    page: int | None = None,
+    limit: int | None = None,
 ) -> dict[str, Any]:
     """Search the Automox community worklet catalog."""
     params: dict[str, Any] = {"o": org_id}
     if query:
         params["q"] = query
+    if page is not None:
+        params["page"] = page
+    if limit is not None:
+        params["limit"] = limit
 
     response = await client.get("/wis/search", params=params)
     results = _extract_worklet_list(response)

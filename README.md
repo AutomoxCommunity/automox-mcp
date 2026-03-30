@@ -31,7 +31,7 @@ You need three values from the [Automox Console](https://console.automox.com):
 | **Account UUID** | Settings > Secrets & Keys (shown on the page) |
 | **Org ID** | The numeric ID in the URL when viewing your organization |
 
-> Both global and org-scoped API keys work. All three values are always required.
+> Both global and org-scoped API keys work. API Key and Account UUID are always required. Org ID is recommended but optional — some tools that don't require org context will work without it.
 
 ### 2. Create a `.env` file
 
@@ -91,7 +91,7 @@ For the full list of tools, parameters, and MCP resources, see the **[Tool Refer
 |---|---|---|---|
 | `AUTOMOX_API_KEY` | Yes | — | Automox API key |
 | `AUTOMOX_ACCOUNT_UUID` | Yes | — | Account UUID from Secrets & Keys |
-| `AUTOMOX_ORG_ID` | Yes | — | Numeric organization ID |
+| `AUTOMOX_ORG_ID` | Recommended | — | Numeric organization ID (required by most tools) |
 | `AUTOMOX_MCP_READ_ONLY` | No | `false` | Disable all write operations (58 of 80 tools remain) |
 | `AUTOMOX_MCP_MODULES` | No | all | Comma-separated list of modules to load (see below) |
 | `AUTOMOX_MCP_TOKEN_BUDGET` | No | `4000` | Max estimated tokens per response before truncation |

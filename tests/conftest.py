@@ -44,11 +44,13 @@ class StubClient:
         get_responses: dict[str, list[Any]] | None = None,
         post_responses: dict[str, list[Any]] | None = None,
         put_responses: dict[str, list[Any]] | None = None,
+        patch_responses: dict[str, list[Any]] | None = None,
         delete_responses: dict[str, list[Any]] | None = None,
     ) -> None:
         self._get = {k: list(v) for k, v in (get_responses or {}).items()}
         self._post = {k: list(v) for k, v in (post_responses or {}).items()}
         self._put = {k: list(v) for k, v in (put_responses or {}).items()}
+        self._patch = {k: list(v) for k, v in (patch_responses or {}).items()}
         self._delete = {k: list(v) for k, v in (delete_responses or {}).items()}
         self.calls: list[tuple[str, str, Any]] = []
         # Sensible defaults; override in individual tests as needed.
@@ -84,6 +86,12 @@ class StubClient:
     ) -> Any:
         self.calls.append(("PUT", path, json_data))
         return self._pop(self._put, path)
+
+    async def patch(
+        self, path: str, *, json_data: Any = None, params: Any = None, headers: Any = None
+    ) -> Any:
+        self.calls.append(("PATCH", path, json_data))
+        return self._pop(self._patch, path)
 
     async def delete(self, path: str, *, params: Any = None, headers: Any = None) -> Any:
         self.calls.append(("DELETE", path, params))

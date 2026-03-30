@@ -197,7 +197,7 @@ async def test_create_webhook_sends_correct_body() -> None:
 async def test_update_webhook_partial_update() -> None:
     updated = {**_WEBHOOK_A, "enabled": False}
     client = StubClient(
-        put_responses={
+        patch_responses={
             f"/organizations/{_ORG_UUID}/webhooks/wh-001": [updated],
         }
     )
@@ -217,7 +217,7 @@ async def test_update_webhook_partial_update() -> None:
 @pytest.mark.asyncio
 async def test_update_webhook_omits_none_fields() -> None:
     client = StubClient(
-        put_responses={
+        patch_responses={
             f"/organizations/{_ORG_UUID}/webhooks/wh-001": [_WEBHOOK_A],
         }
     )

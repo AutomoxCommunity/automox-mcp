@@ -12,9 +12,16 @@ async def list_data_extracts(
     client: AutomoxClient,
     *,
     org_id: int,
+    page: int | None = None,
+    limit: int | None = None,
 ) -> dict[str, Any]:
     """List available data extracts for the organization."""
-    results = await client.get("/data-extracts", params={"o": org_id})
+    params: dict[str, Any] = {"o": org_id}
+    if page is not None:
+        params["page"] = page
+    if limit is not None:
+        params["limit"] = limit
+    results = await client.get("/data-extracts", params=params)
 
     if not isinstance(results, list):
         results = [results] if isinstance(results, Mapping) else []

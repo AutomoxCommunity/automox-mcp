@@ -8,6 +8,11 @@ from typing import Any
 from fastmcp import FastMCP
 
 from ..client import AutomoxClient
+from ..schemas import (
+    AdvancedDeviceSearchParams,
+    DeviceByUuidParams,
+    DeviceSearchTypeaheadParams,
+)
 from ..utils.tooling import (
     call_tool_workflow,
     maybe_format_markdown,
@@ -68,6 +73,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             client,
             _advanced_device_search,
             {"query": query, "page": page, "limit": limit},
+            params_model=AdvancedDeviceSearchParams,
         )
         return maybe_format_markdown(result, output_format)
 
@@ -87,6 +93,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             client,
             _device_search_typeahead,
             {"field": field, "prefix": prefix},
+            params_model=DeviceSearchTypeaheadParams,
         )
         return maybe_format_markdown(result, output_format)
 
@@ -128,6 +135,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             client,
             _get_device_by_uuid,
             {"device_uuid": device_uuid},
+            params_model=DeviceByUuidParams,
         )
         return maybe_format_markdown(result, output_format)
 

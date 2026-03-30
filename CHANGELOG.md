@@ -5,6 +5,29 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2026-03-30
+
+### Fixed
+
+- **Events workflow paginated response handling** — `list_events` now correctly extracts the `data` list from paginated dict responses (`{"data": [...], "total": N}`) instead of wrapping the entire response dict as a single event.
+- **Missing `.strip()` on `account_uuid`** — `AutomoxClient` now strips whitespace from `AUTOMOX_ACCOUNT_UUID`, matching the existing behavior for `AUTOMOX_API_KEY` and `AUTOMOX_ORG_UUID`. Prevents opaque API failures from trailing whitespace in env vars.
+- **Over-broad sensitive field redaction** — Replaced `"key"` and `"auth"` in `SENSITIVE_KEYWORDS` with specific terms (`"api_key"`, `"api-key"`, `"apikey"`) to prevent legitimate fields like `registry_key`, `author`, and `primary_key_id` from being silently redacted in error payloads.
+- **Webhook partial update uses PATCH** — `update_webhook` now uses `client.patch()` instead of `client.put()` for partial updates, preventing the API from resetting omitted fields when treating PUT as a full replacement.
+- **`has_more` pagination flag after auto-pagination** — `summarize_policies` no longer falsely reports `has_more=True` when `page=None` auto-pagination has already fetched all pages.
+- **`total_packages` reports actual total** — `list_device_packages` and `search_org_packages` now extract the true total count from paginated API responses instead of reporting only the current page length.
+- **Top failures sorted by failure rate** — `summarize_policy_activity` now sorts top failing policies by `failure_rate` (then `failed_runs`) instead of raw `failed_runs` count, so a policy with 4/5 failures correctly ranks above one with 5/1000.
+- **`AUTOMOX_ORG_ID` no longer required at startup** — `_validate_env` now treats `AUTOMOX_ORG_ID` as optional (validated when present). Tools that need org context still require it at call time, but the server can start without it.
+- **Inconsistent `_env_flag` semantics** — `transport_security.py` now uses explicit true/false matching with default fallback, consistent with `__init__.py`. Unrecognized values like typos now return the default instead of silently evaluating to `True`.
+- **JWT public key file permission check** — `auth.py` now warns when the JWT public key file is world-writable, matching the existing permission check pattern for API key files.
+- **Token budget `budget=0` handling** — `_apply_token_budget` now uses `budget if budget is not None else default` instead of `budget or default`, correctly handling explicit zero values.
+
+### Added
+
+- **Pydantic validation for 16 tools** — Added `params_model` schemas for all tools in `policy_history_tools` (6), `audit_v2_tools` (1), `device_search_tools` (3 with params), and `compound_tools` (3). User input now passes through `ForbidExtraModel` validation with type coercion, range constraints, and extra-field rejection.
+- **Pagination support for 7 workflow functions** — Added `page`/`limit` parameters to `list_data_extracts`, `list_remediation_action_sets`, `get_action_set_actions`, `get_action_set_issues`, `get_action_set_solutions`, `search_worklet_catalog`, and `list_org_api_keys`. Previously these functions only returned the API's default first page.
+- **Multi-page fetch for client-side filtered queries** — `list_device_inventory` and `search_devices` now fetch additional pages when client-side filters (hostname, IP, tag, policy_status, managed) reduce results below the requested limit, up to 20 pages or 500 items per page.
+- **`StubClient.patch()` method** — Test fixture `StubClient` now supports `patch_responses` for testing PATCH-based workflows.
+
 ## [1.0.0] - 2026-03-29
 
 ### Refactored

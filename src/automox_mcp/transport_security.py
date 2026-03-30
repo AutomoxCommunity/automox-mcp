@@ -184,7 +184,11 @@ def _env_flag(name: str, default: bool = True) -> bool:
     raw = os.environ.get(name, "").strip().lower()
     if not raw:
         return default
-    return raw not in {"0", "false", "no", "off"}
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    return default
 
 
 def build_transport_security_middleware(

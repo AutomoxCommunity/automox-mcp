@@ -6,9 +6,16 @@ import logging
 from typing import Any
 
 from fastmcp import FastMCP
-from fastmcp.exceptions import ToolError
 
 from ..client import AutomoxClient
+from ..schemas import (
+    PolicyHistoryDetailParams,
+    PolicyRunCountParams,
+    PolicyRunDetailV2Params,
+    PolicyRunsByPolicyParams,
+    PolicyRunsForPolicyParams,
+    PolicyRunsV2Params,
+)
 from ..utils.tooling import (
     call_tool_workflow,
     maybe_format_markdown,
@@ -69,10 +76,9 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "page": page,
             "limit": limit,
         }
-        kwargs.setdefault("org_id", client.org_id)
-        if kwargs.get("org_id") is None:
-            raise ToolError("org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly.")
-        result = await call_tool_workflow(client, _list_policy_runs_v2, kwargs)
+        result = await call_tool_workflow(
+            client, _list_policy_runs_v2, kwargs, params_model=PolicyRunsV2Params
+        )
         return maybe_format_markdown(result, output_format)
 
     @server.tool(
@@ -87,10 +93,9 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         output_format: str | None = "json",
     ) -> dict[str, Any]:
         kwargs: dict[str, Any] = {"days": days}
-        kwargs.setdefault("org_id", client.org_id)
-        if kwargs.get("org_id") is None:
-            raise ToolError("org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly.")
-        result = await call_tool_workflow(client, _policy_run_count, kwargs)
+        result = await call_tool_workflow(
+            client, _policy_run_count, kwargs, params_model=PolicyRunCountParams
+        )
         return maybe_format_markdown(result, output_format)
 
     @server.tool(
@@ -104,10 +109,9 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         output_format: str | None = "json",
     ) -> dict[str, Any]:
         kwargs: dict[str, Any] = {}
-        kwargs.setdefault("org_id", client.org_id)
-        if kwargs.get("org_id") is None:
-            raise ToolError("org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly.")
-        result = await call_tool_workflow(client, _policy_runs_by_policy, kwargs)
+        result = await call_tool_workflow(
+            client, _policy_runs_by_policy, kwargs, params_model=PolicyRunsByPolicyParams
+        )
         return maybe_format_markdown(result, output_format)
 
     @server.tool(
@@ -119,10 +123,9 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         output_format: str | None = "json",
     ) -> dict[str, Any]:
         kwargs: dict[str, Any] = {"policy_uuid": policy_uuid}
-        kwargs.setdefault("org_id", client.org_id)
-        if kwargs.get("org_id") is None:
-            raise ToolError("org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly.")
-        result = await call_tool_workflow(client, _get_policy_history_detail, kwargs)
+        result = await call_tool_workflow(
+            client, _get_policy_history_detail, kwargs, params_model=PolicyHistoryDetailParams
+        )
         return maybe_format_markdown(result, output_format)
 
     @server.tool(
@@ -143,10 +146,9 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "report_days": report_days,
             "sort": sort,
         }
-        kwargs.setdefault("org_id", client.org_id)
-        if kwargs.get("org_id") is None:
-            raise ToolError("org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly.")
-        result = await call_tool_workflow(client, _get_policy_runs_for_policy, kwargs)
+        result = await call_tool_workflow(
+            client, _get_policy_runs_for_policy, kwargs, params_model=PolicyRunsForPolicyParams
+        )
         return maybe_format_markdown(result, output_format)
 
     @server.tool(
@@ -175,10 +177,9 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "page": page,
             "limit": limit,
         }
-        kwargs.setdefault("org_id", client.org_id)
-        if kwargs.get("org_id") is None:
-            raise ToolError("org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly.")
-        result = await call_tool_workflow(client, _get_policy_run_detail_v2, kwargs)
+        result = await call_tool_workflow(
+            client, _get_policy_run_detail_v2, kwargs, params_model=PolicyRunDetailV2Params
+        )
         return maybe_format_markdown(result, output_format)
 
 

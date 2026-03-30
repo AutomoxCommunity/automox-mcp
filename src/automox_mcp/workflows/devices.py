@@ -471,70 +471,81 @@ async def list_device_inventory(
 
     resolved_org_id = require_org_id(client, org_id)
 
-    params = {"o": resolved_org_id}
+    has_client_filters = policy_status is not None or managed is not None or not include_unmanaged
+    # Fetch more per page when client-side filtering may discard results
+    fetch_limit = min(limit * 3, 500) if has_client_filters else limit
+    max_pages = 20
+
+    params: dict[str, Any] = {"o": resolved_org_id, "limit": fetch_limit}
     if group_id is not None:
         params["groupId"] = group_id
-    if limit is not None:
-        params["limit"] = limit
-
-    payload = await client.get("/servers", params=params)
-    devices: Sequence[Mapping[str, Any]] = payload if isinstance(payload, list) else []
 
     policy_status_filter = _normalize_status(policy_status) if policy_status else None
+    curated_devices: list[dict[str, Any]] = []
 
-    curated_devices = []
-    for item in devices:
-        summary_fields = _summarize_device_common_fields(item)
-        is_managed = summary_fields["is_managed"]
+    for page_num in range(max_pages):
+        params["page"] = page_num
+        payload = await client.get("/servers", params=params)
+        devices: Sequence[Mapping[str, Any]] = payload if isinstance(payload, list) else []
 
-        if managed is not None and is_managed != managed:
-            continue
-        if not include_unmanaged and not is_managed:
-            continue
-        device_policy_status = summary_fields["policy_status"]
-        if policy_status_filter and device_policy_status != policy_status_filter:
-            continue
+        if not devices:
+            break
 
-        curated_devices.append(
-            {
-                "device_id": item.get("id") or item.get("device_id"),
-                "uuid": item.get("uuid"),
-                "hostname": _format_device_display_name(item),
-                "managed": is_managed,
-                "os": item.get("os_name") or item.get("platform"),
-                "agent_version": item.get("agent_version"),
-                "policy_status": device_policy_status,
-                "policy_failures": _count_failed_policies(item) or None,
-                "pending_patches": summary_fields["pending_patches"],
-                "needs_attention": summary_fields["needs_attention"],
-                "last_check_in": summary_fields["last_check_in"],
-                "server_group_id": item.get("server_group_id"),
-            }
-        )
+        for item in devices:
+            summary_fields = _summarize_device_common_fields(item)
+            is_managed = summary_fields["is_managed"]
+
+            if managed is not None and is_managed != managed:
+                continue
+            if not include_unmanaged and not is_managed:
+                continue
+            device_policy_status = summary_fields["policy_status"]
+            if policy_status_filter and device_policy_status != policy_status_filter:
+                continue
+
+            curated_devices.append(
+                {
+                    "device_id": item.get("id") or item.get("device_id"),
+                    "uuid": item.get("uuid"),
+                    "hostname": _format_device_display_name(item),
+                    "managed": is_managed,
+                    "os": item.get("os_name") or item.get("platform"),
+                    "agent_version": item.get("agent_version"),
+                    "policy_status": device_policy_status,
+                    "policy_failures": _count_failed_policies(item) or None,
+                    "pending_patches": summary_fields["pending_patches"],
+                    "needs_attention": summary_fields["needs_attention"],
+                    "last_check_in": summary_fields["last_check_in"],
+                    "server_group_id": item.get("server_group_id"),
+                }
+            )
+            if len(curated_devices) >= limit:
+                break
+
         if len(curated_devices) >= limit:
+            break
+        # If the API returned fewer than requested, there are no more pages
+        if len(devices) < fetch_limit:
             break
 
     preview = curated_devices[:limit]
 
     data = {
-        "total_devices_returned": len(curated_devices),
+        "total_devices_returned": len(preview),
         "devices": preview,
     }
 
-    metadata = payload.get("metadata", {}) if isinstance(payload, Mapping) else {}
-    metadata.update(
-        {
-            "deprecated_endpoint": False,
-            "org_id": resolved_org_id,
-            "group_id": group_id,
-            "requested_limit": limit,
-            "include_unmanaged": include_unmanaged,
-            "filters": {
-                "policy_status": policy_status_filter,
-                "managed": managed,
-            },
-        }
-    )
+    metadata: dict[str, Any] = {
+        "deprecated_endpoint": False,
+        "org_id": resolved_org_id,
+        "group_id": group_id,
+        "requested_limit": limit,
+        "include_unmanaged": include_unmanaged,
+        "filters": {
+            "policy_status": policy_status_filter,
+            "managed": managed,
+        },
+    }
 
     return {
         "data": data,
@@ -830,7 +841,11 @@ async def search_devices(
 
     resolved_org_id = require_org_id(client, org_id)
 
-    params: dict[str, Any] = {"o": resolved_org_id, "limit": min(limit, 500)}
+    has_client_filters = bool(hostname_contains or ip_address or tag)
+    fetch_limit = min(limit * 3, 500) if has_client_filters else min(limit, 500)
+    max_pages = 20
+
+    params: dict[str, Any] = {"o": resolved_org_id, "limit": fetch_limit}
     if group_id is not None:
         params["groupId"] = group_id
     if managed is not None:
@@ -865,46 +880,57 @@ async def search_devices(
         else:
             severity_values = []
 
-    # Build params as list of tuples so httpx repeats the severity key correctly
-    param_tuples = list(params.items())
-    for sev in severity_values:
-        param_tuples.append(("filters[severity][]", sev))
-
-    devices = await client.get(
-        "/servers", params=dict(params) if not severity_values else param_tuples
-    )
-    devices = devices if isinstance(devices, Sequence) else []
-
-    filtered = []
     hostname_term = (hostname_contains or "").lower()
     ip_term = (ip_address or "").strip()
     tag_term = (tag or "").lower()
 
-    for device in devices:
-        if hostname_term:
-            name = str(device.get("name") or device.get("hostname") or "").lower()
-            custom_name = str(device.get("custom_name") or "").lower()
-            # Match if term is in either hostname or custom_name
-            if hostname_term not in name and hostname_term not in custom_name:
-                continue
+    filtered: list[Any] = []
 
-        if ip_term:
-            ip = str(device.get("ip_address") or device.get("ipAddress") or "").strip()
-            if ip != ip_term:
-                continue
+    for page_num in range(max_pages):
+        params["page"] = page_num
 
-        if tag_term:
-            tags = device.get("tags") or device.get("labels") or []
-            tags_lower = {str(t).lower() for t in tags} if isinstance(tags, Sequence) else set()
-            if tag_term not in tags_lower:
-                continue
+        # Build params as list of tuples so httpx repeats the severity key correctly
+        param_tuples = list(params.items())
+        for sev in severity_values:
+            param_tuples.append(("filters[severity][]", sev))
 
-        filtered.append(device)
+        devices = await client.get(
+            "/servers", params=dict(params) if not severity_values else param_tuples
+        )
+        devices = devices if isinstance(devices, Sequence) else []
+
+        if not devices:
+            break
+
+        for device in devices:
+            if hostname_term:
+                name = str(device.get("name") or device.get("hostname") or "").lower()
+                custom_name = str(device.get("custom_name") or "").lower()
+                if hostname_term not in name and hostname_term not in custom_name:
+                    continue
+
+            if ip_term:
+                ip = str(device.get("ip_address") or device.get("ipAddress") or "").strip()
+                if ip != ip_term:
+                    continue
+
+            if tag_term:
+                tags = device.get("tags") or device.get("labels") or []
+                tags_lower = {str(t).lower() for t in tags} if isinstance(tags, Sequence) else set()
+                if tag_term not in tags_lower:
+                    continue
+
+            filtered.append(device)
+            if len(filtered) >= limit:
+                break
+
         if len(filtered) >= limit:
+            break
+        if len(devices) < fetch_limit:
             break
 
     preview = []
-    for item in filtered:
+    for item in filtered[:limit]:
         preview.append(
             {
                 "device_id": item.get("id") or item.get("device_id"),
@@ -919,23 +945,20 @@ async def search_devices(
             }
         )
 
-    metadata = {}
-    metadata.update(
-        {
-            "deprecated_endpoint": False,
-            "org_id": resolved_org_id,
-            "group_id": group_id,
-            "request_limit": limit,
-            "filters": {
-                "hostname_contains": hostname_contains,
-                "ip_address": ip_address,
-                "tag": tag,
-                "patch_status": patch_status,
-                "severity": severity_values if severity_values else None,
-                "managed": managed,
-            },
-        }
-    )
+    metadata: dict[str, Any] = {
+        "deprecated_endpoint": False,
+        "org_id": resolved_org_id,
+        "group_id": group_id,
+        "request_limit": limit,
+        "filters": {
+            "hostname_contains": hostname_contains,
+            "ip_address": ip_address,
+            "tag": tag,
+            "patch_status": patch_status,
+            "severity": severity_values if severity_values else None,
+            "managed": managed,
+        },
+    }
 
     data = {
         "matches": len(preview),

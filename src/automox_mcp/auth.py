@@ -215,6 +215,20 @@ def _create_jwt_auth() -> Any | None:
     if public_key and not public_key.startswith("-----"):
         key_path = Path(public_key).expanduser()
         if key_path.is_file():
+            # Check file permissions (same as API key file loading)
+            try:
+                mode = key_path.stat().st_mode & 0o777
+                if mode & 0o002:
+                    logger.warning(
+                        "JWT public key file (%s) is world-writable (%s) — "
+                        "an attacker could replace it to bypass authentication. "
+                        "Run: chmod 644 %s",
+                        key_path,
+                        oct(mode),
+                        key_path,
+                    )
+            except OSError:
+                pass
             public_key = key_path.read_text().strip()
 
     # Auto-derive JWKS URI from issuer if not explicitly set

@@ -60,7 +60,7 @@ def test_client_requires_account_uuid(monkeypatch):
 
 @pytest.mark.parametrize(
     "missing_env",
-    ["AUTOMOX_API_KEY", "AUTOMOX_ACCOUNT_UUID", "AUTOMOX_ORG_ID"],
+    ["AUTOMOX_API_KEY", "AUTOMOX_ACCOUNT_UUID"],
 )
 def test_create_server_requires_environment(monkeypatch, missing_env):
     monkeypatch.setenv("AUTOMOX_API_KEY", "env-key")

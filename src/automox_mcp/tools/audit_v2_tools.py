@@ -6,9 +6,9 @@ import logging
 from typing import Any
 
 from fastmcp import FastMCP
-from fastmcp.exceptions import ToolError
 
 from ..client import AutomoxClient
+from ..schemas import AuditEventsOcsfParams
 from ..utils.tooling import (
     call_tool_workflow,
     maybe_format_markdown,
@@ -45,10 +45,9 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "cursor": cursor,
             "limit": limit,
         }
-        kwargs.setdefault("org_id", client.org_id)
-        if kwargs.get("org_id") is None:
-            raise ToolError("org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly.")
-        result = await call_tool_workflow(client, _audit_events_ocsf, kwargs)
+        result = await call_tool_workflow(
+            client, _audit_events_ocsf, kwargs, params_model=AuditEventsOcsfParams
+        )
         return maybe_format_markdown(result, output_format)
 
 

@@ -32,7 +32,7 @@ Complete reference for all 80 tools, 6 workflow prompts, MCP resources, paramete
 
 ## Device Management (8 tools)
 
-- **`list_devices`** - Summarize device inventory and policy status across the organization. Includes unmanaged devices by default and supports `policy_status`/`managed` filters so you can zero in on, for example, non-compliant managed endpoints.
+- **`list_devices`** - Summarize device inventory and policy status across the organization. Returns each device's `uuid` (needed by policy windows tools). Includes unmanaged devices by default and supports `policy_status`/`managed` filters so you can zero in on, for example, non-compliant managed endpoints.
 - **`device_detail`** - Return curated device context (recent policy status, assignments, queued commands, key facts). Pass `include_raw_details=true` only when you explicitly need a sanitized slice of the raw Automox payload.
 - **`devices_needing_attention`** - Surface Automox devices flagged for immediate action.
 - **`search_devices`** - Search Automox devices by hostname, IP, tag, status, or severity of missing patches. Supports multi-severity filtering (e.g., `["critical", "high"]`).
@@ -85,7 +85,7 @@ Richer policy execution reporting via the `/policy-history` API with UUID-based 
 
 ## Group Management (5 tools)
 
-- **`list_server_groups`** - List all server groups with device counts and assigned policies.
+- **`list_server_groups`** - List all server groups with device counts, assigned policies, and group `uuid` (needed by policy windows tools).
 - **`get_server_group`** - Get detailed information about a specific server group.
 - **`create_server_group`** - Create a new server group with name, refresh interval, and optional parent group, policies, and notes.
 - **`update_server_group`** - Update an existing server group.
@@ -159,8 +159,8 @@ Manage maintenance/exclusion windows that prevent policy execution during schedu
 - **`get_policy_window`** - Retrieve details for a specific maintenance window by UUID, including RRULE schedule, duration, assigned groups, and status.
 - **`check_group_exclusion_status`** - Check whether one or more server groups are currently within an active exclusion window. Returns a per-group boolean — useful before triggering manual policy runs.
 - **`check_window_active`** - Check whether a specific maintenance window is currently active. A window is active when its status is "active", it has at least one group, and the current time falls within an exclusion period.
-- **`get_group_scheduled_windows`** - Get upcoming scheduled maintenance periods for a server group with start/end times and window types. Optionally provide a future date limit (ISO 8601 UTC).
-- **`get_device_scheduled_windows`** - Get upcoming scheduled maintenance periods for a specific device with start/end times and window types. Optionally provide a future date limit (ISO 8601 UTC).
+- **`get_group_scheduled_windows`** - Get upcoming scheduled maintenance periods for a server group with start/end times and window types. Optionally provide a future date limit (`YYYY-MM-DDTHH:mm:ss`; trailing `Z` is accepted and stripped automatically).
+- **`get_device_scheduled_windows`** - Get upcoming scheduled maintenance periods for a specific device with start/end times and window types. Optionally provide a future date limit (`YYYY-MM-DDTHH:mm:ss`; trailing `Z` is accepted and stripped automatically).
 - **`create_policy_window`** - Create a new maintenance/exclusion window with RFC 5545 RRULE scheduling. Supports recurring windows (e.g., every Monday 2–4 AM) and one-time windows. All fields required.
 - **`update_policy_window`** - Update an existing maintenance window. Only `dtstart` is required; all other fields are optional for partial updates.
 - **`delete_policy_window`** - Delete a maintenance/exclusion window permanently.

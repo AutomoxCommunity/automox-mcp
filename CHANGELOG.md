@@ -73,6 +73,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`pytest-asyncio` mode** — Added `asyncio_mode = "auto"` to `pyproject.toml` for automatic async test detection.
 - **Unused import** — Removed unused `uuid.UUID` import from `device_search.py`.
 - **Ruff/mypy clean** — Resolved 5 ruff errors (import sorting, line length, E402, ASYNC240, F401) and 1 mypy `arg-type` error across source and test files.
+- **Missing `uuid` in group summaries** — `list_server_groups` now includes the group `uuid` field returned by the Automox API, enabling policy windows tools to reference groups by UUID.
+- **Missing `uuid` in device list summaries** — `list_devices` now includes each device's `uuid`, enabling `get_device_scheduled_windows` lookups without a separate API call.
+- **Policy windows date parameter encoding** — `get_group_scheduled_windows` and `get_device_scheduled_windows` now embed the `date` parameter directly in the URL path to prevent httpx from percent-encoding colons (`%3A`), which the Automox API rejects. Trailing `Z` suffix is also stripped automatically.
 
 ### Changed
 

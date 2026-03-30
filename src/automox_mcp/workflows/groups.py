@@ -12,6 +12,7 @@ def _summarize_group(group: Mapping[str, Any]) -> dict[str, Any]:
     """Extract key fields from a server group record."""
     return {
         "id": group.get("id"),
+        "uuid": group.get("uuid"),
         "name": group.get("name") or "(unnamed)",
         "organization_id": group.get("organization_id"),
         "parent_server_group_id": group.get("parent_server_group_id"),

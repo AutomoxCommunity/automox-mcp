@@ -250,4 +250,4 @@ async def test_device_scheduled_windows_no_date_param() -> None:
         org_uuid=_ORG_UUID,
         device_uuid=_DEVICE_UUID,
     )
-    assert client.calls[0][2] == {}
+    assert client.calls[0][2] is None

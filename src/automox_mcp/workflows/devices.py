@@ -540,6 +540,7 @@ async def list_device_inventory(
         curated_devices.append(
             {
                 "device_id": item.get("id") or item.get("device_id"),
+                "uuid": item.get("uuid"),
                 "hostname": _format_device_display_name(item),
                 "managed": is_managed,
                 "os": item.get("os_name") or item.get("platform"),

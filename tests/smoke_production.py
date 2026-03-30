@@ -864,7 +864,7 @@ async def run_readonly_tools() -> None:
                 resp = await _safe_call(
                     session,
                     "get_group_scheduled_windows",
-                    {"group_uuid": g_uuid, "date": "2026-12-31T00:00:00Z"},
+                    {"group_uuid": g_uuid, "date": "2026-12-31T00:00:00"},
                 )
                 record("get_group_scheduled_windows", resp is not None, _data_keys(resp))
             else:
@@ -887,7 +887,7 @@ async def run_readonly_tools() -> None:
                 resp = await _safe_call(
                     session,
                     "get_device_scheduled_windows",
-                    {"device_uuid": d_uuid, "date": "2026-12-31T00:00:00Z"},
+                    {"device_uuid": d_uuid, "date": "2026-12-31T00:00:00"},
                 )
                 record("get_device_scheduled_windows", resp is not None, _data_keys(resp))
             else:

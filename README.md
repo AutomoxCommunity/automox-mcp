@@ -64,7 +64,7 @@ That's it. Start asking questions.
 
 ## What Can I Ask?
 
-The server exposes 71 tools across devices, policies, patches, groups, webhooks, worklets, vulnerability sync, and more. You don't need to know the tool names — just describe what you want:
+The server exposes 80 tools across devices, policies, patches, groups, webhooks, worklets, vulnerability sync, maintenance windows, and more. You don't need to know the tool names — just describe what you want:
 
 | Ask this | What happens |
 |---|---|
@@ -92,7 +92,7 @@ For the full list of tools, parameters, and MCP resources, see the **[Tool Refer
 | `AUTOMOX_API_KEY` | Yes | — | Automox API key |
 | `AUTOMOX_ACCOUNT_UUID` | Yes | — | Account UUID from Secrets & Keys |
 | `AUTOMOX_ORG_ID` | Yes | — | Numeric organization ID |
-| `AUTOMOX_MCP_READ_ONLY` | No | `false` | Disable all write operations (53 of 71 tools remain) |
+| `AUTOMOX_MCP_READ_ONLY` | No | `false` | Disable all write operations (58 of 80 tools remain) |
 | `AUTOMOX_MCP_MODULES` | No | all | Comma-separated list of modules to load (see below) |
 | `AUTOMOX_MCP_TOKEN_BUDGET` | No | `4000` | Max estimated tokens per response before truncation |
 | `AUTOMOX_MCP_SANITIZE_RESPONSES` | No | `true` | Sanitize API data to mitigate prompt injection |
@@ -103,6 +103,14 @@ For the full list of tools, parameters, and MCP resources, see the **[Tool Refer
 | `AUTOMOX_MCP_PORT` | No | `8000` | Bind port for HTTP/SSE |
 | `AUTOMOX_MCP_API_KEYS` | No | — | Comma-separated MCP endpoint API keys for HTTP/SSE Bearer-token auth (e.g., `key1,label:key2`) |
 | `AUTOMOX_MCP_API_KEY_FILE` | No | — | Path to a file containing MCP endpoint API keys (one per line) |
+| `AUTOMOX_MCP_OAUTH_ISSUER` | No | — | OIDC issuer URL for JWT auth (e.g., `https://auth.example.com/realms/main`) |
+| `AUTOMOX_MCP_OAUTH_JWKS_URI` | No | — | JWKS endpoint for JWT key rotation (auto-derived from issuer if omitted) |
+| `AUTOMOX_MCP_OAUTH_AUDIENCE` | No | — | Expected JWT audience claim (prevents token passthrough) |
+| `AUTOMOX_MCP_OAUTH_SERVER_URL` | No | — | Canonical server URL; enables RFC 9728 Protected Resource Metadata |
+| `AUTOMOX_MCP_OAUTH_SCOPES` | No | — | Comma-separated required OAuth scopes |
+| `AUTOMOX_MCP_ALLOWED_ORIGINS` | No | — | Extra allowed Origin headers for DNS rebinding protection (comma-separated) |
+| `AUTOMOX_MCP_ALLOWED_HOSTS` | No | — | Extra allowed Host headers for DNS rebinding protection (comma-separated) |
+| `AUTOMOX_MCP_DNS_REBINDING_PROTECTION` | No | `true` | Set to `false` to disable DNS rebinding protection (not recommended) |
 | `AUTOMOX_MCP_ALLOW_REMOTE_BIND` | No | `false` | Allow binding to non-loopback addresses (required for `0.0.0.0` or external IPs) |
 
 ### Read-Only Mode
@@ -111,7 +119,7 @@ For the full list of tools, parameters, and MCP resources, see the **[Tool Refer
 AUTOMOX_MCP_READ_ONLY=true
 ```
 
-Disables all write operations. Only read-only tools are registered (53 of 71). Useful for auditing and monitoring.
+Disables all write operations. Only read-only tools are registered (58 of 80). Useful for auditing and monitoring.
 
 ### Modular Loading
 
@@ -121,7 +129,7 @@ Load only the tool modules you need:
 AUTOMOX_MCP_MODULES=devices,policies
 ```
 
-Available modules: `audit`, `audit_v2`, `devices`, `device_search`, `policies`, `policy_history`, `users`, `groups`, `events`, `reports`, `packages`, `webhooks`, `worklets`, `data_extracts`, `vuln_sync`, `compound`
+Available modules: `audit`, `audit_v2`, `devices`, `device_search`, `policies`, `policy_history`, `users`, `groups`, `events`, `reports`, `packages`, `webhooks`, `worklets`, `data_extracts`, `vuln_sync`, `compound`, `policy_windows`
 
 Both settings can be combined:
 
@@ -140,21 +148,22 @@ uvx --env-file .env automox-mcp --transport http --host 127.0.0.1 --port 8000
 
 ### Endpoint Authentication
 
-When deploying over HTTP or SSE, you can require Bearer-token authentication on the MCP endpoint itself (separate from the Automox API key):
+When deploying over HTTP or SSE, you can require authentication on the MCP endpoint (separate from the Automox API key). Two strategies are supported:
 
+**Static API keys** (simple):
 ```bash
-# Generate a key
-automox-mcp --generate-key
-# amx_mcp_a1b2c3d4e5f6...
-
-# Set it (comma-separated for multiple keys)
-export AUTOMOX_MCP_API_KEYS="amx_mcp_a1b2c3d4e5f6..."
-
-# Or use a key file (one per line, supports comments and labels)
-export AUTOMOX_MCP_API_KEY_FILE=/etc/automox-mcp/keys.txt
+automox-mcp --generate-key                         # generate a key
+export AUTOMOX_MCP_API_KEYS="amx_mcp_a1b2c3..."    # or use a key file
 ```
 
-Clients must then include `Authorization: Bearer <key>` on every request. Unauthenticated requests receive a `401 Unauthorized` response. This has no effect on stdio transport.
+**OAuth 2.1 / JWT** (enterprise IdP integration):
+```bash
+export AUTOMOX_MCP_OAUTH_ISSUER="https://auth.example.com/realms/main"
+export AUTOMOX_MCP_OAUTH_AUDIENCE="https://mcp.example.com"
+export AUTOMOX_MCP_OAUTH_SERVER_URL="https://mcp.example.com"  # enables RFC 9728 metadata
+```
+
+Clients must include `Authorization: Bearer <token>` on every request. Unauthenticated requests receive `401 Unauthorized` with proper `WWW-Authenticate` headers. No effect on stdio transport.
 
 ## Security
 
@@ -162,7 +171,7 @@ The Automox MCP server is designed for enterprise deployment with defense-in-dep
 
 **Highlights:**
 
-- **Read-only mode** (`AUTOMOX_MCP_READ_ONLY`) disables all 18 write tools
+- **Read-only mode** (`AUTOMOX_MCP_READ_ONLY`) disables all 22 write tools
 - **Module filtering** (`AUTOMOX_MCP_MODULES`) for least-privilege tool loading
 - **Correlation IDs** on every tool call, forwarded to Automox API as `X-Correlation-ID`
 - **Rate limiting** (30 calls/60s) with token budget estimation and auto-truncation
@@ -174,15 +183,17 @@ The Automox MCP server is designed for enterprise deployment with defense-in-dep
 - **Tool name prefixing** (`AUTOMOX_MCP_TOOL_PREFIX`) to prevent cross-server collisions
 - **Sigstore-signed releases** with CycloneDX SBOM
 - **SSRF prevention** — webhook URLs validated against private/loopback IPs and cloud metadata endpoints
-- **MCP endpoint authentication** — optional Bearer-token auth for HTTP/SSE transports via `AUTOMOX_MCP_API_KEYS` or `AUTOMOX_MCP_API_KEY_FILE`
+- **MCP endpoint authentication** — static API keys or OAuth 2.1/JWT with audience binding and RFC 9728 Protected Resource Metadata
+- **DNS rebinding protection** — Origin and Host header validation on all HTTP/SSE connections per the MCP transport spec
+- **Security response headers** — `X-Content-Type-Options`, `X-Frame-Options`, `CSP`, `Cache-Control: no-store` on all HTTP responses
 - **Remote bind protection** — non-loopback HTTP/SSE binding requires explicit `--allow-remote-bind` opt-in
-- **32 security hardening items** (V-001 through V-018, V-101 through V-108a, V-112, V-114, V-117 through V-119) documented in CHANGELOG and SECURITY.md
+- **41 security hardening items** (V-001 through V-018, V-101 through V-108a, V-112, V-114, V-117 through V-128) documented in CHANGELOG and SECURITY.md
 
 For vulnerability reporting and the full threat model, see [SECURITY.md](SECURITY.md).
 For deployment hardening (containers, Kubernetes, MCP gateways, TLS, authentication), see the [Deployment Security Guide](docs/deployment-security.md).
 Security posture is benchmarked against the [Wiz MCP Security Best Practices](https://www.wiz.io/blog/mcp-security-best-practices) cheat sheet.
 
-> **Note**: For network-accessible deployments, enable endpoint authentication (`AUTOMOX_MCP_API_KEYS`) and/or place the server behind an MCP gateway or authenticating reverse proxy. TLS termination is the deployer's responsibility.
+> **Note**: For network-accessible deployments, enable endpoint authentication (static keys via `AUTOMOX_MCP_API_KEYS` or JWT via `AUTOMOX_MCP_OAUTH_ISSUER`) and/or place the server behind an MCP gateway or authenticating reverse proxy. TLS termination is the deployer's responsibility.
 
 ## Alternative Installation
 

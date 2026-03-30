@@ -851,6 +851,9 @@ class CreateGlobalApiKeyParams(ForbidExtraModel):
     key_data: dict[str, Any] = Field(description="API key configuration")
 
 
+# SECURITY: If wired to a tool, DecryptGlobalApiKeyParams MUST NOT return the
+# decrypted secret in the tool response — it would be visible to the LLM.
+# Requires a dedicated security review before activation.
 class DecryptGlobalApiKeyParams(ForbidExtraModel):
     key_id: str = Field(description="Global API key ID to decrypt")
 
@@ -879,6 +882,9 @@ class CreateUserApiKeyParams(ForbidExtraModel):
     key_data: dict[str, Any] = Field(description="API key configuration")
 
 
+# SECURITY: If wired to a tool, DecryptUserApiKeyParams MUST NOT return the
+# decrypted secret in the tool response — it would be visible to the LLM.
+# Requires a dedicated security review before activation.
 class DecryptUserApiKeyParams(ForbidExtraModel):
     user_id: int = Field(description="User ID")
     api_key_id: int = Field(description="API key ID to decrypt")

@@ -18,6 +18,7 @@ from ..utils.tooling import (
     as_tool_response,
     enforce_rate_limit,
     format_error,
+    format_validation_error,
 )
 
 logger = logging.getLogger(__name__)
@@ -38,7 +39,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             raw_params["org_id"] = client_org_id
             result: dict[str, Any] = await func(client, **raw_params)
         except (ValidationError, ValueError) as exc:
-            raise ToolError(str(exc)) from exc
+            raise ToolError(format_validation_error(exc)) from exc
         except RateLimitError as exc:
             raise ToolError(str(exc)) from exc
         except AutomoxAPIError as exc:
@@ -68,7 +69,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             raw_params["org_uuid"] = str(org_uuid)
             result: dict[str, Any] = await func(client, **raw_params)
         except (ValidationError, ValueError) as exc:
-            raise ToolError(str(exc)) from exc
+            raise ToolError(format_validation_error(exc)) from exc
         except RateLimitError as exc:
             raise ToolError(str(exc)) from exc
         except AutomoxAPIError as exc:

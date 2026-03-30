@@ -137,6 +137,7 @@ class TestLoadKeysFromFile:
                 bob:amx_mcp_key3
             """)
         )
+        key_file.chmod(0o600)
         monkeypatch.setenv("AUTOMOX_MCP_API_KEY_FILE", str(key_file))
 
         tokens = _load_keys_from_file()
@@ -145,9 +146,19 @@ class TestLoadKeysFromFile:
         assert tokens["amx_mcp_key3"]["client_id"] == "bob"
         assert "amx_mcp_key2" in tokens
 
+    def test_world_readable_file_rejected(self, monkeypatch, tmp_path):
+        """V-127: world-readable key files must be refused."""
+        key_file = tmp_path / "keys.txt"
+        key_file.write_text("amx_mcp_key1\n")
+        key_file.chmod(0o644)
+        monkeypatch.setenv("AUTOMOX_MCP_API_KEY_FILE", str(key_file))
+        with pytest.raises(RuntimeError, match="world-readable"):
+            _load_keys_from_file()
+
     def test_empty_file(self, monkeypatch, tmp_path):
         key_file = tmp_path / "empty.txt"
         key_file.write_text("")
+        key_file.chmod(0o600)
         monkeypatch.setenv("AUTOMOX_MCP_API_KEY_FILE", str(key_file))
         assert _load_keys_from_file() == {}
 
@@ -162,6 +173,7 @@ class TestLoadApiKeys:
         """Env var keys take precedence over file keys on collision."""
         key_file = tmp_path / "keys.txt"
         key_file.write_text("file-client:shared_token\n")
+        key_file.chmod(0o600)
         monkeypatch.setenv("AUTOMOX_MCP_API_KEY_FILE", str(key_file))
         monkeypatch.setenv("AUTOMOX_MCP_API_KEYS", "env-client:shared_token")
 
@@ -171,6 +183,7 @@ class TestLoadApiKeys:
     def test_combines_sources(self, monkeypatch, tmp_path):
         key_file = tmp_path / "keys.txt"
         key_file.write_text("file_key\n")
+        key_file.chmod(0o600)
         monkeypatch.setenv("AUTOMOX_MCP_API_KEY_FILE", str(key_file))
         monkeypatch.setenv("AUTOMOX_MCP_API_KEYS", "env_key")
 

@@ -168,19 +168,84 @@ AUTOMOX_MCP_API_KEY_FILE=/etc/automox-mcp/keys.txt
 
 When configured, all HTTP/SSE requests must include `Authorization: Bearer <key>`. Unauthenticated requests receive `401 Unauthorized`. This is transport-level authentication — it controls who may connect to the MCP endpoint, independent of the Automox API key.
 
+### OAuth 2.1 / JWT Authentication (V-122)
+
+For enterprise environments with an existing Identity Provider (Keycloak, Auth0, Azure AD, Okta), the server supports JWT-based authentication with automatic JWKS key rotation and RFC 9728 Protected Resource Metadata:
+
+```bash
+# Required: OIDC issuer URL
+AUTOMOX_MCP_OAUTH_ISSUER="https://auth.example.com/realms/main"
+
+# JWKS endpoint for automatic key rotation (auto-derived from issuer if omitted)
+AUTOMOX_MCP_OAUTH_JWKS_URI="https://auth.example.com/realms/main/protocol/openid-connect/certs"
+
+# Audience claim — tokens MUST be issued for this audience (prevents token passthrough)
+AUTOMOX_MCP_OAUTH_AUDIENCE="https://mcp.example.com"
+
+# Canonical server URL — enables RFC 9728 Protected Resource Metadata at
+# /.well-known/oauth-protected-resource
+AUTOMOX_MCP_OAUTH_SERVER_URL="https://mcp.example.com"
+
+# Optional: required OAuth scopes (comma-separated)
+AUTOMOX_MCP_OAUTH_SCOPES="mcp:tools"
+
+# Optional: JWT signing algorithm (default: RS256)
+AUTOMOX_MCP_OAUTH_ALGORITHM="RS256"
+```
+
+When configured, the server:
+- Validates JWT signatures via JWKS with automatic key rotation
+- Verifies `iss` (issuer) and `aud` (audience) claims
+- Checks token expiration
+- Enforces required scopes
+- Serves RFC 9728 Protected Resource Metadata at `/.well-known/oauth-protected-resource/<path>`
+- Returns proper `WWW-Authenticate` headers with `resource_metadata` URLs on 401/403
+
+Static API keys take precedence if both are configured.
+
+### DNS Rebinding Protection (V-120)
+
+The server validates `Host` and `Origin` headers on all HTTP/SSE connections to prevent DNS rebinding attacks, as required by the MCP transport specification. This is enabled by default.
+
+```bash
+# Disable DNS rebinding protection (NOT recommended for production)
+AUTOMOX_MCP_DNS_REBINDING_PROTECTION=false
+
+# Allow additional Host header values (comma-separated)
+AUTOMOX_MCP_ALLOWED_HOSTS="proxy.internal:443,cdn.example.com:443"
+
+# Allow additional Origin header values (comma-separated)
+AUTOMOX_MCP_ALLOWED_ORIGINS="https://app.example.com,https://dashboard.example.com"
+```
+
+The server automatically allows the bound host:port and loopback aliases. Requests with invalid Host headers receive `421 Misdirected Request`; invalid Origins receive `403 Forbidden`.
+
+### Security Response Headers (V-121)
+
+All HTTP responses include security headers:
+- `X-Content-Type-Options: nosniff`
+- `X-Frame-Options: DENY`
+- `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`
+- `Cache-Control: no-store`
+- `Referrer-Policy: strict-origin-when-cross-origin`
+- `Permissions-Policy: microphone=(), camera=(), geolocation=()`
+
+These are always enabled on HTTP/SSE transports with no opt-out (defense-in-depth).
+
 ### Recommendations by Transport
 
 | Transport | Recommendation |
 |-----------|---------------|
 | `stdio` | No network exposure — suitable for local/developer use |
-| `sse` / `http` | Enable `AUTOMOX_MCP_API_KEYS` for built-in auth. For defense-in-depth, also place behind a reverse proxy with OAuth2/OIDC. Requires `--allow-remote-bind` for non-loopback addresses |
+| `sse` / `http` (simple) | Enable `AUTOMOX_MCP_API_KEYS` for built-in auth. DNS rebinding protection is on by default. Requires `--allow-remote-bind` for non-loopback addresses |
+| `sse` / `http` (enterprise) | Use `AUTOMOX_MCP_OAUTH_ISSUER` for JWT/OIDC auth with audience binding. Serves RFC 9728 metadata for MCP client discovery. Place behind TLS-terminating reverse proxy |
 | Multi-user | Deploy separate server instances per API key/role, or use an MCP gateway that maps user identity to server instances |
 
 ## Human-in-the-Loop Configuration
 
 Client-side controls that complement the server's safety features:
 
-- Enable **confirmation dialogs** in your MCP client for all write tools (the server's 16 write tools are identifiable by the `request_id` parameter)
+- Enable **confirmation dialogs** in your MCP client for all write tools (the server's 22 write tools are identifiable by the `request_id` parameter)
 - Use `AUTOMOX_MCP_READ_ONLY=true` for monitoring and read-only use cases
 - Use `AUTOMOX_MCP_MODULES` to load only required tool domains (principle of least functionality)
 - Test new or untrusted server versions in a staging environment with `AUTOMOX_MCP_READ_ONLY=true` before production use
@@ -219,8 +284,10 @@ Each release also includes a CycloneDX SBOM (`sbom.cdx.json`) attached to the Gi
 - [ ] Server running as non-root in a container with dropped capabilities
 - [ ] Egress restricted to `console.automox.com:443`
 - [ ] TLS terminated at gateway or reverse proxy
-- [ ] MCP endpoint authentication enabled (`AUTOMOX_MCP_API_KEYS` or `AUTOMOX_MCP_API_KEY_FILE`) and/or enforced at gateway/reverse proxy
-- [ ] API key file permissions restricted to owner only (`chmod 600`) — the server warns at startup if group/world-readable (V-118)
+- [ ] MCP endpoint authentication enabled — static keys (`AUTOMOX_MCP_API_KEYS`) or JWT/OIDC (`AUTOMOX_MCP_OAUTH_ISSUER`) — and/or enforced at gateway/reverse proxy
+- [ ] For JWT auth: `AUTOMOX_MCP_OAUTH_AUDIENCE` set to prevent token passthrough; `AUTOMOX_MCP_OAUTH_SERVER_URL` set for RFC 9728 metadata
+- [ ] API key file permissions restricted to owner only (`chmod 600`) — the server refuses world-readable files and warns on group-readable (V-118, V-127)
+- [ ] DNS rebinding protection enabled (default) — custom origins added via `AUTOMOX_MCP_ALLOWED_ORIGINS` if needed
 - [ ] Structured JSON logs (`AUTOMOX_MCP_LOG_FORMAT=json`) forwarded to SIEM
 - [ ] Release artifact verified via Sigstore before deployment
 - [ ] MCP client configured with confirmation dialogs for write operations
@@ -234,3 +301,5 @@ Each release also includes a CycloneDX SBOM (`sbom.cdx.json`) attached to the Gi
 - [OWASP Top 10 for LLM Applications](https://owasp.org/www-project-top-10-for-large-language-model-applications/) — LLM01 (Prompt Injection) is directly relevant
 - [Sigstore Documentation](https://docs.sigstore.dev/) — For verifying signed release artifacts
 - [MCP Specification](https://modelcontextprotocol.io/) — The protocol specification this server implements
+- [MCP Security Best Practices](https://modelcontextprotocol.io/specification/2025-11-25/basic/security_best_practices) — Official MCP security guidance (session hijacking, SSRF, confused deputy, scope minimization)
+- [MCP Authorization Specification](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization) — OAuth 2.1 authorization framework for MCP

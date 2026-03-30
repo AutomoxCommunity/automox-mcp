@@ -30,6 +30,7 @@ _MODULE_REGISTRY: dict[str, tuple[str, bool]] = {
     "data_extracts": ("data_extract_tools", True),
     "vuln_sync": ("vuln_sync_tools", True),
     "compound": ("compound_tools", False),
+    "policy_windows": ("policy_windows_tools", True),
 }
 
 # Modules that always load regardless of AUTOMOX_MCP_MODULES filtering

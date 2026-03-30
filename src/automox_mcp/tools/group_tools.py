@@ -27,6 +27,7 @@ from ..utils.tooling import (
     check_idempotency,
     enforce_rate_limit,
     format_error,
+    format_validation_error,
     maybe_format_markdown,
     store_idempotency,
 )
@@ -66,7 +67,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 payload["org_id"] = client_org_id
             result: dict[str, Any] = await func(client, **payload)
         except (ValidationError, ValueError) as exc:
-            raise ToolError(str(exc)) from exc
+            raise ToolError(format_validation_error(exc)) from exc
         except RateLimitError as exc:
             raise ToolError(str(exc)) from exc
         except AutomoxAPIError as exc:

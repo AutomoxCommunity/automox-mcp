@@ -18,6 +18,7 @@ from . import (
     policy,
     policy_crud,
     policy_history,
+    policy_windows,
     reports,
     vuln_sync,
     webhooks,
@@ -99,6 +100,17 @@ from .webhooks import (
     test_webhook,
     update_webhook,
 )
+from .policy_windows import (
+    check_group_exclusion_status,
+    check_window_active,
+    create_policy_window,
+    delete_policy_window,
+    get_device_scheduled_windows,
+    get_group_scheduled_windows,
+    get_policy_window,
+    search_policy_windows,
+    update_policy_window,
+)
 from .worklets import get_worklet_detail, search_worklet_catalog
 
 __all__ = [
@@ -117,6 +129,7 @@ __all__ = [
     "policy",
     "policy_crud",
     "policy_history",
+    "policy_windows",
     "reports",
     "vuln_sync",
     "webhooks",
@@ -192,4 +205,13 @@ __all__ = [
     "update_server_group",
     "update_webhook",
     "upload_action_set",
+    "check_group_exclusion_status",
+    "check_window_active",
+    "create_policy_window",
+    "delete_policy_window",
+    "get_device_scheduled_windows",
+    "get_group_scheduled_windows",
+    "get_policy_window",
+    "search_policy_windows",
+    "update_policy_window",
 ]

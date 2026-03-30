@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ipaddress
 import logging
+import socket
 from collections.abc import Awaitable, Callable
 from typing import Any
 from urllib.parse import urlparse
@@ -23,6 +24,7 @@ from ..utils.tooling import (
     check_idempotency,
     enforce_rate_limit,
     format_error,
+    format_validation_error,
     maybe_format_markdown,
     store_idempotency,
 )
@@ -48,7 +50,25 @@ def _validate_webhook_url(url: str) -> None:
     except ValueError as exc:
         if "must not target" in str(exc):
             raise
-        # Not a bare IP — hostname is fine; DNS resolution is Automox's responsibility
+        # Not a bare IP — perform best-effort DNS resolution to catch hostnames
+        # that resolve to private/internal IPs (V-126: SSRF defense-in-depth)
+        try:
+            resolved = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+            for family, _type, _proto, _canonname, sockaddr in resolved:
+                resolved_addr = ipaddress.ip_address(sockaddr[0])
+                if (
+                    resolved_addr.is_private
+                    or resolved_addr.is_loopback
+                    or resolved_addr.is_link_local
+                    or resolved_addr.is_reserved
+                ):
+                    raise ValueError(
+                        "Webhook URL hostname resolves to a private/internal address"
+                    )
+        except (socket.gaierror, OSError):
+            # DNS resolution failed — allow through; Automox's backend will
+            # perform its own resolution when delivering webhooks
+            pass
     # Block well-known cloud metadata endpoints by hostname
     _BLOCKED_HOSTS = {
         "metadata.google.internal",
@@ -173,7 +193,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 payload = {k: v for k, v in params.items() if v is not None}
             result: dict[str, Any] = await func(client, **payload)
         except (ValidationError, ValueError) as exc:
-            raise ToolError(str(exc)) from exc
+            raise ToolError(format_validation_error(exc)) from exc
         except RateLimitError as exc:
             raise ToolError(str(exc)) from exc
         except AutomoxAPIError as exc:

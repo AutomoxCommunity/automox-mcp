@@ -151,6 +151,16 @@ def main(argv: Sequence[str] | None = None) -> None:
         if port is None:
             transport_kwargs.setdefault("port", 8000)
 
+        # Transport security: DNS rebinding protection + security headers
+        from .transport_security import build_transport_security_middleware
+
+        resolved_host_for_sec = str(transport_kwargs.get("host", "127.0.0.1"))
+        resolved_port_for_sec = int(str(transport_kwargs.get("port", 8000)))
+        transport_kwargs["middleware"] = build_transport_security_middleware(
+            host=resolved_host_for_sec,
+            port=resolved_port_for_sec,
+        )
+
         resolved_host = str(transport_kwargs.get("host", "127.0.0.1"))
         _LOOPBACK = {"127.0.0.1", "::1", "localhost"}
         if resolved_host not in _LOOPBACK:

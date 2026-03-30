@@ -5,7 +5,8 @@ Exercises startup, HTTP transport, correlation IDs, idempotency, markdown
 output, capability discovery, non-loopback warnings, and every read-only
 tool against a live Automox organisation.  Tests 35–49 cover Phase 3 tools
 (worklets, data extracts, org API keys, policy history v2, audit v2/OCSF,
-advanced device search, and vulnerability sync).
+advanced device search, and vulnerability sync).  Tests 50–55 cover policy
+windows (maintenance/exclusion windows).
 
 Requirements:
     AUTOMOX_API_KEY, AUTOMOX_ACCOUNT_UUID, and AUTOMOX_ORG_ID must be set.
@@ -265,7 +266,7 @@ def test_stdio_startup() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 2–6, 8–34: HTTP transport tests (run inside an async context)
+# 2–6, 8–55: HTTP transport tests (run inside an async context)
 # ---------------------------------------------------------------------------
 
 
@@ -456,7 +457,7 @@ def test_non_loopback_warning() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Read-only tool battery (tests 8–34)
+# Read-only tool battery (tests 8–55)
 # ---------------------------------------------------------------------------
 
 
@@ -807,6 +808,111 @@ async def run_readonly_tools() -> None:
         resp = await _safe_call(session, "get_upload_formats", {})
         record("get_upload_formats", resp is not None, _count_or_err(resp))
 
+        # ================================================================
+        # Policy Windows (tests 50–55)
+        # ================================================================
+
+        log.info(f"\n{BOLD}Policy Windows{RESET}")
+
+        # 50. search_policy_windows
+        resp = await _safe_call(session, "search_policy_windows", {})
+        record("search_policy_windows", resp is not None, _count_or_err(resp))
+        window_list = _extract_list(resp.get("data")) if resp else []
+        window_uuid: str | None = None
+        for w in window_list:
+            w_uuid = w.get("window_uuid")
+            if w_uuid:
+                window_uuid = w_uuid
+                break
+
+        # 51. get_policy_window (needs a window_uuid from search)
+        if window_uuid:
+            resp = await _safe_call(
+                session, "get_policy_window", {"window_uuid": window_uuid}
+            )
+            record("get_policy_window", resp is not None, _data_keys(resp))
+        else:
+            record("get_policy_window", True, "skipped — no windows in org (OK)")
+
+        # 52. check_window_active (needs a window_uuid)
+        if window_uuid:
+            resp = await _safe_call(
+                session, "check_window_active", {"window_uuid": window_uuid}
+            )
+            record("check_window_active", resp is not None, _data_keys(resp))
+        else:
+            record("check_window_active", True, "skipped — no windows in org (OK)")
+
+        # 53. check_group_exclusion_status (needs group UUIDs)
+        # Use the first group's UUID if available from earlier tests
+        if group_list:
+            g_uuid = group_list[0].get("uuid") or group_list[0].get("group_uuid")
+            if g_uuid:
+                resp = await _safe_call(
+                    session,
+                    "check_group_exclusion_status",
+                    {"group_uuids": [g_uuid]},
+                )
+                record("check_group_exclusion_status", resp is not None, _data_keys(resp))
+            else:
+                record(
+                    "check_group_exclusion_status",
+                    True,
+                    "skipped — no group UUID available (OK)",
+                )
+        else:
+            record(
+                "check_group_exclusion_status",
+                True,
+                "skipped — no groups in org (OK)",
+            )
+
+        # 54. get_group_scheduled_windows (needs a group UUID)
+        if group_list:
+            g_uuid = group_list[0].get("uuid") or group_list[0].get("group_uuid")
+            if g_uuid:
+                resp = await _safe_call(
+                    session,
+                    "get_group_scheduled_windows",
+                    {"group_uuid": g_uuid, "date": "2026-12-31T00:00:00Z"},
+                )
+                record("get_group_scheduled_windows", resp is not None, _data_keys(resp))
+            else:
+                record(
+                    "get_group_scheduled_windows",
+                    True,
+                    "skipped — no group UUID available (OK)",
+                )
+        else:
+            record(
+                "get_group_scheduled_windows",
+                True,
+                "skipped — no groups in org (OK)",
+            )
+
+        # 55. get_device_scheduled_windows (needs a device UUID)
+        if device_list:
+            d_uuid = device_list[0].get("uuid") or device_list[0].get("device_uuid")
+            if d_uuid:
+                resp = await _safe_call(
+                    session,
+                    "get_device_scheduled_windows",
+                    {"device_uuid": d_uuid, "date": "2026-12-31T00:00:00Z"},
+                )
+                record("get_device_scheduled_windows", resp is not None, _data_keys(resp))
+            else:
+                record(
+                    "get_device_scheduled_windows",
+                    True,
+                    "skipped — no device UUID available (OK)",
+                )
+        else:
+            record(
+                "get_device_scheduled_windows",
+                True,
+                "skipped — no devices in org (OK)",
+            )
+
 
 def _extract_id(item: dict[str, Any], *keys: str) -> int | None:
     """Try multiple field names to extract an ID from a response item."""
@@ -932,7 +1038,7 @@ def main() -> int:
     # 1. Stdio startup (synchronous)
     test_stdio_startup()
 
-    # 2–6, 8–49: HTTP transport tests (async)
+    # 2–6, 8–55: HTTP transport tests (async)
     asyncio.run(run_http_tests())
 
     # 7. Non-loopback warning (separate server, synchronous)

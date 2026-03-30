@@ -9,6 +9,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### Phase 6: MCP Security Best Practices
+
+- **DNS rebinding protection** (V-120) — `DNSRebindingProtectionMiddleware` validates `Host` and `Origin` headers on all HTTP/SSE connections per the MCP transport specification. Returns `421 Misdirected Request` for invalid Host headers and `403 Forbidden` for invalid Origins. Supports wildcard port patterns. Enabled by default; configurable via `AUTOMOX_MCP_ALLOWED_ORIGINS`, `AUTOMOX_MCP_ALLOWED_HOSTS`, and `AUTOMOX_MCP_DNS_REBINDING_PROTECTION`.
+- **Security response headers** (V-121) — `SecurityHeadersMiddleware` injects `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`, `Cache-Control: no-store`, `Referrer-Policy: strict-origin-when-cross-origin`, and `Permissions-Policy` on all HTTP responses. Always enabled on HTTP/SSE transports.
+- **OAuth 2.1 / JWT authentication** (V-122) — Validate JWTs from external authorization servers (Keycloak, Auth0, Azure AD, Okta) with audience binding, issuer validation, and automatic JWKS key rotation via FastMCP's `JWTVerifier`. When `AUTOMOX_MCP_OAUTH_SERVER_URL` is set, wraps with `RemoteAuthProvider` to serve RFC 9728 Protected Resource Metadata at `/.well-known/oauth-protected-resource/<path>` and returns proper `WWW-Authenticate` headers with `resource_metadata` URLs on 401/403 responses. Configure via `AUTOMOX_MCP_OAUTH_ISSUER`, `AUTOMOX_MCP_OAUTH_JWKS_URI`, `AUTOMOX_MCP_OAUTH_AUDIENCE`, `AUTOMOX_MCP_OAUTH_SERVER_URL`, `AUTOMOX_MCP_OAUTH_SCOPES`, `AUTOMOX_MCP_OAUTH_ALGORITHM`.
+- **New module**: `transport_security.py` — ASGI middleware for DNS rebinding protection and security response headers, with `build_transport_security_middleware()` factory that auto-configures from server bind address and environment variables.
+
+#### Policy Windows (9 tools)
+
+- **New module**: `policy_windows` — 9 tools (6 read, 3 write) for managing maintenance/exclusion windows via the Policy Windows API.
+  - `search_policy_windows` — Search/list windows with filtering by group, status, recurrence; pagination support.
+  - `get_policy_window` — Get window details by UUID.
+  - `check_group_exclusion_status` — Check if groups are in an active exclusion window (per-group boolean).
+  - `check_window_active` — Check if a specific window is currently active.
+  - `get_group_scheduled_windows` — Upcoming maintenance periods for a server group.
+  - `get_device_scheduled_windows` — Upcoming maintenance periods for a device.
+  - `create_policy_window` — Create a maintenance/exclusion window with RFC 5545 RRULE scheduling.
+  - `update_policy_window` — Update a window (partial update, `dtstart` required).
+  - `delete_policy_window` — Delete a window permanently.
+
+### Security
+
+- **V-120**: DNS rebinding protection via Origin/Host header validation on all HTTP/SSE connections. Implements the MCP transport specification requirement: "Servers MUST validate the Origin header on all incoming connections to prevent DNS rebinding attacks."
+- **V-121**: HTTP security response headers on all HTTP/SSE responses (defence-in-depth). Prevents clickjacking (`frame-ancestors 'none'`), MIME sniffing (`nosniff`), and caching of sensitive responses (`no-store`).
+- **V-122**: OAuth 2.1 / JWT authentication with RFC 9728 Protected Resource Metadata. Prevents token passthrough via audience binding (`AUTOMOX_MCP_OAUTH_AUDIENCE`). Implements the MCP authorization specification requirements for token audience validation and protected resource metadata.
+- **V-123**: Reject requests with missing `Host` header in DNS rebinding middleware (returns 400). Prevents bypass of DNS rebinding protection through misconfigured proxies or malformed requests.
+- **V-124**: Sanitize `ValidationError`/`ValueError` messages before raising `ToolError` across all 17 tool modules. Prevents Pydantic validation errors from echoing attacker-controlled input values to the LLM.
+- **V-125**: Warn at startup when `AUTOMOX_MCP_OAUTH_ISSUER` does not use HTTPS, as JWKS key discovery over cleartext HTTP is vulnerable to MITM attacks.
+- **V-126**: Best-effort DNS resolution check in webhook URL validation. Hostnames that resolve to private, loopback, or link-local addresses are now rejected (defense-in-depth against SSRF via DNS rebinding).
+- **V-127**: Refuse to load world-readable API key files (upgraded from warning to `RuntimeError`). Group-readable files still produce a warning.
+- **V-128**: Added `Literal`, `UUID`, pattern, and bounds constraints to all policy windows tool parameters (pagination size capped at 500, dates validated against ISO 8601, RRULE validated for RFC 5545 prefix).
+
+### Changed
+
+- `auth.py` — Refactored into three provider factories (`_create_static_auth`, `_create_jwt_auth`, `create_auth_provider`) with priority chain: static keys > JWT/OIDC > none. `is_auth_configured()` now also checks for `AUTOMOX_MCP_OAUTH_ISSUER`. Renamed `_env_list` to public `env_list` for cross-module use.
+- `__init__.py` — HTTP/SSE transport startup now injects transport security middleware (DNS rebinding + security headers) automatically.
+- `SECURITY.md` — Added V-120 through V-128 to threat model and security features table. Added MCP specification security references.
+- `docs/deployment-security.md` — New sections for OAuth/JWT auth, DNS rebinding protection, and security headers. Updated recommendations table and pre-production checklist.
+- `docs/tool-reference.md` — Enterprise Features section updated with OAuth/JWT auth, DNS rebinding protection, and security headers documentation.
+- `README.md` — Configuration table expanded with 8 new env vars. Endpoint Authentication section rewritten for dual static/JWT support. Security highlights updated to 41 items (V-001 through V-128).
+
 #### Phase 5: Hardening & Quality
 
 - **Unicode normalization in sanitizer** (V-108a) — `sanitize_for_llm()` now applies NFKC normalization and strips zero-width/invisible characters before pattern matching, defeating homoglyph bypass attacks (Cyrillic lookalikes, full-width characters, zero-width joiners).
@@ -131,7 +172,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Correlation IDs** — UUID4 assigned per tool call via FastMCP middleware. The ID flows to the `metadata` field of every tool response and is forwarded to the Automox API as the `X-Correlation-ID` request header. The middleware logs tool name, final status, and wall-clock latency at `INFO` level.
 - **Token budget estimation** — Middleware warns when a response is estimated to exceed ~4000 tokens and auto-truncates list data to stay within budget. Threshold is configurable via `AUTOMOX_MCP_TOKEN_BUDGET` environment variable.
-- **Idempotency keys** — All 16 write tools accept an optional `request_id` parameter (UUID string). A duplicate `request_id` within 300 seconds returns the cached response without re-executing the API call. In-memory TTL cache with a maximum of 1000 entries.
+- **Idempotency keys** — All 21 idempotent write tools accept an optional `request_id` parameter (UUID string). A duplicate `request_id` within 300 seconds returns the cached response without re-executing the API call. In-memory TTL cache with a maximum of 1000 entries.
 - **Markdown table output** — 13 list tools accept an optional `output_format` parameter (`"json"` default, `"markdown"` for compact tables suited to chat interfaces).
 - **`discover_capabilities` meta-tool** — Returns all available tools organized by domain (devices, policies, patches, groups, events, reports, audit, webhooks, account, compound). Always registered regardless of `AUTOMOX_MCP_MODULES` configuration. Brings total tool count to 45.
 

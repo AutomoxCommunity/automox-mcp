@@ -32,6 +32,7 @@ _VALID_MODULES: frozenset[str] = frozenset({
     "data_extracts",
     "vuln_sync",
     "compound",
+    "policy_windows",
 })
 
 SENSITIVE_KEYWORDS: tuple[str, ...] = (
@@ -271,6 +272,22 @@ def format_error(exc: AutomoxAPIError) -> str:
     message = f"{str(exc)} (status={exc.status_code})\n\nAPI Response:\n{payload_text}"
     if is_sanitization_enabled():
         message = sanitize_for_llm(message, field_name="message")
+    return message
+
+
+def format_validation_error(exc: Exception) -> str:
+    """Sanitize a ValidationError/ValueError message before it reaches the LLM.
+
+    Pydantic ``ValidationError`` messages can echo back raw input values.
+    This prevents attacker-controlled data from reaching the LLM via
+    deliberately malformed tool parameters (V-124).
+    """
+    message = str(exc)
+    if is_sanitization_enabled():
+        message = sanitize_for_llm(message, field_name="message")
+    # Truncate to prevent oversized validation errors from consuming token budget
+    if len(message) > 500:
+        message = message[:500] + "… (truncated)"
     return message
 
 

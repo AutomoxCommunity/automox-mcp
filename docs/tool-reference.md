@@ -1,6 +1,6 @@
 # Tool Reference
 
-Complete reference for all 71 tools, 6 workflow prompts, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
+Complete reference for all 80 tools, 6 workflow prompts, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
 
 > **Tip:** You don't need to memorize this. Call `discover_capabilities` from your AI assistant to get a live summary of available tools organized by domain.
 
@@ -21,6 +21,7 @@ Complete reference for all 71 tools, 6 workflow prompts, MCP resources, paramete
 - [Reports (2 tools)](#reports-2-tools)
 - [Account Management (3 tools)](#account-management-3-tools)
 - [Audit Trail (2 tools)](#audit-trail-2-tools)
+- [Policy Windows (9 tools)](#policy-windows-9-tools)
 - [Capability Discovery (1 tool)](#capability-discovery-1-tool)
 - [Workflow Prompts (6 prompts)](#workflow-prompts-6-prompts)
 - [MCP Resources](#mcp-resources)
@@ -150,9 +151,23 @@ Manage vulnerability remediation workflows via the Vuln Sync API. Supports CSV-b
 - **`audit_trail_user_activity`** - Retrieve Automox audit trail events performed by a specific user on a given date, with optional pagination cursor support. Set `include_raw_events=true` to include sanitized event payloads when deeper investigation is required. Pass either the full email address or provide `actor_name`/partial email hints and the tool will resolve the matching Automox user automatically.
 - **`audit_events_ocsf`** - Query OCSF-formatted audit events from the Audit Service v2. Supports filtering by date, event category (authentication, account_change, entity_management, user_access, web_resource_activity), and event type name. Uses cursor-based pagination for large result sets.
 
+## Policy Windows (9 tools)
+
+Manage maintenance/exclusion windows that prevent policy execution during scheduled periods. Uses the Policy Windows API with org UUID-based endpoints and RFC 5545 RRULE scheduling.
+
+- **`search_policy_windows`** - Search and list maintenance/exclusion windows with optional filtering by group UUIDs, status (`active`/`inactive`), and recurrence type (`recurring`/`once`). Supports pagination via `page`/`size`.
+- **`get_policy_window`** - Retrieve details for a specific maintenance window by UUID, including RRULE schedule, duration, assigned groups, and status.
+- **`check_group_exclusion_status`** - Check whether one or more server groups are currently within an active exclusion window. Returns a per-group boolean — useful before triggering manual policy runs.
+- **`check_window_active`** - Check whether a specific maintenance window is currently active. A window is active when its status is "active", it has at least one group, and the current time falls within an exclusion period.
+- **`get_group_scheduled_windows`** - Get upcoming scheduled maintenance periods for a server group with start/end times and window types. Optionally provide a future date limit (ISO 8601 UTC).
+- **`get_device_scheduled_windows`** - Get upcoming scheduled maintenance periods for a specific device with start/end times and window types. Optionally provide a future date limit (ISO 8601 UTC).
+- **`create_policy_window`** - Create a new maintenance/exclusion window with RFC 5545 RRULE scheduling. Supports recurring windows (e.g., every Monday 2–4 AM) and one-time windows. All fields required.
+- **`update_policy_window`** - Update an existing maintenance window. Only `dtstart` is required; all other fields are optional for partial updates.
+- **`delete_policy_window`** - Delete a maintenance/exclusion window permanently.
+
 ## Capability Discovery (1 tool)
 
-- **`discover_capabilities`** - Return all available tools organized by domain (devices, device_search, policies, policy_history, patches, groups, events, reports, audit, webhooks, worklets, data_extracts, vuln_sync, account, compound). This meta-tool is always loaded regardless of `AUTOMOX_MCP_MODULES` configuration and provides a quick reference for what the server can do.
+- **`discover_capabilities`** - Return all available tools organized by domain (devices, device_search, policies, policy_history, patches, groups, events, reports, audit, webhooks, worklets, data_extracts, vuln_sync, account, compound, policy_windows). This meta-tool is always loaded regardless of `AUTOMOX_MCP_MODULES` configuration and provides a quick reference for what the server can do.
 
 ## Workflow Prompts (6 prompts)
 
@@ -234,7 +249,7 @@ AUTOMOX_MCP_TOKEN_BUDGET=4000   # default; set higher to allow larger responses
 
 ### Idempotency Keys
 
-All 16 write tools accept an optional `request_id` parameter (any UUID string). Submitting the same `request_id` within 300 seconds returns the cached response without re-executing the underlying API call. The cache holds up to 1000 entries and is stored in-memory (cleared on server restart).
+All 21 idempotent write tools accept an optional `request_id` parameter (any UUID string). Submitting the same `request_id` within 300 seconds returns the cached response without re-executing the underlying API call. The cache holds up to 1000 entries and is stored in-memory (cleared on server restart).
 
 ```
 # Example: safe to retry -- second call returns the cached result
@@ -257,7 +272,9 @@ The `discover_capabilities` meta-tool returns all available tools organized by d
 
 ### Endpoint Authentication
 
-For HTTP/SSE deployments, the server supports Bearer-token authentication at the transport level. When configured, every request must include a valid `Authorization: Bearer <key>` header.
+For HTTP/SSE deployments, the server supports two authentication strategies (first match wins):
+
+**Option 1: Static API Keys** — Simple bearer tokens for trusted clients:
 
 ```bash
 # Generate a key
@@ -270,4 +287,36 @@ AUTOMOX_MCP_API_KEYS="alice:amx_mcp_abc123,bob:amx_mcp_def456"
 AUTOMOX_MCP_API_KEY_FILE=/etc/automox-mcp/keys.txt
 ```
 
-This is independent of the Automox API key (`AUTOMOX_API_KEY`) and has no effect on stdio transport. See [Deployment Security Guide](deployment-security.md) for full details.
+**Option 2: OAuth 2.1 / JWT** — Validate JWTs from an external IdP (Keycloak, Auth0, Azure AD, Okta):
+
+```bash
+AUTOMOX_MCP_OAUTH_ISSUER="https://auth.example.com/realms/main"
+AUTOMOX_MCP_OAUTH_JWKS_URI="https://auth.example.com/realms/main/protocol/openid-connect/certs"
+AUTOMOX_MCP_OAUTH_AUDIENCE="https://mcp.example.com"
+AUTOMOX_MCP_OAUTH_SERVER_URL="https://mcp.example.com"
+AUTOMOX_MCP_OAUTH_SCOPES="mcp:tools"          # optional
+AUTOMOX_MCP_OAUTH_ALGORITHM="RS256"            # optional, default RS256
+```
+
+When `AUTOMOX_MCP_OAUTH_SERVER_URL` is set, the server exposes [RFC 9728](https://datatracker.ietf.org/doc/html/rfc9728) Protected Resource Metadata at `/.well-known/oauth-protected-resource/<path>` and returns proper `WWW-Authenticate` headers on 401/403 responses, enabling MCP clients to discover the authorization server automatically.
+
+Both options are independent of the Automox API key (`AUTOMOX_API_KEY`) and have no effect on stdio transport. See [Deployment Security Guide](deployment-security.md) for full details.
+
+### DNS Rebinding Protection
+
+The server validates `Host` and `Origin` headers on all HTTP/SSE connections to prevent [DNS rebinding attacks](https://en.wikipedia.org/wiki/DNS_rebinding), as required by the MCP transport specification. Enabled by default — the server automatically allows the bound host:port and loopback aliases.
+
+```bash
+# Add additional allowed origins (e.g., your web dashboard)
+AUTOMOX_MCP_ALLOWED_ORIGINS="https://app.example.com,https://dashboard.example.com"
+
+# Add additional allowed hosts
+AUTOMOX_MCP_ALLOWED_HOSTS="proxy.internal:443"
+
+# Disable (NOT recommended for production)
+AUTOMOX_MCP_DNS_REBINDING_PROTECTION=false
+```
+
+### Security Response Headers
+
+All HTTP responses automatically include security headers: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`, `Cache-Control: no-store`, `Referrer-Policy: strict-origin-when-cross-origin`, and `Permissions-Policy`. Always enabled with no opt-out.

@@ -119,6 +119,39 @@ def test_valid_modules_includes_new_modules() -> None:
     }
 
 
+def test_policy_windows_tools_register_read_only() -> None:
+    server = _make_server_with_module("policy_windows_tools", has_writes=False)
+    tool_names = set(server._tool_manager._tools.keys())
+    read_tools = {
+        "search_policy_windows",
+        "get_policy_window",
+        "check_group_exclusion_status",
+        "check_window_active",
+        "get_group_scheduled_windows",
+        "get_device_scheduled_windows",
+    }
+    assert read_tools.issubset(tool_names)
+    assert "create_policy_window" not in tool_names
+    assert "update_policy_window" not in tool_names
+    assert "delete_policy_window" not in tool_names
+
+
+def test_policy_windows_tools_register_with_writes() -> None:
+    server = _make_server_with_module("policy_windows_tools", has_writes=True)
+    tool_names = set(server._tool_manager._tools.keys())
+    assert "create_policy_window" in tool_names
+    assert "update_policy_window" in tool_names
+    assert "delete_policy_window" in tool_names
+
+
+def test_valid_modules_includes_policy_windows() -> None:
+    from automox_mcp.utils.tooling import get_enabled_modules
+
+    with patch.dict(os.environ, {"AUTOMOX_MCP_MODULES": "policy_windows"}):
+        enabled = get_enabled_modules()
+    assert "policy_windows" in enabled
+
+
 def test_unknown_modules_warned(caplog) -> None:
     import logging
 

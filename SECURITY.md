@@ -53,7 +53,7 @@ For sensitive deployments, we recommend using an MCP gateway with inline guardra
 
 ### Privilege Escalation
 
-- `AUTOMOX_MCP_READ_ONLY` mode disables all 18 write tools
+- `AUTOMOX_MCP_READ_ONLY` mode disables all 22 write tools
 - `AUTOMOX_MCP_MODULES` limits which tool domains load (principle of least functionality)
 - Pagination capped at 50 pages to prevent resource exhaustion (V-011)
 - Report limits bounded to 500 results (V-004)
@@ -61,7 +61,10 @@ For sensitive deployments, we recommend using an MCP gateway with inline guardra
 ### Network Exposure
 
 - Non-loopback HTTP/SSE binding requires explicit opt-in via `--allow-remote-bind` or `AUTOMOX_MCP_ALLOW_REMOTE_BIND=true` (V-106); server exits with an error otherwise
+- **DNS rebinding protection**: Origin and Host header validation on all HTTP/SSE connections per the MCP transport specification (V-120); configurable via `AUTOMOX_MCP_ALLOWED_ORIGINS` and `AUTOMOX_MCP_ALLOWED_HOSTS`
+- **Security response headers** on all HTTP responses: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`, `Cache-Control: no-store`, `Referrer-Policy`, `Permissions-Policy` (V-121)
 - Built-in Bearer-token endpoint authentication for HTTP/SSE transports via `AUTOMOX_MCP_API_KEYS` or `AUTOMOX_MCP_API_KEY_FILE` (V-108); for additional defense-in-depth, an authenticating reverse proxy or MCP gateway is recommended
+- **OAuth 2.1 / JWT authentication** for enterprise IdP integration (V-122): validate JWTs from external authorization servers (Keycloak, Auth0, Azure AD, Okta) with audience binding, issuer validation, and automatic JWKS key rotation; serves RFC 9728 Protected Resource Metadata at `/.well-known/oauth-protected-resource`
 - Tool name prefixing (`AUTOMOX_MCP_TOOL_PREFIX`) prevents cross-server collisions
 - Webhook URLs validated against private/loopback/link-local IPs and cloud metadata endpoints (Google, Azure, Oracle Cloud, generic `*.internal`) to prevent SSRF (V-103, V-114)
 
@@ -105,14 +108,23 @@ For sensitive deployments, we recommend using an MCP gateway with inline guardra
 | V-112 | Narrowed policy.py exception handler; no raw error leakage to LLM | `workflows/policy.py` |
 | V-114 | Expanded cloud metadata blocklist (Azure, Oracle, *.internal) | `tools/webhook_tools.py` |
 | V-117 | Reference-style markdown image/link stripping | `utils/sanitize.py` |
-| V-118 | API key file permission check (warn on group/world-readable) | `auth.py` |
+| V-118 | API key file permission check (block world-readable, warn group-readable) | `auth.py` |
 | V-119 | Unlabeled fenced code block removal | `utils/sanitize.py` |
+| V-120 | DNS rebinding protection (Origin/Host header validation) | `transport_security.py`, `__init__.py` |
+| V-121 | HTTP security response headers (X-Frame-Options, CSP, etc.) | `transport_security.py` |
+| V-122 | OAuth 2.1 / JWT authentication with RFC 9728 metadata | `auth.py` |
+| V-123 | Reject missing Host header in DNS rebinding middleware | `transport_security.py` |
+| V-124 | Sanitize ValidationError/ValueError messages before ToolError | All `tools/*.py`, `utils/tooling.py` |
+| V-125 | Warn on non-HTTPS OAuth issuer URL (MITM risk for JWKS) | `auth.py` |
+| V-126 | Best-effort DNS resolution check for webhook SSRF | `tools/webhook_tools.py` |
+| V-127 | Refuse world-readable API key files | `auth.py` |
+| V-128 | Literal/UUID type constraints on policy windows parameters | `tools/policy_windows_tools.py` |
 
 ## Scope and Limitations
 
 This server does **not** provide:
 
-- **Authorization / RBAC** — The server operates with a single Automox API key; multi-user access control is the gateway's responsibility. MCP endpoint authentication (V-108) controls *who may connect*, not *what they may do*.
+- **Authorization / RBAC** — The server operates with a single Automox API key; multi-user access control is the gateway's responsibility. MCP endpoint authentication (V-108, V-122) controls *who may connect*, not *what they may do*. OAuth scopes can be enforced via `AUTOMOX_MCP_OAUTH_SCOPES`.
 - **TLS termination** — Use a reverse proxy (nginx, Envoy, Caddy) or MCP gateway
 - **Container isolation** — Run in a container with dropped capabilities and read-only filesystem
 - **Egress filtering** — Restrict outbound traffic to `console.automox.com:443` at the network layer
@@ -121,6 +133,8 @@ See the [Deployment Security Guide](docs/deployment-security.md) for infrastruct
 
 ## References
 
+- [MCP Security Best Practices](https://modelcontextprotocol.io/specification/2025-11-25/basic/security_best_practices) — Official MCP protocol security guidance (session hijacking, SSRF, confused deputy, token passthrough, scope minimization)
+- [MCP Authorization Specification](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization) — OAuth 2.1 authorization framework for MCP, RFC 9728 Protected Resource Metadata
 - [Wiz: MCP Security Best Practices (Cheat Sheet)](https://www.wiz.io/blog/mcp-security-best-practices) — Industry guidance this project's security posture is benchmarked against
 - [Deployment Security Guide](docs/deployment-security.md) — Infrastructure-level hardening guidance
 - [OWASP Top 10 for LLM Applications](https://owasp.org/www-project-top-10-for-large-language-model-applications/) — LLM01 (Prompt Injection) is directly relevant to MCP tool security

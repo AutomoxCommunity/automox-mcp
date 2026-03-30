@@ -16,6 +16,7 @@ from ..utils.tooling import (
     as_tool_response,
     enforce_rate_limit,
     format_error,
+    format_validation_error,
     maybe_format_markdown,
 )
 from ..workflows.device_search import (
@@ -51,7 +52,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             await enforce_rate_limit()
             result: dict[str, Any] = await func(client, **kwargs)
         except (ValidationError, ValueError) as exc:
-            raise ToolError(str(exc)) from exc
+            raise ToolError(format_validation_error(exc)) from exc
         except RateLimitError as exc:
             raise ToolError(str(exc)) from exc
         except AutomoxAPIError as exc:

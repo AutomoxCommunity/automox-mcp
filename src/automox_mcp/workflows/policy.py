@@ -249,9 +249,11 @@ async def summarize_policies(
 
     resolved_org_id = require_org_id(client, org_id)
 
+    # When client-side filtering is active, over-fetch to avoid excessive API calls
+    fetch_limit = min(limit * 3, 500) if not include_inactive else limit
     params = {"o": resolved_org_id}
-    if limit is not None:
-        params["limit"] = limit
+    if fetch_limit is not None:
+        params["limit"] = fetch_limit
     if page is not None:
         params["page"] = page
 
@@ -434,6 +436,9 @@ def _decode_schedule_days_bitmask(bitmask: int) -> dict[str, Any]:
     """
     if not bitmask or bitmask == 0:
         return {"interpretation": "Unscheduled (no days selected)"}
+
+    # Mask out the unused bit 0 so odd values don't produce wrong results
+    bitmask = bitmask & 0xFE
 
     # Map bitmask to day names using Automox's bit positions
     days_map = {
@@ -721,13 +726,13 @@ async def summarize_patch_approvals(
         approval_status = (approval_item.get("status") or "unknown").lower()
         status_counts[approval_status] += 1
 
-        if status_filter and approval_status != status_filter:
-            continue
-
         severity = (
             approval_item.get("severity") or approval_item.get("cvss_severity") or "unknown"
         ).lower()
         severity_counts[severity] += 1
+
+        if status_filter and approval_status != status_filter:
+            continue
 
         pending_items.append(
             {

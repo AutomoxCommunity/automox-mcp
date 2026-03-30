@@ -379,9 +379,9 @@ async def test_get_group_scheduled_windows_with_date() -> None:
         date="2026-04-30T00:00:00Z",
     )
 
-    # Date is embedded in the path (not params) to avoid colon URL-encoding
-    assert "date=2026-04-30T00:00:00" in client.calls[0][1]
-    assert client.calls[0][2] is None
+    # Date is passed via params dict (properly URL-encoded by httpx)
+    assert client.calls[0][1].endswith("/scheduled-windows")
+    assert client.calls[0][2] == {"date": "2026-04-30T00:00:00"}
 
 
 # ---------------------------------------------------------------------------
@@ -423,9 +423,9 @@ async def test_get_device_scheduled_windows_with_date() -> None:
         date="2026-04-30T00:00:00Z",
     )
 
-    # Date is embedded in the path (not params) to avoid colon URL-encoding
-    assert "date=2026-04-30T00:00:00" in client.calls[0][1]
-    assert client.calls[0][2] is None
+    # Date is passed via params dict (properly URL-encoded by httpx)
+    assert client.calls[0][1].endswith("/scheduled-windows")
+    assert client.calls[0][2] == {"date": "2026-04-30T00:00:00"}
 
 
 # ---------------------------------------------------------------------------

@@ -46,18 +46,22 @@ async def list_events(
     events = await client.get("/events", params=params)
 
     # Handle paginated dict responses (e.g. {"data": [...], "total": N})
+    api_total: int | None = None
     if isinstance(events, Mapping):
         raw = events.get("data")
         if isinstance(raw, list):
             events_list: list[Any] = raw
         else:
-            events_list = [events] if events else []
+            events_list = []
+        api_total_value = events.get("total") or events.get("totalCount")
+        if isinstance(api_total_value, int):
+            api_total = api_total_value
     elif isinstance(events, list):
         events_list = events
     else:
         events_list = [events] if events else []
 
-    total = len(events_list)
+    total = api_total if api_total is not None else len(events_list)
     summary: list[dict[str, Any]] = []
     for event in events_list:
         if not isinstance(event, Mapping):

@@ -47,7 +47,10 @@ class JSONFormatter(logging.Formatter):
                     elif key == "status":
                         entry["status"] = value
                     elif key == "latency":
-                        entry["latency_ms"] = round(float(value.rstrip("s")) * 1000, 1)
+                        try:
+                            entry["latency_ms"] = round(float(value.rstrip("s")) * 1000, 1)
+                        except (ValueError, TypeError):
+                            entry["latency_raw"] = value
 
         if record.exc_info and record.exc_info[1]:
             entry["exception"] = str(record.exc_info[1])

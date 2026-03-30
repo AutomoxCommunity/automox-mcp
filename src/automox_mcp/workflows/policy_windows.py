@@ -321,10 +321,11 @@ async def get_group_scheduled_windows(
 ) -> dict[str, Any]:
     """Get upcoming scheduled maintenance periods for a server group."""
     path = f"/policy-windows/org/{org_uuid}/group/{group_uuid}/scheduled-windows"
+    params: dict[str, Any] = {}
     if date is not None:
-        path = f"{path}?date={date.rstrip('Z')}"
+        params["date"] = date.rstrip("Z")
 
-    result = await client.get(path)
+    result = await client.get(path, params=params or None)
 
     periods: list[dict[str, Any]] = []
     if isinstance(result, list):
@@ -368,10 +369,11 @@ async def get_device_scheduled_windows(
 ) -> dict[str, Any]:
     """Get upcoming scheduled maintenance periods for a specific device."""
     path = f"/policy-windows/org/{org_uuid}/device/{device_uuid}/scheduled-windows"
+    params: dict[str, Any] = {}
     if date is not None:
-        path = f"{path}?date={date.rstrip('Z')}"
+        params["date"] = date.rstrip("Z")
 
-    result = await client.get(path)
+    result = await client.get(path, params=params or None)
 
     periods: list[dict[str, Any]] = []
     if isinstance(result, list):

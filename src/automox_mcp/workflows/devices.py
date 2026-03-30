@@ -916,7 +916,11 @@ async def search_devices(
 
             if tag_term:
                 tags = device.get("tags") or device.get("labels") or []
-                tags_lower = {str(t).lower() for t in tags} if isinstance(tags, Sequence) else set()
+                tags_lower = (
+                    {str(t).lower() for t in tags}
+                    if isinstance(tags, Sequence) and not isinstance(tags, (str, bytes))
+                    else {str(tags).lower()} if isinstance(tags, str) else set()
+                )
                 if tag_term not in tags_lower:
                     continue
 
@@ -989,12 +993,21 @@ async def summarize_device_health(
     if limit is not None:
         effective_limit = max(1, min(limit, 500))
 
-    params = {"o": resolved_org_id, "limit": effective_limit}
+    params: dict[str, Any] = {"o": resolved_org_id, "limit": effective_limit}
     if group_id is not None:
         params["groupId"] = group_id
 
-    devices = await client.get("/servers", params=params)
-    devices = devices if isinstance(devices, Sequence) else []
+    # Paginate to collect all devices (up to a safety cap)
+    _MAX_HEALTH_PAGES = 20
+    all_devices: list[Any] = []
+    for _page_num in range(_MAX_HEALTH_PAGES):
+        params["page"] = _page_num
+        page_response = await client.get("/servers", params=params)
+        page_items = page_response if isinstance(page_response, Sequence) else []
+        all_devices.extend(page_items)
+        if len(page_items) < effective_limit:
+            break
+    devices: Sequence[Any] = all_devices
 
     totals: Counter[str] = Counter()
     device_status_counts: Counter[str] = Counter()

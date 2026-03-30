@@ -35,7 +35,7 @@ The following attack surfaces have been identified and mitigated:
 - API key stored as private attribute (`_api_key`), injected per-request via httpx auth callback (V-001)
 - Generic error messages prevent key leakage in stack traces (V-006)
 - Webhook secrets stripped from idempotency cache after create/rotate (V-012)
-- Sensitive field redaction covers: `token`, `secret`, `key`, `password`, `credential`, `auth`, `bearer`, `passwd`, `api-key`, `apikey` (V-010, V-107)
+- Sensitive field redaction covers: `token`, `secret`, `api_key`, `api-key`, `apikey`, `password`, `credential`, `bearer`, `passwd` (V-010, V-107, S-003)
 - HTTP client debug logging excludes request parameters (V-005)
 
 ### Prompt Injection via API Data
@@ -124,6 +124,9 @@ For sensitive deployments, we recommend using an MCP gateway with inline guardra
 | S-002 | Documented auth brute-force rate limiting as deployer responsibility | `SECURITY.md`, `docs/deployment-security.md` |
 | S-003 | Documented SENSITIVE_KEYWORDS narrowing rationale | `utils/tooling.py` |
 | S-004 | UUID format validation before caching on client | `utils/organization.py` |
+| V-129 | Zero-match actor resolution prevented in audit lookup | `workflows/audit.py` |
+| V-130 | IPv6 DNS rebinding protection with bracket-formatted hosts | `transport_security.py` |
+| V-131 | Origin wildcard port validation (numeric-only suffix) | `transport_security.py` |
 | S-005 | Patch names format/length validation via Pydantic | `schemas.py` |
 
 ## Scope and Limitations

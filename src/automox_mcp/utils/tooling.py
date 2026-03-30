@@ -336,16 +336,22 @@ def _apply_token_budget(
         "Consider using pagination or filters to reduce size."
     )
 
-    # Truncate list data if the data payload is a dict with a list value
+    # Truncate list data if the data payload contains a list
     data = response_dict.get("data")
-    if isinstance(data, Mapping):
+    if isinstance(data, list) and len(data) > 1:
+        total = len(data)
+        response_dict["data"] = data[: max(total // 2, 1)]
+        meta["truncated"] = True
+        meta["total_available"] = total
+        meta["returned_count"] = len(response_dict["data"])
+    elif isinstance(data, Mapping):
         for _key, value in data.items():
             if isinstance(value, list) and len(value) > 1:
                 total = len(value)
-                value[:] = value[: max(total // 2, 1)]
+                data[_key] = value[: max(total // 2, 1)]
                 meta["truncated"] = True
                 meta["total_available"] = total
-                meta["returned_count"] = len(value)
+                meta["returned_count"] = len(data[_key])
                 break
 
     return response_dict
@@ -412,7 +418,8 @@ def maybe_format_markdown(result: dict[str, Any], output_format: str | None) -> 
         for _key, value in data.items():
             if isinstance(value, list) and value:
                 return {"data": format_as_markdown_table(value), "metadata": {"format": "markdown"}}
-    return {"data": format_as_markdown_table([]), "metadata": {"format": "markdown"}}
+    # Cannot convert to markdown table — return original result unchanged
+    return result
 
 
 async def call_tool_workflow(

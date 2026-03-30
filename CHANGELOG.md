@@ -5,6 +5,35 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3] - 2026-03-30
+
+### Fixed
+
+- **Wrong user resolved in audit actor lookup** — `_lookup_actor_from_hints` no longer assigns a minimum score of 5 to zero-match candidates. Previously, when no candidate matched any criteria (email, name token), an arbitrary API result was selected as the "best match" and used to filter audit events for the wrong user.
+- **IPv6 DNS rebinding protection rejects all requests** — Allowed hosts now include bracket-formatted IPv6 variants (e.g., `[::1]:8000`) matching what HTTP clients actually send in Host headers. Previously, the bare `::1:8000` format never matched.
+- **Wildcard bind (`0.0.0.0`/`::`) breaks DNS rebinding protection** — Loopback aliases (`127.0.0.1`, `localhost`, `::1`) are now auto-added when binding to wildcard addresses. Previously, only the literal `0.0.0.0:8000` was allowed, which no real client sends.
+- **IPv6 wildcard-port patterns never match** — `_host_matches` now uses proper host:port parsing that handles IPv6 bracket syntax. Origin wildcard matching now validates the suffix is a numeric port to prevent prefix-confusion bypasses.
+- **Tag search iterates characters on string tags** — `search_devices` now excludes `str`/`bytes` from the `Sequence` isinstance check when processing device tags. Previously, a single tag string like `"production"` was iterated character-by-character.
+- **Audit response `Sequence` check matches strings** — Added `str`/`bytes` guards to two `isinstance(response, Sequence)` checks in `audit.py` (lines 216, 677). Previously, a string API response would be iterated character-by-character, silently producing empty results. Consistent with the existing guard in `audit_v2.py`.
+- **Events dict response without `data` treated as event** — `list_events` no longer wraps a Mapping response without a `"data"` key as a single event entry. Returns an empty list instead of producing a garbage entry with all-None fields.
+- **`total_events` reports page count instead of API total** — `list_events` now reads the `total`/`totalCount` field from the API response envelope when available, consistent with `packages.py`.
+- **`maybe_format_markdown` discards non-list data** — When `output_format="markdown"` and the data isn't a dict containing a list, the function now returns the original result instead of replacing all data with `"_No data_"`.
+- **Token budget truncation skips top-level list data** — `_apply_token_budget` now truncates when `data` is itself a list (common from `extract_list`), not just when lists are nested inside dicts. Also uses safe reassignment instead of in-place slice mutation.
+- **Malformed latency crashes JSON log formatter** — `JSONFormatter.format()` now catches `ValueError`/`TypeError` from malformed latency strings instead of propagating the exception, which could lose log entries.
+- **`summarize_device_health` only fetches first 500 devices** — Now paginates up to 20 pages instead of making a single API call. Previously, health statistics for organizations with >500 devices only reflected a partial subset.
+- **`severity_breakdown` counts only status-filtered items** — `summarize_patch_approvals` now counts severity for all approval items before applying the status filter, making `severity_breakdown` and `status_breakdown` cover the same population.
+- **`_decode_schedule_days_bitmask` ignores unused bit 0** — Bitmask is now masked with `& 0xFE` before processing. Previously, any odd bitmask value produced wrong day counts and missed pattern matches (e.g., 63 not recognized as weekdays).
+- **`AutomoxRateLimitError` discards 429 response payload** — Now extracts the response payload (including `Retry-After` info) before raising, consistent with how other HTTP errors are handled.
+- **`summarize_policies` uses output limit as API page size** — When client-side filtering is active (e.g., `include_inactive=False`), the API fetch limit is now `min(limit * 3, 500)` to avoid excessive API calls. Consistent with `search_devices` and `list_device_inventory`.
+- **Policy windows date query param embedded in URL path** — `get_group_scheduled_windows` and `get_device_scheduled_windows` now pass the `date` parameter via httpx's `params` dict instead of manually appending to the URL path, ensuring proper URL encoding.
+- **Audit `params` variable shadowed by `parse_qs`** — Renamed to `qs_params` to avoid overwriting the original request parameters dict with a `dict[str, list[str]]`.
+
+### Security
+
+- **V-129**: Zero-match actor resolution prevented — audit trail no longer resolves to an arbitrary user when no candidates match search criteria.
+- **V-130**: IPv6 DNS rebinding protection now functional — bracket-formatted Host headers are correctly validated.
+- **V-131**: Origin wildcard port validation — wildcard port matching now rejects non-numeric suffixes to prevent prefix-confusion bypasses.
+
 ## [1.0.2] - 2026-03-30
 
 ### Fixed

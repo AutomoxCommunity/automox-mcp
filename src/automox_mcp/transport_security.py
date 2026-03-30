@@ -109,11 +109,26 @@ class DNSRebindingProtectionMiddleware:
         self.allowed_hosts: set[str] = set(allowed_hosts or [])
         self.allowed_origins: set[str] = set(allowed_origins or [])
 
+    @staticmethod
+    def _parse_host_port(value: str) -> tuple[str, str | None]:
+        """Split a Host header into (host, port), handling IPv6 brackets."""
+        if value.startswith("["):
+            bracket_end = value.find("]")
+            if bracket_end != -1:
+                host_part = value[: bracket_end + 1]
+                rest = value[bracket_end + 1 :]
+                port_part = rest[1:] if rest.startswith(":") else None
+                return host_part, port_part
+        if ":" in value:
+            parts = value.rsplit(":", 1)
+            return parts[0], parts[1]
+        return value, None
+
     def _host_matches(self, host: str) -> bool:
         if host in self.allowed_hosts:
             return True
         # Support wildcard port: "host:*" matches "host:1234"
-        host_base = host.rsplit(":", 1)[0] if ":" in host else host
+        host_base, _ = self._parse_host_port(host)
         for allowed in self.allowed_hosts:
             if allowed.endswith(":*") and host_base == allowed[:-2]:
                 return True
@@ -122,12 +137,14 @@ class DNSRebindingProtectionMiddleware:
     def _origin_matches(self, origin: str) -> bool:
         if origin in self.allowed_origins:
             return True
-        # Support wildcard port patterns
+        # Support wildcard port patterns — verify the suffix is a valid port
         for allowed in self.allowed_origins:
             if allowed.endswith(":*"):
                 base = allowed[:-2]
                 if origin.startswith(base + ":"):
-                    return True
+                    port_suffix = origin[len(base) + 1 :]
+                    if port_suffix.isdigit():
+                        return True
         return False
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
@@ -218,22 +235,43 @@ def build_transport_security_middleware(
 
     # Build allowed hosts
     allowed_hosts: list[str] = []
+
+    def _add_host_variants(h: str, p: int) -> None:
+        """Add a host:port entry, plus bracket variant for IPv6."""
+        allowed_hosts.append(f"{h}:{p}")
+        if ":" in h and not h.startswith("["):
+            allowed_hosts.append(f"[{h}]:{p}")
+
     # Always allow the bound host:port
-    allowed_hosts.append(f"{host}:{port}")
+    _add_host_variants(host, port)
     # For loopback, also allow common aliases
     if host in _LOOPBACK_HOSTS:
         for lb in _LOOPBACK_HOSTS:
-            allowed_hosts.append(f"{lb}:{port}")
+            _add_host_variants(lb, port)
+    # For wildcard bind addresses, also add loopback aliases
+    if host in {"0.0.0.0", "::"}:
+        for lb in _LOOPBACK_HOSTS:
+            _add_host_variants(lb, port)
     # User-supplied extras
     allowed_hosts.extend(env_list("AUTOMOX_MCP_ALLOWED_HOSTS"))
 
     # Build allowed origins
     allowed_origins: list[str] = []
+
+    def _add_origin_variants(h: str, p: int) -> None:
+        """Add http://host:port origin, plus bracket variant for IPv6."""
+        allowed_origins.append(f"http://{h}:{p}")
+        if ":" in h and not h.startswith("["):
+            allowed_origins.append(f"http://[{h}]:{p}")
+
     # Allow the server's own origin
-    allowed_origins.append(f"http://{host}:{port}")
+    _add_origin_variants(host, port)
     if host in _LOOPBACK_HOSTS:
         for lb in _LOOPBACK_HOSTS:
-            allowed_origins.append(f"http://{lb}:{port}")
+            _add_origin_variants(lb, port)
+    if host in {"0.0.0.0", "::"}:
+        for lb in _LOOPBACK_HOSTS:
+            _add_origin_variants(lb, port)
     # User-supplied extras (e.g. "https://app.example.com")
     allowed_origins.extend(env_list("AUTOMOX_MCP_ALLOWED_ORIGINS"))
 

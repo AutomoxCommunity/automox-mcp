@@ -213,7 +213,7 @@ async def _lookup_actor_from_hints(
             if partial_email and partial_email != resolved_email:
                 error_payload["partial_email_hint"] = partial_email
             return resolved_email, None, error_payload
-        if isinstance(response, Sequence):
+        if isinstance(response, Sequence) and not isinstance(response, (str, bytes)):
             user_items = response
         elif isinstance(response, Mapping):
             data_block = response.get("data")
@@ -275,8 +275,7 @@ async def _lookup_actor_from_hints(
                     score += 15
                 reasons.append(f"name_tokens:{len(matched_tokens)}")
         if not reasons:
-            score = max(score, 5)
-            reasons.append("search_match")
+            reasons.append("search_match_only")
 
         scored_matches.append(
             {
@@ -304,7 +303,7 @@ async def _lookup_actor_from_hints(
     resolved_uuid = None
     resolved_display_name = None
 
-    if best_match:
+    if best_match and best_match["score"] > 0:
         best_record = best_match["record"]
         resolved_email = resolved_email or best_record.get("normalized_email")
         resolved_uuid = best_record.get("normalized_uuid")
@@ -674,7 +673,7 @@ async def audit_trail_user_activity(
 
     api_metadata: Mapping[str, Any] | None = None
     events: list[Mapping[str, Any]]
-    if isinstance(response, Sequence):
+    if isinstance(response, Sequence) and not isinstance(response, (str, bytes)):
         events = [item for item in response if isinstance(item, Mapping)]
     elif isinstance(response, Mapping):
         api_metadata = (
@@ -758,8 +757,8 @@ async def audit_trail_user_activity(
 
     if api_next_link and not next_cursor:
         parsed = urlparse(str(api_next_link))
-        params = parse_qs(parsed.query)
-        maybe_cursor = params.get("cursor")
+        qs_params = parse_qs(parsed.query)
+        maybe_cursor = qs_params.get("cursor")
         if maybe_cursor:
             next_cursor = maybe_cursor[0]
 

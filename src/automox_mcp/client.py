@@ -233,8 +233,11 @@ class AutomoxClient:
             ) from exc
 
         if response.status_code == 429:
+            payload = self._extract_error_payload(response)
             raise AutomoxRateLimitError(
-                "automox rate limit exceeded", status_code=response.status_code
+                "automox rate limit exceeded",
+                status_code=response.status_code,
+                payload=payload,
             )
 
         if response.status_code >= 400:

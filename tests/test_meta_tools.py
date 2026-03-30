@@ -84,6 +84,7 @@ def test_all_domains_present():
         "vuln_sync",
         "account",
         "compound",
+        "policy_windows",
     }
     assert set(_DOMAIN_CATALOG.keys()) == expected
 

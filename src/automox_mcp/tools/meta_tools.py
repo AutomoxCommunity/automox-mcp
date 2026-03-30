@@ -113,6 +113,17 @@ _DOMAIN_CATALOG: dict[str, list[tuple[str, str]]] = {
         ("get_compliance_snapshot", "Compliance posture view"),
         ("get_device_full_profile", "Complete device profile"),
     ],
+    "policy_windows": [
+        ("search_policy_windows", "Search maintenance/exclusion windows"),
+        ("get_policy_window", "Details for a specific window"),
+        ("check_group_exclusion_status", "Check if groups are in an exclusion window"),
+        ("check_window_active", "Check if a window is currently active"),
+        ("get_group_scheduled_windows", "Upcoming maintenance periods for a group"),
+        ("get_device_scheduled_windows", "Upcoming maintenance periods for a device"),
+        ("create_policy_window", "Create a maintenance/exclusion window"),
+        ("update_policy_window", "Update a maintenance window"),
+        ("delete_policy_window", "Delete a maintenance window"),
+    ],
 }
 
 
@@ -124,8 +135,9 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         description=(
             "Discover available Automox MCP tools for a specific domain. "
             "Returns tool names and descriptions. "
-            "Valid domains: devices, policies, patches, groups, events, "
-            "reports, audit, webhooks, account, compound. "
+            "Valid domains: devices, device_search, policies, policy_history, "
+            "patches, groups, events, reports, audit, webhooks, worklets, "
+            "data_extracts, vuln_sync, account, compound, policy_windows. "
             "Call with no domain to list all available domains."
         ),
     )

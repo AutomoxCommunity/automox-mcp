@@ -5,6 +5,42 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.5] - 2026-03-30
+
+### Fixed
+
+- **HMAC+JWKS key confusion attack** — JWT algorithm validation now rejects HMAC algorithms when a JWKS URI is configured (not just when a public key is set). An attacker who set `AUTOMOX_MCP_OAUTH_ALGORITHM=HS256` with a JWKS URI could use the JWKS-fetched public key as the HMAC shared secret (V-150).
+- **Sanitization bypass for strings in lists** — `sanitize_dict()` now sanitizes bare strings inside list structures. Previously, a payload like `{"tags": ["SYSTEM: override instructions"]}` would pass the instruction prefix through to the LLM unsanitized (V-151).
+- **Unsanitized user input reflected in error message** — `normalize_policy_operations_input` now sanitizes the `operation` field value before embedding it in the error message sent to the LLM. A crafted value could inject prompt instructions via the error path (V-152).
+- **Unbounded memory growth in auth rate limiter** — `AuthRateLimitMiddleware` now periodically cleans up expired `_blocked_until` entries and empty `_failures` deques, with a hard cap of 10K tracked IPs. Previously, IP rotation attacks could exhaust server memory over time (V-153).
+- **IPv6 bare-address host parsing misidentified host:port** — `_parse_host_port` now detects bare IPv6 addresses (2+ colons) instead of splitting on the last colon. `_add_host_variants` now generates bracketed `[::1]:8000` format matching what HTTP clients send (V-154).
+- **Wildcard port matching accepted invalid ports** — Port range validation (1-65535) added to wildcard matching in both `_host_matches` and `_origin_matches` (V-155).
+- **org_uuid from API response cached without validation** — `resolve_org_uuid` now validates UUID format via `UUID()` when caching values from the `/orgs` API response, matching the existing explicit_uuid path. A compromised API response could inject path traversal characters (V-156).
+- **`require_org_id` treats org_id=0 as missing** — Changed from truthiness check to explicit `None` check. `org_id=0` was silently discarded (V-157).
+- **`GetWisItemParams.item_id` missing validation** — Added `max_length=200` and alphanumeric pattern constraint, matching the existing `extract_id` field. Unvalidated strings were interpolated into URL paths (V-158).
+- **Unbounded dict payloads forwarded to API** — `CreateDataExtractParams.extract_data`, `UploadActionSetParams.action_set_data`, and `AdvancedDeviceSearchParams.query` now enforce a 50KB size limit via model validators (V-159).
+- **Cursor fields missing length constraints** — Added `max_length=2000` to cursor fields in `AuditTrailEventsParams` and `AuditEventsOcsfParams` (V-160).
+- **Webhook name/URL/event_types missing length constraints** — Added `max_length` to `CreateWebhookParams` and `UpdateWebhookParams` fields (V-161).
+- **Blocking DNS resolution in webhook validation** — `_validate_webhook_url` now sets a 3-second socket timeout to limit event loop blockage during synchronous DNS resolution in the Pydantic validator (V-162).
+- **Prompt injection via MCP prompt parameters** — All prompt templates now validate and sanitize user-supplied parameters (`policy_id`, `device_id`, `group_name`) before interpolation (V-163).
+- **Destructive actions without confirmation gates** — `investigate_noncompliant_device` and `triage_failed_policy_run` prompts now instruct the LLM to present a remediation plan and wait for user confirmation before executing commands like reboot or patch_all (V-164).
+- **`report_days` parameter ignored** — `summarize_policy_execution_history` now generates a `start_time` filter from `report_days`, actually filtering the API query by date range instead of only including the value in response metadata.
+
+### Security
+
+- **V-150**: HMAC+JWKS key confusion attack prevention in JWT auth configuration.
+- **V-151**: Bare strings in list structures now pass through `sanitize_for_llm()`.
+- **V-152**: User-controlled values sanitized before reflection in error messages.
+- **V-153**: Auth rate limiter periodic cleanup with 10K IP hard cap prevents memory exhaustion DoS.
+- **V-154**: IPv6 addresses correctly parsed and bracketed in DNS rebinding protection.
+- **V-155**: Wildcard port validation enforces TCP port range (1-65535).
+- **V-156**: UUID format validation on API-derived org_uuid before caching.
+- **V-158**: WIS item_id constrained to alphanumeric pattern with 200-char limit.
+- **V-159**: Passthrough dict fields (extract_data, action_set_data, query) capped at 50KB.
+- **V-162**: DNS resolution timeout prevents event loop starvation in webhook validation.
+- **V-163**: MCP prompt parameters validated/sanitized to prevent prompt injection.
+- **V-164**: Destructive prompt workflows require explicit user confirmation.
+
 ## [1.0.4] - 2026-03-30
 
 ### Fixed

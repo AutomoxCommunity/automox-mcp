@@ -11,9 +11,13 @@ def register(server: FastMCP) -> None:
         description="Guided workflow to investigate why a device is non-compliant and remediate it.",
     )
     def investigate_noncompliant_device(device_id: str) -> str:
-        return f"""Investigate non-compliant device {device_id}. Follow these steps:
+        # Validate device_id is a numeric identifier
+        _safe_id = "".join(c for c in str(device_id).strip() if c.isdigit())
+        if not _safe_id or _safe_id != str(device_id).strip():
+            return "Error: device_id must be a numeric identifier (e.g., '12345')."
+        return f"""Investigate non-compliant device {_safe_id}. Follow these steps:
 
-1. **Get device details**: Use `device_detail` with device_id={device_id} to understand the device's current state, OS, and group membership.
+1. **Get device details**: Use `device_detail` with device_id={_safe_id} to understand the device's current state, OS, and group membership.
 
 2. **Check device inventory**: Use `get_device_inventory` to review hardware, security, and system details.
 
@@ -29,11 +33,12 @@ def register(server: FastMCP) -> None:
    - Device offline/stale (check last_seen timestamp)
    - Configuration drift (compare device state to policy requirements)
 
-7. **Remediate**: Based on the root cause:
-   - For missing patches: Use `execute_device_command` with command_type="patch_all" to push patches
-   - For stale devices: Use `execute_device_command` with command_type="scan" to refresh state
-   - For policy failures: Use `execute_policy_now` to re-run the failing policy
+7. **Propose remediation** (IMPORTANT: present the plan and wait for user confirmation before executing any commands):
+   - For missing patches: Propose using `execute_device_command` with command_type="patch_all"
+   - For stale devices: Propose using `execute_device_command` with command_type="scan" to refresh state
+   - For policy failures: Propose using `execute_policy_now` to re-run the failing policy
+   **Ask the user to confirm before executing any remediation commands.**
 
-8. **Verify**: After remediation, use `device_detail` again to confirm the device is now compliant.
+8. **Verify**: After user-approved remediation, use `device_detail` again to confirm the device is now compliant.
 
 Report your findings and actions taken in a clear summary."""

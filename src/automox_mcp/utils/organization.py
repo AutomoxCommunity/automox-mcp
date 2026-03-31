@@ -103,6 +103,8 @@ async def resolve_org_uuid(
             if candidate_uuid:
                 uuid_text = str(candidate_uuid).strip()
                 if uuid_text:
+                    # Validate UUID format before caching (matches explicit_uuid path)
+                    UUID(uuid_text)
                     client.org_uuid = uuid_text
                     return uuid_text
 

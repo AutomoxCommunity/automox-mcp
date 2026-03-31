@@ -65,8 +65,15 @@ def _validate_webhook_url(url: str) -> None:
             raise
         # Not a bare IP — perform best-effort DNS resolution to catch hostnames
         # that resolve to private/internal IPs (V-126: SSRF defense-in-depth)
+        # Note: This is a blocking call within a sync Pydantic validator.
+        # We set a short socket timeout to limit event loop blockage.
         try:
-            resolved = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+            _prev_timeout = socket.getdefaulttimeout()
+            socket.setdefaulttimeout(3.0)
+            try:
+                resolved = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+            finally:
+                socket.setdefaulttimeout(_prev_timeout)
             for _family, _type, _proto, _canonname, sockaddr in resolved:
                 resolved_addr = ipaddress.ip_address(sockaddr[0])
                 if (
@@ -129,9 +136,9 @@ class GetWebhookParams(ForbidExtraModel):
 
 class CreateWebhookParams(ForbidExtraModel):
     org_uuid: UUID
-    name: str
-    url: str = Field(description="HTTPS webhook endpoint URL")
-    event_types: list[str]
+    name: str = Field(max_length=200)
+    url: str = Field(description="HTTPS webhook endpoint URL", max_length=2000)
+    event_types: list[str] = Field(max_length=50)
 
     @model_validator(mode="after")
     def _enforce_https(self) -> CreateWebhookParams:
@@ -142,10 +149,10 @@ class CreateWebhookParams(ForbidExtraModel):
 class UpdateWebhookParams(ForbidExtraModel):
     org_uuid: UUID
     webhook_id: UUID
-    name: str | None = None
-    url: str | None = Field(None, description="HTTPS webhook endpoint URL")
+    name: str | None = Field(None, max_length=200)
+    url: str | None = Field(None, description="HTTPS webhook endpoint URL", max_length=2000)
     enabled: bool | None = None
-    event_types: list[str] | None = None
+    event_types: list[str] | None = Field(None, max_length=50)
 
     @model_validator(mode="after")
     def _enforce_https(self) -> UpdateWebhookParams:

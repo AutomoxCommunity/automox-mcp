@@ -82,7 +82,7 @@ def require_org_id(
     Prefers *org_id* when given, falling back to ``client.org_id``
     (sourced from ``AUTOMOX_ORG_ID``).
     """
-    resolved = org_id or getattr(client, "org_id", None)
-    if not resolved:
+    resolved = org_id if org_id is not None else getattr(client, "org_id", None)
+    if resolved is None:
         raise ValueError("org_id required - pass explicitly or set AUTOMOX_ORG_ID")
     return resolved

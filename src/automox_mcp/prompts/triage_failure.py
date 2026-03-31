@@ -11,9 +11,13 @@ def register(server: FastMCP) -> None:
         description="Guided workflow to triage and remediate a failed policy execution.",
     )
     def triage_failed_policy_run(policy_id: str) -> str:
-        return f"""Triage the most recent failed policy run for policy {policy_id}. Follow these steps:
+        # Validate policy_id is a numeric identifier
+        _safe_id = "".join(c for c in str(policy_id).strip() if c.isdigit())
+        if not _safe_id or _safe_id != str(policy_id).strip():
+            return "Error: policy_id must be a numeric identifier (e.g., '12345')."
+        return f"""Triage the most recent failed policy run for policy {_safe_id}. Follow these steps:
 
-1. **Get policy details**: Use `policy_detail` with policy_id={policy_id} and include_recent_runs=10 to see the policy configuration and recent execution history.
+1. **Get policy details**: Use `policy_detail` with policy_id={_safe_id} and include_recent_runs=10 to see the policy configuration and recent execution history.
 
 2. **Identify the failed run**: From the recent runs, find the most recent run with failures. Note the execution token/UUID.
 
@@ -34,11 +38,12 @@ def register(server: FastMCP) -> None:
 
 6. **Check if failure is recurring**: Use `policy_execution_timeline` to see if these same devices have been failing consistently.
 
-7. **Remediate**:
-   - For offline devices: Use `execute_device_command` with command_type="scan" to refresh
-   - For script errors: Review the policy configuration and use `apply_policy_changes` to fix
-   - For stuck devices: Use `execute_device_command` with command_type="reboot" if appropriate
-   - Re-run the policy: Use `execute_policy_now` to retry
+7. **Propose remediation** (IMPORTANT: present the plan and wait for user confirmation before executing any commands):
+   - For offline devices: Propose `execute_device_command` with command_type="scan" to refresh
+   - For script errors: Propose reviewing the policy configuration and using `apply_policy_changes` to fix
+   - For stuck devices: Propose `execute_device_command` with command_type="reboot" ONLY with explicit user approval
+   - Re-run the policy: Propose `execute_policy_now` to retry
+   **Ask the user to confirm before executing any remediation commands, especially reboots.**
 
 8. **Set up monitoring**: Use `create_webhook` to set up notifications for future policy failures if not already configured.
 

@@ -164,9 +164,19 @@ async def summarize_policy_execution_history(
     # The API requires operator syntax for filters (e.g. policy_uuid:equals=UUID).
     # httpx URL-encodes colons in param keys (%3A), which the API rejects.
     # Build the full query string manually to preserve the literal colon.
+    from datetime import UTC, datetime, timedelta
     from urllib.parse import urlencode
 
-    safe_params = urlencode({"org": str(org_uuid), "limit": min(limit, 5000)})
+    params_dict: dict[str, str] = {
+        "org": str(org_uuid),
+        "limit": str(min(limit, 5000)),
+    }
+    # Apply date filter when report_days is specified
+    if report_days is not None and report_days > 0:
+        start_date = datetime.now(UTC) - timedelta(days=report_days)
+        params_dict["start_time"] = start_date.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    safe_params = urlencode(params_dict)
     path = f"/policy-history/policy-runs?policy_uuid:equals={policy_uuid}&{safe_params}"
     payload = await client.get(path)
 

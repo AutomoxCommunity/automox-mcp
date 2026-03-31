@@ -115,15 +115,19 @@ def normalize_policy_operations_input(raw_operations: Sequence[Any]) -> list[dic
 
         # Check for common mistake: using 'operation' instead of 'action'
         if "operation" in op_dict and "action" not in op_dict:
-            operation_value = op_dict.pop("operation")
+            operation_value = str(op_dict.pop("operation"))
+            # Sanitize user-provided value before reflecting in error message
+            safe_value = operation_value[:50].replace("\n", " ").replace("\r", " ")
+            if safe_value not in ("create", "update"):
+                safe_value = repr(safe_value)
             raise ToolError(
                 f"Operation at index {index} uses 'operation' field but should use "
                 f"'action' field instead. "
-                f"Found: 'operation': '{operation_value}'. "
-                f"Change to: 'action': '{operation_value}'. "
+                f"Found: 'operation': {safe_value}. "
+                f"Change to: 'action': 'create' or 'action': 'update'. "
                 f"\n\nCorrect format:\n"
                 f"{{\n"
-                f'  "action": "{operation_value}",\n'
+                f'  "action": "create",\n'
                 f'  "policy": {{\n'
                 f'    "name": "Policy Name",\n'
                 f'    "policy_type_name": "patch",\n'

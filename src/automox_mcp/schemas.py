@@ -65,6 +65,7 @@ class AuditTrailEventsParams(OrgIdContextMixin, ForbidExtraModel):
     cursor: str | None = Field(
         None,
         description="Resume the search from this Automox event cursor",
+        max_length=2000,
     )
     limit: int | None = Field(
         None,
@@ -612,7 +613,11 @@ class SearchWisParams(OrgIdRequiredMixin, ForbidExtraModel):
 
 
 class GetWisItemParams(OrgIdRequiredMixin, ForbidExtraModel):
-    item_id: str = Field(description="WIS item ID")
+    item_id: str = Field(
+        description="WIS item ID",
+        max_length=200,
+        pattern=r"^[a-zA-Z0-9_\-]+$",
+    )
 
 
 # ------------------------------------------------------------------------
@@ -623,9 +628,27 @@ class GetWisItemParams(OrgIdRequiredMixin, ForbidExtraModel):
 class CreateDataExtractParams(OrgIdRequiredMixin, ForbidExtraModel):
     extract_data: dict[str, Any] = Field(description="Data extract configuration")
 
+    @model_validator(mode="after")
+    def _limit_extract_data_size(self) -> CreateDataExtractParams:
+        import json
+
+        raw = json.dumps(self.extract_data, default=str)
+        if len(raw) > 50_000:
+            raise ValueError("extract_data payload exceeds 50 KB limit")
+        return self
+
 
 class UploadActionSetParams(OrgIdRequiredMixin, ForbidExtraModel):
     action_set_data: dict[str, Any] = Field(description="Action set upload data")
+
+    @model_validator(mode="after")
+    def _limit_action_set_data_size(self) -> UploadActionSetParams:
+        import json
+
+        raw = json.dumps(self.action_set_data, default=str)
+        if len(raw) > 50_000:
+            raise ValueError("action_set_data payload exceeds 50 KB limit")
+        return self
 
 
 # ============================================================================
@@ -682,7 +705,7 @@ class AuditEventsOcsfParams(OrgIdRequiredMixin, ForbidExtraModel):
     date: str = Field(description="Date to query (YYYY-MM-DD)", pattern=r"^\d{4}-\d{2}-\d{2}$")
     category_name: str | None = Field(None, description="OCSF event category name", max_length=200)
     type_name: str | None = Field(None, description="OCSF event type name", max_length=200)
-    cursor: str | None = Field(None, description="Pagination cursor")
+    cursor: str | None = Field(None, description="Pagination cursor", max_length=2000)
     limit: int | None = Field(None, ge=1, le=500, description="Maximum events to return")
 
 
@@ -693,6 +716,16 @@ class AuditEventsOcsfParams(OrgIdRequiredMixin, ForbidExtraModel):
 
 class AdvancedDeviceSearchParams(ForbidExtraModel):
     query: dict[str, Any] | None = Field(None, description="Structured query for device search")
+
+    @model_validator(mode="after")
+    def _limit_query_size(self) -> AdvancedDeviceSearchParams:
+        if self.query is not None:
+            import json
+
+            raw = json.dumps(self.query, default=str)
+            if len(raw) > 50_000:
+                raise ValueError("query payload exceeds 50 KB limit")
+        return self
     page: int | None = Field(None, ge=0, description="Page number")
     limit: int | None = Field(None, ge=1, le=500, description="Results per page")
 

@@ -11,9 +11,13 @@ def register(server: FastMCP) -> None:
         description="Guided workflow to audit a policy's execution history and identify issues.",
     )
     def audit_policy_execution(policy_id: str) -> str:
-        return f"""Audit the execution history for policy {policy_id}. Follow these steps:
+        # Validate policy_id is a numeric identifier
+        _safe_id = "".join(c for c in str(policy_id).strip() if c.isdigit())
+        if not _safe_id or _safe_id != str(policy_id).strip():
+            return "Error: policy_id must be a numeric identifier (e.g., '12345')."
+        return f"""Audit the execution history for policy {_safe_id}. Follow these steps:
 
-1. **Get policy details**: Use `policy_detail` with policy_id={policy_id} to understand the policy's configuration, schedule, and target groups.
+1. **Get policy details**: Use `policy_detail` with policy_id={_safe_id} to understand the policy's configuration, schedule, and target groups.
 
 2. **Review execution timeline**: Use `policy_execution_timeline` with the policy's UUID to see recent executions over the past 30 days. Look for patterns in success/failure rates.
 

@@ -209,7 +209,7 @@ class TestBuildMiddleware:
         allowed_hosts = dns_mw.kwargs["allowed_hosts"]
         assert "127.0.0.1:8000" in allowed_hosts
         assert "localhost:8000" in allowed_hosts
-        assert "::1:8000" in allowed_hosts
+        assert "[::1]:8000" in allowed_hosts
 
     def test_disabled_via_env(self, monkeypatch):
         monkeypatch.setenv("AUTOMOX_MCP_DNS_REBINDING_PROTECTION", "false")

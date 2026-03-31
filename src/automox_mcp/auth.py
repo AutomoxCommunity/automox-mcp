@@ -252,11 +252,14 @@ def _create_jwt_auth() -> Any | None:
 
     # Auto-derive JWKS URI from issuer if not explicitly set
     if not jwks_uri and not public_key:
-        # Standard OIDC discovery endpoint
+        # Standard OIDC JWKS endpoint (protocol/openid-connect/certs for Keycloak,
+        # .well-known/jwks.json for Auth0/Okta). Use the discovery document to find
+        # the actual jwks_uri at runtime; pass the discovery URL so JWTVerifier can
+        # resolve it via standard OIDC discovery.
         candidate = issuer.rstrip("/") + "/.well-known/openid-configuration"
         logger.info(
-            "AUTOMOX_MCP_OAUTH_JWKS_URI not set — will use standard OIDC discovery "
-            "endpoint: %s",
+            "AUTOMOX_MCP_OAUTH_JWKS_URI not set — will use OIDC discovery "
+            "endpoint to locate JWKS: %s",
             candidate,
         )
         jwks_uri = candidate
@@ -278,6 +281,13 @@ def _create_jwt_auth() -> Any | None:
             f"AUTOMOX_MCP_OAUTH_ALGORITHM={algorithm} is an HMAC algorithm but a public key "
             "is configured. HMAC algorithms use shared secrets, not public keys. "
             "Use an asymmetric algorithm (e.g., RS256, ES256) with public keys."
+        )
+    if algorithm.upper() in _HMAC_ALGORITHMS and jwks_uri:
+        raise RuntimeError(
+            f"AUTOMOX_MCP_OAUTH_ALGORITHM={algorithm} is an HMAC algorithm but a JWKS URI "
+            "is configured. HMAC shared secrets must not be fetched from a JWKS endpoint — "
+            "this combination enables key-confusion attacks. "
+            "Use an asymmetric algorithm (e.g., RS256, ES256) with JWKS."
         )
     if algorithm.upper() not in _ASYMMETRIC_ALGORITHMS | _HMAC_ALGORITHMS:
         raise RuntimeError(

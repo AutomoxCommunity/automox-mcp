@@ -235,7 +235,15 @@ def sanitize_dict(data: Any, *, _depth: int = 0) -> Any:
         return result
 
     if isinstance(data, list):
-        return [sanitize_dict(item, _depth=_depth + 1) for item in data]
+        result_list: list[Any] = []
+        for item in data:
+            if isinstance(item, str) and item:
+                result_list.append(sanitize_for_llm(item))
+            elif isinstance(item, (Mapping, list)):
+                result_list.append(sanitize_dict(item, _depth=_depth + 1))
+            else:
+                result_list.append(item)
+        return result_list
 
     return data
 

@@ -126,7 +126,12 @@ class DNSRebindingProtectionMiddleware:
                 rest = value[bracket_end + 1 :]
                 port_part = rest[1:] if rest.startswith(":") else None
                 return host_part, port_part
-        if ":" in value:
+        # Detect bare (non-bracketed) IPv6 by counting colons — IPv6 always has 2+
+        colon_count = value.count(":")
+        if colon_count >= 2:
+            # Bare IPv6 address (e.g. "::1") — no port component
+            return value, None
+        if colon_count == 1:
             parts = value.rsplit(":", 1)
             return parts[0], parts[1]
         return value, None
@@ -140,9 +145,11 @@ class DNSRebindingProtectionMiddleware:
         host_base, host_port = self._parse_host_port(host_lower)
         for allowed in self.allowed_hosts:
             if allowed.endswith(":*") and host_base == allowed[:-2]:
-                # Validate that the port portion is numeric
+                # Validate that the port is a valid TCP port number
                 if host_port is not None and host_port.isdigit():
-                    return True
+                    port_num = int(host_port)
+                    if 1 <= port_num <= 65535:
+                        return True
         return False
 
     def _origin_matches(self, origin: str) -> bool:
@@ -157,7 +164,9 @@ class DNSRebindingProtectionMiddleware:
                 if origin_lower.startswith(base + ":"):
                     port_suffix = origin_lower[len(base) + 1 :]
                     if port_suffix.isdigit():
-                        return True
+                        port_num = int(port_suffix)
+                        if 1 <= port_num <= 65535:
+                            return True
         return False
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
@@ -216,6 +225,8 @@ class AuthRateLimitMiddleware:
     static API keys and JWT tokens.
     """
 
+    _MAX_TRACKED_IPS = 10_000  # Cap to prevent memory exhaustion from IP rotation attacks
+
     def __init__(
         self,
         app: ASGIApp,
@@ -229,12 +240,49 @@ class AuthRateLimitMiddleware:
         self.block_seconds = block_seconds
         self._failures: dict[str, deque[float]] = defaultdict(deque)
         self._blocked_until: dict[str, float] = {}
+        self._last_cleanup: float = 0.0
 
     def _get_client_ip(self, scope: Scope) -> str:
         client = scope.get("client")
         if client:
             return client[0]
         return "unknown"
+
+    def _cleanup_stale_entries(self, now: float) -> None:
+        """Periodically evict expired blocks and empty failure deques."""
+        # Run cleanup at most once per window_seconds
+        if now - self._last_cleanup < self.window_seconds:
+            return
+        self._last_cleanup = now
+
+        # Evict expired _blocked_until entries
+        expired_blocks = [
+            ip for ip, until in self._blocked_until.items() if now >= until
+        ]
+        for ip in expired_blocks:
+            del self._blocked_until[ip]
+
+        # Evict empty or fully-expired failure deques
+        cutoff = now - self.window_seconds
+        stale_failures = []
+        for ip, dq in self._failures.items():
+            while dq and dq[0] < cutoff:
+                dq.popleft()
+            if not dq:
+                stale_failures.append(ip)
+        for ip in stale_failures:
+            del self._failures[ip]
+
+        # Hard cap: if still over limit, drop oldest entries
+        total = len(self._failures) + len(self._blocked_until)
+        if total > self._MAX_TRACKED_IPS:
+            overflow = total - self._MAX_TRACKED_IPS
+            # Evict oldest blocked entries first (sorted by expiry)
+            for ip in sorted(self._blocked_until, key=self._blocked_until.get)[:overflow]:  # type: ignore[arg-type]
+                del self._blocked_until[ip]
+                overflow -= 1
+                if overflow <= 0:
+                    break
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
@@ -243,6 +291,9 @@ class AuthRateLimitMiddleware:
 
         client_ip = self._get_client_ip(scope)
         now = time.monotonic()
+
+        # Periodically clean up stale entries to prevent memory exhaustion
+        self._cleanup_stale_entries(now)
 
         # Check if client is blocked
         blocked_until = self._blocked_until.get(client_ip, 0)
@@ -341,9 +392,12 @@ def build_transport_security_middleware(
 
     def _add_host_variants(h: str, p: int) -> None:
         """Add a host:port entry, plus bracket variant for IPv6."""
-        allowed_hosts.append(f"{h}:{p}")
         if ":" in h and not h.startswith("["):
+            # Bare IPv6: add both bracketed form (standard) and bare form
             allowed_hosts.append(f"[{h}]:{p}")
+            allowed_hosts.append(h)  # bare IPv6 without port
+        else:
+            allowed_hosts.append(f"{h}:{p}")
 
     # Always allow the bound host:port
     _add_host_variants(host, port)
@@ -363,9 +417,11 @@ def build_transport_security_middleware(
 
     def _add_origin_variants(h: str, p: int) -> None:
         """Add http://host:port origin, plus bracket variant for IPv6."""
-        allowed_origins.append(f"http://{h}:{p}")
         if ":" in h and not h.startswith("["):
+            # IPv6: browsers use bracketed form in Origin headers
             allowed_origins.append(f"http://[{h}]:{p}")
+        else:
+            allowed_origins.append(f"http://{h}:{p}")
 
     # Allow the server's own origin
     _add_origin_variants(host, port)

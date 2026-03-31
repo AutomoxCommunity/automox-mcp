@@ -17,7 +17,7 @@ from automox_mcp.workflows.device_inventory import (
 # Shared fixtures / helpers
 # ---------------------------------------------------------------------------
 
-ORG_UUID = "aaaa-bbbb-cccc-dddd"
+ORG_UUID = "aaaabbbb-cccc-dddd-eeee-ffffffffffff"
 DEVICE_UUID = "1111-2222-3333-4444"
 
 

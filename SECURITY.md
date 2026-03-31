@@ -47,7 +47,10 @@ Tool responses pass Automox API data back to the LLM after sanitization. The `sa
 - Strips inline and reference-style markdown link/image syntax that could exfiltrate data (V-117)
 - Removes fenced code blocks (labelled and unlabeled, including 4+ backtick delimiters) containing shell/script commands (V-119, V-142)
 - Removes instruction-like prefixes from all fields except an explicit preserve-list (names, tags, hostnames) (V-104, V-134)
+- Sanitizes bare strings inside list structures, not just dict values (V-151)
 - Configurable via `AUTOMOX_MCP_SANITIZE_RESPONSES` (default: enabled)
+
+MCP prompt templates validate and sanitize all user-supplied parameters (policy IDs, device IDs, group names) before interpolation into prompt text (V-163). Prompts that instruct destructive actions (reboots, patching, policy changes) include explicit confirmation gates requiring user approval (V-164).
 
 For sensitive deployments, we recommend using an MCP gateway with inline guardrails for additional defense-in-depth.
 
@@ -63,7 +66,7 @@ For sensitive deployments, we recommend using an MCP gateway with inline guardra
 - Non-loopback HTTP/SSE binding requires explicit opt-in via `--allow-remote-bind` or `AUTOMOX_MCP_ALLOW_REMOTE_BIND=true` (V-106); server exits with an error otherwise
 - **DNS rebinding protection**: Origin and Host header validation (case-insensitive per RFC 4343) on all HTTP/SSE and WebSocket connections per the MCP transport specification (V-120); configurable via `AUTOMOX_MCP_ALLOWED_ORIGINS` and `AUTOMOX_MCP_ALLOWED_HOSTS`
 - **Security response headers** on all HTTP responses: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`, `Cache-Control: no-store`, `Referrer-Policy`, `Permissions-Policy`, `Strict-Transport-Security` (V-121, V-141)
-- **Authentication rate limiting**: clients are blocked for 5 minutes after 10 failed authentication attempts within 60 seconds (V-140)
+- **Authentication rate limiting**: clients are blocked for 5 minutes after 10 failed authentication attempts within 60 seconds (V-140); stale entries are periodically cleaned with a hard cap of 10K tracked IPs to prevent memory exhaustion (V-153)
 - Built-in Bearer-token endpoint authentication for HTTP/SSE transports via `AUTOMOX_MCP_API_KEYS` or `AUTOMOX_MCP_API_KEY_FILE` (V-108); minimum key length warning at startup (V-144); for additional defense-in-depth, an authenticating reverse proxy or MCP gateway is recommended
 - **OAuth 2.1 / JWT authentication** for enterprise IdP integration (V-122): validate JWTs from external authorization servers (Keycloak, Auth0, Azure AD, Okta) with mandatory audience binding (V-136), HTTPS-only issuer (V-137), algorithm validation (V-138), and automatic JWKS key rotation; serves RFC 9728 Protected Resource Metadata at `/.well-known/oauth-protected-resource`
 - Tool name prefixing (`AUTOMOX_MCP_TOOL_PREFIX`) prevents cross-server collisions
@@ -136,7 +139,7 @@ For sensitive deployments, we recommend using an MCP gateway with inline guardra
 | V-135 | JWT public key file world-writable rejection (not just warning) | `auth.py` |
 | V-136 | JWT audience claim mandatory when JWT auth enabled | `auth.py` |
 | V-137 | Non-HTTPS OAuth issuer rejected | `auth.py` |
-| V-138 | JWT algorithm validation (HMAC/asymmetric mismatch, allowlist) | `auth.py` |
+| V-138 | JWT algorithm validation (HMAC/asymmetric mismatch, HMAC+JWKS key confusion, allowlist) | `auth.py` |
 | V-139 | API key file stat() failure no longer bypasses permission check | `auth.py` |
 | V-140 | Authentication rate limiting middleware (10 failures/60s = 5min block) | `transport_security.py` |
 | V-141 | HSTS header on all HTTP responses | `transport_security.py` |
@@ -149,6 +152,21 @@ For sensitive deployments, we recommend using an MCP gateway with inline guardra
 | V-148 | Input validation bounds on 20+ schema fields | `schemas.py` |
 | V-149 | Operations list bounded to 50 | `schemas.py` |
 | S-006 | SSRF DNS fail-closed (reject unresolvable hostnames) | `tools/webhook_tools.py` |
+| V-150 | HMAC+JWKS key confusion attack prevention | `auth.py` |
+| V-151 | Sanitize bare strings in lists (prompt injection defense) | `utils/sanitize.py` |
+| V-152 | Sanitize reflected error values in policy operations | `workflows/policy_crud.py` |
+| V-153 | Rate limiter memory exhaustion prevention (stale entry cleanup + IP cap) | `transport_security.py` |
+| V-154 | IPv6 bare-address host parsing fix (DNS rebinding bypass) | `transport_security.py` |
+| V-155 | Port range validation (1-65535) in wildcard matching | `transport_security.py` |
+| V-156 | UUID validation on API-derived org_uuid before caching | `utils/organization.py` |
+| V-157 | Explicit None check for org_id (org_id=0 no longer treated as missing) | `utils/response.py` |
+| V-158 | WIS item_id pattern/length validation | `schemas.py` |
+| V-159 | Payload size limits (50KB) on passthrough dict fields | `schemas.py` |
+| V-160 | Cursor field max_length constraints | `schemas.py` |
+| V-161 | Webhook name/URL/event_types length constraints | `tools/webhook_tools.py` |
+| V-162 | DNS resolution timeout (3s) in webhook SSRF validation | `tools/webhook_tools.py` |
+| V-163 | Prompt parameter input validation (injection prevention) | `prompts/*.py` |
+| V-164 | Destructive action confirmation gates in prompt workflows | `prompts/investigate_device.py`, `prompts/triage_failure.py` |
 
 ## Scope and Limitations
 

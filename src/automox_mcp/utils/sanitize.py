@@ -46,8 +46,9 @@ _CODE_BLOCK_RE = re.compile(
     re.DOTALL | re.IGNORECASE,
 )
 
-# Unlabeled fenced code blocks (any content between 3+ backticks)
-_UNLABELED_CODE_BLOCK_RE = re.compile(r"`{3,}[^\S\n]*\n.*?`{3,}", re.DOTALL)
+# Fenced code blocks with any or no language label (catch-all for labels not
+# matched by _CODE_BLOCK_RE, e.g. ```javascript, ```ruby, or unlabeled ```)
+_UNLABELED_CODE_BLOCK_RE = re.compile(r"`{3,}[^\n]*\n.*?`{3,}", re.DOTALL)
 
 # Triple-or-more backticks (that aren't part of a code block we already removed)
 _TRIPLE_BACKTICK_RE = re.compile(r"`{3,}")

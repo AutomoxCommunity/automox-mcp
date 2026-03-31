@@ -283,6 +283,10 @@ class AuthRateLimitMiddleware:
                 overflow -= 1
                 if overflow <= 0:
                     break
+            # If still over cap, evict oldest failure entries (by earliest timestamp)
+            if overflow > 0:
+                for ip in sorted(self._failures, key=lambda k: self._failures[k][0] if self._failures[k] else 0)[:overflow]:
+                    del self._failures[ip]
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":

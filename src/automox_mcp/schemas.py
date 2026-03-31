@@ -137,8 +137,8 @@ class PolicyDefinition(BaseModel):
     schedule_weeks_of_month: int | None = Field(
         None,
         ge=0,
-        le=30,
-        description="Bitmask representing scheduled weeks of the month (max 30 = bits 1-4).",
+        le=62,
+        description="Bitmask representing scheduled weeks of the month (max 62 = bits 1-5).",
     )
     schedule_months: int | None = Field(
         None,

@@ -289,13 +289,13 @@ def register_policy_resources(server: FastMCP) -> None:
                     "numeric": "0-6 (Sunday=0) or list of numeric indexes",
                 },
                 "bitmask_values": {
-                    "sunday": 1,
                     "monday": 2,
                     "tuesday": 4,
                     "wednesday": 8,
                     "thursday": 16,
                     "friday": 32,
                     "saturday": 64,
+                    "sunday": 128,
                     "example": "weekdays = 2+4+8+16+32 = 62",
                 },
             },
@@ -632,8 +632,8 @@ FastMCP provides a friendly 'schedule' helper block that automatically converts 
 ## IMPORTANT: Scheduling Requirements
 Automox requires ALL THREE of these fields when scheduling a policy:
 1. **schedule_days** - Which days of the week (bitmask 2-254, where 254 = all 7 days)
-2. **schedule_weeks_of_month** - Which weeks of the month (bitmask 1-62, where
-   1=first week, 2=second, 4=third, 8=fourth, 16=fifth)
+2. **schedule_weeks_of_month** - Which weeks of the month (bitmask 2-62, where
+   2=first week, 4=second, 8=third, 16=fourth, 32=fifth; bit 0 is trailing zero)
 3. **schedule_months** - Which months of the year (bitmask 1-8190, where each bit
    represents a month)
 

@@ -107,17 +107,22 @@ class TestCodeBlockRemoval:
         result = sanitize_for_llm(text)
         assert "Get-Process" not in result
 
-    def test_preserves_non_shell_code_blocks(self):
+    def test_strips_non_shell_code_blocks(self):
+        """All fenced code blocks are stripped regardless of language label."""
         text = '```json\n{"key": "value"}\n```'
         result = sanitize_for_llm(text)
-        # Triple backticks get escaped to single, but content preserved
-        assert "key" in result
+        assert "key" not in result
+
+    def test_strips_javascript_code_block(self):
+        """Language labels outside the shell allowlist are also stripped."""
+        text = "```javascript\nconsole.log('hi')\n```"
+        result = sanitize_for_llm(text)
+        assert "console" not in result
 
     def test_escapes_remaining_triple_backticks(self):
-        text = "```json\n{}\n```"
+        text = "```\n{}\n```"
         result = sanitize_for_llm(text)
         assert "```" not in result
-        assert "`" in result
 
 
 # ---------------------------------------------------------------------------

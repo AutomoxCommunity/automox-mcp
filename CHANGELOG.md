@@ -5,6 +5,32 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.7] - 2026-03-31
+
+### Fixed
+
+- **OIDC auto-discovery passes discovery URL as JWKS URL** — When `AUTOMOX_MCP_OAUTH_JWKS_URI` is omitted, the server now fetches the OIDC discovery document and extracts the actual `jwks_uri` field. Previously, the `/.well-known/openid-configuration` URL itself was passed to `JWTVerifier`, which expects a JWKS document with a top-level `keys` array — resulting in zero keys found and all tokens rejected (V-172).
+- **`AUTOMOX_MCP_OAUTH_JWKS_URI` missing HTTPS validation** — Added HTTPS enforcement for the JWKS URI, consistent with the existing issuer URL check. Fetching JWKS over cleartext HTTP is vulnerable to MITM key substitution (V-173).
+- **`AUTOMOX_MCP_OAUTH_PUBLIC_KEY` file path fallthrough** — When the value looks like a file path but the file does not exist, the server now raises a `RuntimeError` at startup instead of silently passing the raw path string as a PEM key literal, which would fail opaquely at token verification time (V-174).
+- **Sunday bitmask value incorrect in schedule reference resource** — The `bitmask_values` JSON resource listed Sunday as `1` instead of `128`. The text resource and `policy_crud.py` already used the correct value (V-175).
+- **`schedule_weeks_of_month` Pydantic constraint rejects valid values** — Changed `le=30` to `le=62`. The auto-default is 62 (all 5 weeks with trailing zero) and the docs specify 1–62 as the valid range, but Pydantic validation rejected values above 30 (V-176).
+- **Week-of-month bitmask documentation shows wrong individual values** — Updated from `1=first, 2=second, 4=third, 8=fourth, 16=fifth` to the correct trailing-zero pattern `2=first, 4=second, 8=third, 16=fourth, 32=fifth` matching the code (V-177).
+- **`groups.py` crash on null `policies` field** — `len(group.get("policies", []))` returns `None` when the key exists with a null value. Changed to `group.get("policies") or []` (V-178).
+- **Rate limiter memory cap only evicts blocked IPs** — Hard cap eviction now also trims `_failures` entries when `_blocked_until` eviction alone is insufficient. Under sustained IP rotation, `_failures` could previously grow past `_MAX_TRACKED_IPS` (V-179).
+- **Code block sanitizer misses non-allowlisted language labels** — Fenced code blocks with language labels not in the shell allowlist (e.g., ` ```javascript `, ` ```ruby `) now match the catch-all pattern. Previously, only shell-like labels and unlabeled blocks were stripped (V-180).
+
+### Security
+
+- **V-172**: OIDC discovery document parsed to extract actual JWKS URI.
+- **V-173**: HTTPS enforcement on JWKS URI prevents cleartext key fetch.
+- **V-174**: Fail-fast on missing public key file prevents opaque auth failures.
+- **V-175**: Correct Sunday bitmask in schedule reference resource.
+- **V-176**: `schedule_weeks_of_month` validation accepts full valid range (0–62).
+- **V-177**: Week-of-month bitmask documentation aligned with trailing-zero pattern.
+- **V-178**: Null-safe policy count in group summaries.
+- **V-179**: Rate limiter eviction covers both `_blocked_until` and `_failures` dicts.
+- **V-180**: Code block sanitizer strips all fenced blocks regardless of language label.
+
 ## [1.0.6] - 2026-03-30
 
 ### Fixed

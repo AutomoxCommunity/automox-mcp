@@ -220,6 +220,15 @@ def _create_jwt_auth() -> Any | None:
         )
 
     jwks_uri = _env_str("AUTOMOX_MCP_OAUTH_JWKS_URI")
+
+    # Reject non-HTTPS JWKS URIs (same MITM risk as issuer)
+    if jwks_uri and not jwks_uri.startswith("https://"):
+        raise RuntimeError(
+            f"AUTOMOX_MCP_OAUTH_JWKS_URI ({jwks_uri}) does not use HTTPS. "
+            "Fetching JWKS over cleartext HTTP is vulnerable to MITM attacks. "
+            "Use an https:// JWKS URI."
+        )
+
     public_key = _env_str("AUTOMOX_MCP_OAUTH_PUBLIC_KEY")
 
     # If public_key looks like a file path, read it
@@ -249,20 +258,45 @@ def _create_jwt_auth() -> Any | None:
                     f"Cannot verify permissions on JWT public key file ({key_path}): {exc}"
                 ) from exc
             public_key = key_path.read_text().strip()
+        else:
+            raise RuntimeError(
+                f"AUTOMOX_MCP_OAUTH_PUBLIC_KEY ({public_key}) looks like a file path "
+                f"but the file does not exist. Provide either a valid file path or "
+                f"an inline PEM-encoded key starting with '-----'."
+            )
 
-    # Auto-derive JWKS URI from issuer if not explicitly set
+    # Auto-derive JWKS URI from issuer via OIDC discovery
     if not jwks_uri and not public_key:
-        # Standard OIDC JWKS endpoint (protocol/openid-connect/certs for Keycloak,
-        # .well-known/jwks.json for Auth0/Okta). Use the discovery document to find
-        # the actual jwks_uri at runtime; pass the discovery URL so JWTVerifier can
-        # resolve it via standard OIDC discovery.
-        candidate = issuer.rstrip("/") + "/.well-known/openid-configuration"
+        discovery_url = issuer.rstrip("/") + "/.well-known/openid-configuration"
         logger.info(
-            "AUTOMOX_MCP_OAUTH_JWKS_URI not set — will use OIDC discovery "
-            "endpoint to locate JWKS: %s",
-            candidate,
+            "AUTOMOX_MCP_OAUTH_JWKS_URI not set — fetching OIDC discovery "
+            "document to locate JWKS: %s",
+            discovery_url,
         )
-        jwks_uri = candidate
+        import httpx
+
+        try:
+            resp = httpx.get(discovery_url, timeout=10)
+            resp.raise_for_status()
+            discovery = resp.json()
+        except Exception as exc:
+            raise RuntimeError(
+                f"Failed to fetch OIDC discovery document from {discovery_url}: {exc}. "
+                "Set AUTOMOX_MCP_OAUTH_JWKS_URI explicitly to bypass discovery."
+            ) from exc
+
+        jwks_uri = discovery.get("jwks_uri")
+        if not jwks_uri:
+            raise RuntimeError(
+                f"OIDC discovery document at {discovery_url} does not contain a "
+                "'jwks_uri' field. Set AUTOMOX_MCP_OAUTH_JWKS_URI explicitly."
+            )
+        if not jwks_uri.startswith("https://"):
+            raise RuntimeError(
+                f"OIDC discovery returned non-HTTPS jwks_uri ({jwks_uri}). "
+                "This is vulnerable to MITM attacks."
+            )
+        logger.info("Discovered JWKS URI from OIDC: %s", jwks_uri)
 
     audience = _env_str("AUTOMOX_MCP_OAUTH_AUDIENCE")
     if not audience:

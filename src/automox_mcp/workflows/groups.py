@@ -17,7 +17,7 @@ def _summarize_group(group: Mapping[str, Any]) -> dict[str, Any]:
         "organization_id": group.get("organization_id"),
         "parent_server_group_id": group.get("parent_server_group_id"),
         "server_count": group.get("server_count", 0),
-        "policy_count": len(group.get("policies", [])),
+        "policy_count": len(group.get("policies") or []),
         "policies": group.get("policies"),
         "ui_color": group.get("ui_color"),
         "notes": group.get("notes"),

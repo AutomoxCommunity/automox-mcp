@@ -191,7 +191,9 @@ For enterprise environments with an existing Identity Provider (Keycloak, Auth0,
 # Required: OIDC issuer URL
 AUTOMOX_MCP_OAUTH_ISSUER="https://auth.example.com/realms/main"
 
-# JWKS endpoint for automatic key rotation (auto-derived from issuer if omitted)
+# JWKS endpoint for automatic key rotation (discovered via OIDC if omitted)
+# When omitted, the server fetches {issuer}/.well-known/openid-configuration
+# at startup and extracts the jwks_uri from the discovery document.
 AUTOMOX_MCP_OAUTH_JWKS_URI="https://auth.example.com/realms/main/protocol/openid-connect/certs"
 
 # Audience claim — REQUIRED. Tokens MUST be issued for this audience (prevents token passthrough)

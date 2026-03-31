@@ -47,7 +47,7 @@ Tool responses pass Automox API data back to the LLM after sanitization. The `sa
 - **Unicode normalization** (NFKC) and zero-width character stripping to defeat homoglyph attacks (V-108a)
 - **HTML tag and script stripping** — removes `<script>` blocks, event handler attributes, `javascript:`/`data:` URIs, and all HTML tags (V-133)
 - Strips inline and reference-style markdown link/image syntax that could exfiltrate data (V-117)
-- Removes fenced code blocks (labelled and unlabeled, including 4+ backtick delimiters) containing shell/script commands (V-119, V-142)
+- Removes all fenced code blocks regardless of language label (including 4+ backtick delimiters), preventing execution-capable content from reaching the LLM (V-119, V-142)
 - Removes instruction-like prefixes from all fields except an explicit preserve-list (names, tags, hostnames) (V-104, V-134)
 - Sanitizes bare strings inside list structures, not just dict values (V-151)
 - Configurable via `AUTOMOX_MCP_SANITIZE_RESPONSES` (default: enabled)
@@ -146,7 +146,7 @@ For sensitive deployments, we recommend using an MCP gateway with inline guardra
 | V-140 | Authentication rate limiting middleware (10 failures/60s = 5min block) | `transport_security.py` |
 | V-141 | HSTS header on all HTTP responses | `transport_security.py` |
 | V-142 | Fenced code block regex supports 4+ backtick delimiters | `utils/sanitize.py` |
-| V-143 | OIDC discovery uses standard openid-configuration path | `auth.py` |
+| V-143 | OIDC discovery fetches and parses openid-configuration document | `auth.py` |
 | V-144 | Minimum API key length warning at startup | `auth.py` |
 | V-145 | `is_auth_configured()` handles key file permission errors | `auth.py` |
 | V-146 | API key not exposed via `repr()` or `__slots__` | `client.py` |
@@ -176,6 +176,15 @@ For sensitive deployments, we recommend using an MCP gateway with inline guardra
 | V-169 | Presigned URL redaction in data extract responses | `workflows/data_extracts.py` |
 | V-170 | Atomic idempotency reservation (TOCTOU fix) | `utils/tooling.py` |
 | V-171 | Account UUID format validation at client construction | `client.py` |
+| V-172 | OIDC discovery document parsed to extract actual JWKS URI | `auth.py` |
+| V-173 | HTTPS enforcement on JWKS URI | `auth.py` |
+| V-174 | Fail-fast on missing public key file path | `auth.py` |
+| V-175 | Correct Sunday bitmask in schedule reference resource | `resources/policy_resources.py` |
+| V-176 | `schedule_weeks_of_month` validation accepts full valid range (0–62) | `schemas.py` |
+| V-177 | Week-of-month bitmask docs aligned with trailing-zero pattern | `resources/policy_resources.py` |
+| V-178 | Null-safe policy count in group summaries | `workflows/groups.py` |
+| V-179 | Rate limiter eviction covers `_failures` dict | `transport_security.py` |
+| V-180 | Code block sanitizer strips all fenced blocks regardless of language label | `utils/sanitize.py` |
 
 ## Scope and Limitations
 

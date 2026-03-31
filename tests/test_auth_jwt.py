@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
+import httpx
+
 from automox_mcp.auth import (
     _create_jwt_auth,
     create_auth_provider,
@@ -82,12 +86,20 @@ class TestCreateJwtAuth:
         self._clear_oauth_env(monkeypatch)
         monkeypatch.setenv("AUTOMOX_MCP_OAUTH_ISSUER", "https://auth.example.com")
         monkeypatch.setenv("AUTOMOX_MCP_OAUTH_AUDIENCE", "https://mcp.example.com")
-        # No JWKS_URI and no PUBLIC_KEY — should auto-derive
+        # No JWKS_URI and no PUBLIC_KEY — should auto-derive via OIDC discovery
 
-        provider = _create_jwt_auth()
+        # Mock the OIDC discovery fetch to return a valid jwks_uri
+        mock_response = httpx.Response(
+            200,
+            json={"jwks_uri": "https://auth.example.com/.well-known/jwks.json"},
+            request=httpx.Request("GET", "https://auth.example.com/.well-known/openid-configuration"),
+        )
+        with patch("httpx.get", return_value=mock_response):
+            provider = _create_jwt_auth()
         assert provider is not None
-        # The provider should have been created with the derived JWKS URI
+        # The provider should have been created with the discovered JWKS URI
         assert type(provider).__name__ == "JWTVerifier"
+        assert provider.jwks_uri == "https://auth.example.com/.well-known/jwks.json"
 
     def test_custom_algorithm(self, monkeypatch):
         self._clear_oauth_env(monkeypatch)

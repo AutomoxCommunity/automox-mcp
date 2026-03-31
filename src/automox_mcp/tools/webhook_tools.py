@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import ipaddress
 import logging
 import socket
@@ -21,7 +22,6 @@ from ..utils.tooling import (
     maybe_format_markdown,
     store_idempotency,
 )
-
 
 _BLOCKED_HOSTS: frozenset[str] = frozenset({
     "metadata.google.internal",
@@ -65,15 +65,21 @@ def _validate_webhook_url(url: str) -> None:
             raise
         # Not a bare IP — perform best-effort DNS resolution to catch hostnames
         # that resolve to private/internal IPs (V-126: SSRF defense-in-depth)
-        # Note: This is a blocking call within a sync Pydantic validator.
-        # We set a short socket timeout to limit event loop blockage.
+        # V-150: Run DNS resolution in a thread pool to avoid blocking the
+        # async event loop (was freezing all concurrent operations for up to 3s).
         try:
-            _prev_timeout = socket.getdefaulttimeout()
-            socket.setdefaulttimeout(3.0)
-            try:
-                resolved = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
-            finally:
-                socket.setdefaulttimeout(_prev_timeout)
+
+            def _resolve_with_timeout() -> list[Any]:
+                _prev_timeout = socket.getdefaulttimeout()
+                socket.setdefaulttimeout(3.0)
+                try:
+                    return socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
+                finally:
+                    socket.setdefaulttimeout(_prev_timeout)
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(_resolve_with_timeout)
+                resolved = future.result(timeout=5.0)
             for _family, _type, _proto, _canonname, sockaddr in resolved:
                 resolved_addr = ipaddress.ip_address(sockaddr[0])
                 if (
@@ -85,13 +91,13 @@ def _validate_webhook_url(url: str) -> None:
                     or resolved_addr.is_unspecified
                 ):
                     raise ValueError("Webhook URL hostname resolves to a private/internal address")
-        except (socket.gaierror, OSError):
-            # DNS resolution failed — reject by default (fail-closed).
+        except (socket.gaierror, OSError, concurrent.futures.TimeoutError):
+            # DNS resolution failed or timed out — reject by default (fail-closed).
             # S-001: TOCTOU risk remains between validation and delivery.
             raise ValueError(
                 "Webhook URL hostname could not be resolved via DNS. "
                 "Ensure the hostname is publicly resolvable."
-            )
+            ) from None
     # Block well-known cloud metadata endpoints by hostname (using normalized name)
     lower_host = hostname_normalized.lower()
     if lower_host in _BLOCKED_HOSTS or lower_host.endswith(".internal"):
@@ -125,8 +131,8 @@ class ListWebhookEventTypesParams(ForbidExtraModel):
 
 class ListWebhooksParams(ForbidExtraModel):
     org_uuid: UUID
-    limit: int | None = None
-    cursor: str | None = None
+    limit: int | None = Field(None, ge=1, le=500)
+    cursor: str | None = Field(None, max_length=2000)
 
 
 class GetWebhookParams(ForbidExtraModel):

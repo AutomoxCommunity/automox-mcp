@@ -100,15 +100,49 @@ class RateLimitError(RuntimeError):
     """Raised when a tool exceeds the configured rate limit."""
 
 
+_SENTINEL_IN_FLIGHT = "__in_flight__"
+
+
 class IdempotencyCache:
-    """In-memory TTL cache for idempotent write operations."""
+    """In-memory TTL cache for idempotent write operations.
+
+    V-156: Uses a get-or-reserve pattern to prevent duplicate writes from
+    concurrent requests with the same ``request_id``.  ``reserve()`` atomically
+    checks for an existing entry *and* inserts an in-flight placeholder when
+    none exists, closing the TOCTOU gap between check and store.
+    """
 
     _MAX_ENTRIES = 1000
 
     def __init__(self, *, ttl_seconds: float = 300.0) -> None:
         self._ttl = ttl_seconds
-        self._cache: dict[tuple[str, str], tuple[dict[str, Any], float]] = {}
+        self._cache: dict[tuple[str, str], tuple[dict[str, Any] | str, float]] = {}
         self._lock = asyncio.Lock()
+
+    async def reserve(
+        self, request_id: str, tool_name: str
+    ) -> tuple[bool, dict[str, Any] | None]:
+        """Atomically check-and-reserve a request_id slot.
+
+        Returns ``(True, cached_response)`` if a completed response exists,
+        ``(True, None)`` if another caller already reserved the slot (duplicate
+        in-flight), or ``(False, None)`` when a fresh reservation was created.
+        """
+        async with self._lock:
+            self._evict_expired()
+            key = (request_id, tool_name)
+            entry = self._cache.get(key)
+            if entry is not None:
+                value, expiry = entry
+                if time.monotonic() > expiry:
+                    del self._cache[key]
+                elif isinstance(value, dict):
+                    return True, value  # Completed — return cached
+                else:
+                    return True, None  # In-flight — duplicate request
+            # Reserve the slot with a sentinel
+            self._cache[key] = (_SENTINEL_IN_FLIGHT, time.monotonic() + self._ttl)
+            return False, None
 
     async def get(self, request_id: str, tool_name: str) -> dict[str, Any] | None:
         async with self._lock:
@@ -117,11 +151,13 @@ class IdempotencyCache:
             entry = self._cache.get(key)
             if entry is None:
                 return None
-            response, expiry = entry
+            value, expiry = entry
             if time.monotonic() > expiry:
                 del self._cache[key]
                 return None
-            return response
+            if isinstance(value, dict):
+                return value
+            return None  # In-flight sentinel — not yet complete
 
     async def put(self, request_id: str, tool_name: str, response: dict[str, Any]) -> None:
         async with self._lock:
@@ -147,10 +183,23 @@ _IDEMPOTENCY_CACHE = IdempotencyCache()
 
 
 async def check_idempotency(request_id: str | None, tool_name: str) -> dict[str, Any] | None:
-    """Return cached response for a duplicate request_id, or None."""
+    """Atomically check and reserve a request_id, returning a cached response if available.
+
+    Returns the cached response dict when a previous call already completed,
+    or ``None`` when the caller should proceed with the operation.  The slot
+    is reserved under the hood so that concurrent duplicates see the in-flight
+    sentinel and return a generic "duplicate" response instead of executing
+    the operation a second time.
+    """
     if not request_id:
         return None
-    return await _IDEMPOTENCY_CACHE.get(request_id, tool_name)
+    already_exists, cached = await _IDEMPOTENCY_CACHE.reserve(request_id, tool_name)
+    if already_exists:
+        if cached is not None:
+            return cached
+        # Another request is in flight — return a minimal duplicate marker.
+        return {"data": {"duplicate": True, "request_id": request_id}, "metadata": {}}
+    return None
 
 
 async def store_idempotency(

@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from collections.abc import Mapping, Sequence
 from typing import Any
 
 from ..client import AutomoxAPIError, AutomoxClient
 from ..utils import resolve_org_uuid
 from ..utils.response import require_org_id
+
+# V-153: Allow standard UUIDs and Automox short UUIDs, but block path injection chars
+_SAFE_UUID_RE = re.compile(r"^[a-fA-F0-9\-]+$")
 
 logger = logging.getLogger(__name__)
 
@@ -20,12 +24,22 @@ async def _resolve_device_uuid(
     device_id: int,
     org_id: int,
 ) -> str | None:
-    """Look up a device's UUID from its numeric ID."""
+    """Look up a device's UUID from its numeric ID.
+
+    V-153: Validates UUID format before returning to prevent URL path injection
+    if the API returned a malformed value.
+    """
     params = {"o": org_id}
     try:
         response = await client.get(f"/servers/{device_id}", params=params)
         if isinstance(response, Mapping):
-            return str(response.get("uuid") or response.get("device_uuid") or "") or None
+            raw = str(response.get("uuid") or response.get("device_uuid") or "").strip()
+            if raw and _SAFE_UUID_RE.fullmatch(raw):
+                return raw
+            elif raw:
+                logger.warning(
+                    "Device %s returned invalid UUID format: %r", device_id, raw[:50]
+                )
     except AutomoxAPIError as exc:
         logger.debug("Failed to resolve UUID for device %s: %s", device_id, exc)
     return None

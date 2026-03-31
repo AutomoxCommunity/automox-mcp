@@ -101,7 +101,9 @@ async def test_get_returns_detail() -> None:
     result = await get_data_extract(cast(AutomoxClient, client), org_id=42, extract_id="ext-001")
 
     assert result["data"]["id"] == "ext-001"
-    assert result["data"]["download_url"] == "https://example.com/download/ext-001"
+    # V-155: download_url is no longer exposed to LLM (presigned URL protection)
+    assert "download_url" not in result["data"]
+    assert result["data"]["has_download_url"] is True
     assert result["data"]["row_count"] == 500
 
 

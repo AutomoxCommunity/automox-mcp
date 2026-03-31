@@ -6,6 +6,7 @@ import importlib.metadata
 import json
 import logging
 import os
+import re
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -77,13 +78,22 @@ class AutomoxClient:
             ) from exc
 
         try:
-            self.account_uuid = (account_uuid or os.environ["AUTOMOX_ACCOUNT_UUID"]).strip()
+            raw_account_uuid = (account_uuid or os.environ["AUTOMOX_ACCOUNT_UUID"]).strip()
         except KeyError as exc:
             raise ValueError(
                 "AUTOMOX_ACCOUNT_UUID environment variable is required. "
                 "Set it to your Automox account UUID. "
                 "You can find it in the Automox console URL or API responses."
             ) from exc
+        # V-157: Validate format before using in URL paths to prevent path injection.
+        # Allow hex digits, hyphens, and lowercase letters (Automox UUIDs).
+        # Block path separators, dots, and control characters.
+        if not re.fullmatch(r"[a-zA-Z0-9\-]+", raw_account_uuid):
+            raise ValueError(
+                f"AUTOMOX_ACCOUNT_UUID contains invalid characters: {raw_account_uuid!r}. "
+                "Expected alphanumeric characters and hyphens only."
+            )
+        self.account_uuid = raw_account_uuid
 
         if org_id is not None:
             self.org_id = org_id

@@ -34,9 +34,11 @@ The following attack surfaces have been identified and mitigated:
 
 - API key stored as private attribute (`_api_key`), injected per-request via httpx auth callback (V-001)
 - Generic error messages prevent key leakage in stack traces (V-006)
-- Webhook secrets stripped from idempotency cache after create/rotate (V-012)
+- Webhook secrets stripped from idempotency cache after create/rotate (V-012); idempotency cache uses atomic reservation to prevent duplicate writes from concurrent requests (V-170)
 - Sensitive field redaction covers: `token`, `secret`, `api_key`, `api-key`, `apikey`, `password`, `credential`, `bearer`, `passwd` (V-010, V-107, S-003)
 - HTTP client debug logging excludes request parameters (V-005)
+- Presigned download URLs from data extract API redacted before reaching LLM; only a boolean `has_download_url` flag is returned (V-169)
+- Account UUID format-validated at client construction to prevent path injection via malformed environment variables (V-171)
 
 ### Prompt Injection via API Data
 
@@ -70,7 +72,7 @@ For sensitive deployments, we recommend using an MCP gateway with inline guardra
 - Built-in Bearer-token endpoint authentication for HTTP/SSE transports via `AUTOMOX_MCP_API_KEYS` or `AUTOMOX_MCP_API_KEY_FILE` (V-108); minimum key length warning at startup (V-144); for additional defense-in-depth, an authenticating reverse proxy or MCP gateway is recommended
 - **OAuth 2.1 / JWT authentication** for enterprise IdP integration (V-122): validate JWTs from external authorization servers (Keycloak, Auth0, Azure AD, Okta) with mandatory audience binding (V-136), HTTPS-only issuer (V-137), algorithm validation (V-138), and automatic JWKS key rotation; serves RFC 9728 Protected Resource Metadata at `/.well-known/oauth-protected-resource`
 - Tool name prefixing (`AUTOMOX_MCP_TOOL_PREFIX`) prevents cross-server collisions
-- Webhook URLs validated against private/loopback/link-local/multicast/unspecified IPs and cloud metadata endpoints (Google, Azure, Oracle Cloud, generic `*.internal`) with trailing-dot FQDN normalization to prevent SSRF (V-103, V-114, V-147). DNS resolution failures are now fail-closed (S-006). **Accepted risk (S-001):** DNS resolution is checked at validation time but the Automox backend performs its own resolution at delivery time; a DNS rebinding attack between those two points is theoretically possible. This is inherent to the split-validation architecture and mitigated by the backend's own controls
+- Webhook URLs validated against private/loopback/link-local/multicast/unspecified IPs and cloud metadata endpoints (Google, Azure, Oracle Cloud, generic `*.internal`) with trailing-dot FQDN normalization to prevent SSRF (V-103, V-114, V-147). DNS resolution runs in a thread pool to avoid blocking the async event loop (V-165). DNS resolution failures are now fail-closed (S-006). **Accepted risk (S-001):** DNS resolution is checked at validation time but the Automox backend performs its own resolution at delivery time; a DNS rebinding attack between those two points is theoretically possible. This is inherent to the split-validation architecture and mitigated by the backend's own controls
 
 ### Denial of Service
 
@@ -167,6 +169,13 @@ For sensitive deployments, we recommend using an MCP gateway with inline guardra
 | V-162 | DNS resolution timeout (3s) in webhook SSRF validation | `tools/webhook_tools.py` |
 | V-163 | Prompt parameter input validation (injection prevention) | `prompts/*.py` |
 | V-164 | Destructive action confirmation gates in prompt workflows | `prompts/investigate_device.py`, `prompts/triage_failure.py` |
+| V-165 | Non-blocking DNS resolution in webhook SSRF validation | `tools/webhook_tools.py` |
+| V-166 | Webhook cursor/limit input bounds | `tools/webhook_tools.py` |
+| V-167 | Policy merge recursion depth limit (10 levels) | `workflows/policy_crud.py` |
+| V-168 | Device UUID format validation before URL path interpolation | `workflows/device_inventory.py` |
+| V-169 | Presigned URL redaction in data extract responses | `workflows/data_extracts.py` |
+| V-170 | Atomic idempotency reservation (TOCTOU fix) | `utils/tooling.py` |
+| V-171 | Account UUID format validation at client construction | `client.py` |
 
 ## Scope and Limitations
 

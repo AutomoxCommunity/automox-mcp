@@ -35,10 +35,13 @@ async def list_data_extracts(
             "name": item.get("name"),
             "status": item.get("status"),
         }
-        for optional in ("type", "created_at", "updated_at", "file_size", "download_url"):
+        for optional in ("type", "created_at", "updated_at", "file_size"):
             val = item.get(optional)
             if val is not None:
                 entry[optional] = val
+        # V-155: Flag download_url presence without exposing presigned tokens
+        if item.get("download_url"):
+            entry["has_download_url"] = True
         extracts.append(entry)
 
     return {
@@ -74,13 +77,18 @@ async def get_data_extract(
         "created_at",
         "updated_at",
         "file_size",
-        "download_url",
         "expires_at",
         "row_count",
     ):
         val = result.get(optional)
         if val is not None:
             detail[optional] = val
+    # V-155: Flag download_url presence without exposing presigned tokens to LLM.
+    # Presigned URLs contain embedded auth credentials that should not be
+    # cached in LLM context. The user can retrieve the URL directly from the
+    # Automox console.
+    if result.get("download_url"):
+        detail["has_download_url"] = True
 
     return {
         "data": detail,

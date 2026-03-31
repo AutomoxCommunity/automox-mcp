@@ -584,16 +584,29 @@ def _coerce_policy_payload_defaults(payload: dict[str, Any]) -> list[str]:
     return warnings
 
 
+_MAX_MERGE_DEPTH = 10
+
+
 def _deep_merge_dicts(
     base: Mapping[str, Any],
     overrides: Mapping[str, Any],
+    *,
+    _depth: int = 0,
 ) -> dict[str, Any]:
-    """Recursively merge dictionaries, preferring override values."""
+    """Recursively merge dictionaries, preferring override values.
+
+    V-152: Capped at ``_MAX_MERGE_DEPTH`` levels to prevent stack overflow
+    from adversarially nested configuration payloads.
+    """
     merged = dict(base)
     for key, override_value in overrides.items():
         base_value = merged.get(key)
-        if isinstance(base_value, Mapping) and isinstance(override_value, Mapping):
-            merged[key] = _deep_merge_dicts(base_value, override_value)
+        if (
+            isinstance(base_value, Mapping)
+            and isinstance(override_value, Mapping)
+            and _depth < _MAX_MERGE_DEPTH
+        ):
+            merged[key] = _deep_merge_dicts(base_value, override_value, _depth=_depth + 1)
         else:
             merged[key] = deepcopy(override_value)
     return merged

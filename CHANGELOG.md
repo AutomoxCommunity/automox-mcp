@@ -5,6 +5,28 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.6] - 2026-03-30
+
+### Fixed
+
+- **Blocking DNS resolution freezes async event loop** — Webhook URL validation now runs DNS resolution in a `ThreadPoolExecutor` instead of blocking the event loop for up to 3 seconds. All concurrent tool calls were stalled during hostname resolution (V-165).
+- **Webhook `ListWebhooksParams` missing input bounds** — Added `ge=1, le=500` on `limit` and `max_length=2000` on `cursor`, consistent with other paginated schemas (V-166).
+- **`_deep_merge_dicts` unbounded recursion** — Policy update merge now caps recursion at 10 levels, preventing stack overflow from adversarially nested configuration payloads (V-167).
+- **Device UUID from API used in URL path without format validation** — `_resolve_device_uuid` now validates the API-returned UUID against `[a-fA-F0-9\-]+` before interpolation into URL paths, preventing path injection if the upstream API returned a malformed value (V-168).
+- **Presigned `download_url` tokens exposed to LLM** — Data extract responses now return `has_download_url: true` instead of the raw URL. Presigned cloud storage URLs contain embedded auth credentials (`X-Amz-Security-Token`, `sig=`) that should not be cached in LLM context (V-169).
+- **Idempotency cache TOCTOU allows duplicate writes** — Replaced the non-atomic check-then-execute-then-store pattern with an atomic `reserve()` method that inserts an in-flight sentinel during the check. Concurrent duplicate `request_id` values now return a duplicate marker instead of both executing (V-170).
+- **`account_uuid` not format-validated before URL path interpolation** — `AutomoxClient` now validates `AUTOMOX_ACCOUNT_UUID` against `[a-zA-Z0-9\-]+` at construction time, preventing path injection via malformed environment variables (V-171).
+
+### Security
+
+- **V-165**: Non-blocking DNS resolution in webhook SSRF validation (ThreadPoolExecutor).
+- **V-166**: Webhook cursor/limit input bounds consistent with other schemas.
+- **V-167**: Policy merge recursion depth limit prevents stack overflow DoS.
+- **V-168**: Device UUID format validation before URL path interpolation.
+- **V-169**: Presigned URL redaction in data extract responses.
+- **V-170**: Atomic idempotency reservation prevents duplicate write operations.
+- **V-171**: Account UUID format validation at client construction.
+
 ## [1.0.5] - 2026-03-30
 
 ### Fixed

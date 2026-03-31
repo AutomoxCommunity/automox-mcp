@@ -145,7 +145,7 @@ The gateway can inspect tool calls and responses:
 
 The server has a built-in rate limiter (30 calls/60s) for Automox API calls, but the gateway should enforce its own per-client limits to detect runaway scripts or abuse.
 
-**Important (S-002):** The built-in rate limiter does not cover MCP endpoint authentication attempts. The reverse proxy or gateway **must** rate-limit authentication failures to prevent brute-force attacks on static API keys. Example nginx configuration:
+The server includes a built-in `AuthRateLimitMiddleware` (V-140) that blocks client IPs after 10 failed authentication attempts (401/403) within 60 seconds for a 5-minute cool-down period. For additional defense-in-depth, the reverse proxy or gateway should also rate-limit authentication failures. Example nginx configuration:
 
 ```nginx
 limit_req_zone $binary_remote_addr zone=mcp_auth:10m rate=10r/s;
@@ -158,7 +158,7 @@ server {
 }
 ```
 
-Generated API keys use 128-bit entropy (`secrets.token_hex(16)`), making brute-force infeasible. However, operator-chosen keys configured via `AUTOMOX_MCP_API_KEYS` may have lower entropy.
+Generated API keys use 128-bit entropy (`secrets.token_hex(16)`), making brute-force infeasible. Keys shorter than 16 characters trigger a startup warning (V-144). However, operator-chosen keys configured via `AUTOMOX_MCP_API_KEYS` may have lower entropy.
 
 ### Server Allowlist
 
@@ -194,8 +194,8 @@ AUTOMOX_MCP_OAUTH_ISSUER="https://auth.example.com/realms/main"
 # JWKS endpoint for automatic key rotation (auto-derived from issuer if omitted)
 AUTOMOX_MCP_OAUTH_JWKS_URI="https://auth.example.com/realms/main/protocol/openid-connect/certs"
 
-# Audience claim — tokens MUST be issued for this audience (prevents token passthrough)
-# The server logs a warning at startup if this is not set.
+# Audience claim — REQUIRED. Tokens MUST be issued for this audience (prevents token passthrough)
+# The server will refuse to start if this is not set when JWT auth is enabled.
 AUTOMOX_MCP_OAUTH_AUDIENCE="https://mcp.example.com"
 
 # Canonical server URL — enables RFC 9728 Protected Resource Metadata at
@@ -245,6 +245,7 @@ All HTTP responses include security headers:
 - `Cache-Control: no-store`
 - `Referrer-Policy: strict-origin-when-cross-origin`
 - `Permissions-Policy: microphone=(), camera=(), geolocation=()`
+- `Strict-Transport-Security: max-age=63072000; includeSubDomains`
 
 These are always enabled on HTTP/SSE transports with no opt-out (defense-in-depth).
 
@@ -301,15 +302,15 @@ Each release also includes a CycloneDX SBOM (`sbom.cdx.json`) attached to the Gi
 - [ ] Egress restricted to `console.automox.com:443`
 - [ ] TLS terminated at gateway or reverse proxy
 - [ ] MCP endpoint authentication enabled — static keys (`AUTOMOX_MCP_API_KEYS`) or JWT/OIDC (`AUTOMOX_MCP_OAUTH_ISSUER`) — and/or enforced at gateway/reverse proxy
-- [ ] For JWT auth: `AUTOMOX_MCP_OAUTH_AUDIENCE` set to prevent token passthrough (server warns at startup if unset); `AUTOMOX_MCP_OAUTH_SERVER_URL` set for RFC 9728 metadata
-- [ ] API key file permissions restricted to owner only (`chmod 600`) — the server refuses world-readable files and warns on group-readable (V-118, V-127)
+- [ ] For JWT auth: `AUTOMOX_MCP_OAUTH_AUDIENCE` set (mandatory — server refuses to start without it); issuer uses HTTPS; `AUTOMOX_MCP_OAUTH_SERVER_URL` set for RFC 9728 metadata
+- [ ] API key file permissions restricted to owner only (`chmod 600`) — the server refuses world-readable files, world-writable JWT pubkey files, and raises on stat failures (V-118, V-127, V-135, V-139)
 - [ ] DNS rebinding protection enabled (default) — custom origins added via `AUTOMOX_MCP_ALLOWED_ORIGINS` if needed
 - [ ] Structured JSON logs (`AUTOMOX_MCP_LOG_FORMAT=json`) forwarded to SIEM
 - [ ] Release artifact verified via Sigstore before deployment
 - [ ] MCP client configured with confirmation dialogs for write operations
 - [ ] Resource quotas (CPU/RAM) set on container
 - [ ] Tool prefix configured if running alongside other MCP servers (`AUTOMOX_MCP_TOOL_PREFIX`)
-- [ ] Reverse proxy rate-limits authentication attempts (S-002)
+- [ ] Built-in auth rate limiting active (V-140); reverse proxy adds additional rate limiting for defense-in-depth
 - [ ] `AUTOMOX_MCP_ALLOW_REMOTE_BIND` set only when non-loopback binding is intentional
 
 ## References

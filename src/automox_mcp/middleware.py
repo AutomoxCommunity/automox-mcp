@@ -28,7 +28,9 @@ class CorrelationMiddleware(Middleware):
     async def on_call_tool(self, context: Any, call_next: Any) -> Any:
         correlation_id = str(uuid.uuid4())
         token = _correlation_id_var.set(correlation_id)
-        tool_name = context.message.name
+        # Sanitize tool name to prevent log injection via control characters
+        raw_tool_name = context.message.name
+        tool_name = raw_tool_name.replace("\n", "").replace("\r", "").replace("\t", "_")[:200]
         start = time.perf_counter()
         status = "error"
         try:

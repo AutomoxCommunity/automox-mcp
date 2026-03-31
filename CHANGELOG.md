@@ -5,6 +5,53 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.4] - 2026-03-30
+
+### Fixed
+
+- **URL path injection via unvalidated string IDs** — `policy_uuid`, `exec_token`, `device_uuid` in V2 schemas now use `UUID` type validation, matching the existing V1 schemas. Previously, bare `str` fields were interpolated directly into API URL paths without format validation. `extract_id` now uses a pattern constraint.
+- **Trailing-dot FQDN bypasses cloud metadata blocklist** — Webhook URL validation now strips trailing dots from hostnames before blocklist comparison. `metadata.google.internal.` (a valid FQDN) previously bypassed both exact-match and `.endswith(".internal")` checks.
+- **DNS resolution failure silently allows webhook URLs** — Webhook URL validation now rejects hostnames that cannot be resolved via DNS (fail-closed) instead of allowing them through (fail-open).
+- **Token budget truncation mutates idempotency cache** — `_apply_token_budget` now deep-copies the response dict before truncation, preventing in-place mutation of cached entries that would cause progressive data loss on idempotent replays.
+- **Token budget truncation only targets first list in Mapping data** — Now truncates ALL oversized lists within a Mapping payload, not just the first one found.
+- **`resolve_org_uuid` conflates account UUID with org UUID** — Account UUID fallback no longer caches the value as `client.org_uuid`. Previously, tools using `allow_account_uuid=True` could poison the cache, causing subsequent tools that require a real org UUID to receive an account UUID instead.
+- **Async race condition on `client.org_uuid`** — `resolve_org_uuid` now uses an asyncio lock to prevent concurrent mutations when multiple tool calls are in-flight (e.g., compound workflows using `asyncio.gather`).
+- **Case-sensitive Host/Origin header matching** — DNS rebinding protection now normalizes headers to lowercase before comparison per RFC 4343. Previously, `Host: LOCALHOST:8000` would be rejected.
+- **WebSocket connections bypass DNS rebinding protection** — The middleware now validates `scope["type"] == "websocket"` in addition to `"http"`.
+- **Host wildcard port matching accepts non-numeric ports** — `_host_matches` now validates that the port portion is numeric when matching `host:*` patterns, consistent with `_origin_matches`.
+- **Log injection via tool name** — Correlation middleware now sanitizes tool names by stripping newline/carriage return/tab characters, preventing injected log lines that could forge audit trails or mislead SIEM systems.
+- **`_redact_sensitive_fields` unbounded recursion** — Added depth limit of 20 to prevent stack overflow on deeply nested error payloads.
+- **`normalize_status` unbounded recursion** — Added depth limit of 20 to prevent stack overflow on deeply nested status structures.
+- **`_estimate_tokens` returns 0 on serialization failure** — Now falls back to `repr()` length estimation, then to the default budget value, instead of returning 0 which would bypass budget enforcement entirely.
+- **`/servers` API response not handled when paginated dict** — `list_device_inventory`, `search_devices`, and `summarize_device_health` now handle both bare list and `{"data": [...]}` dict response formats from the `/servers` endpoint.
+- **`clone_policy` unbounded fetch** — The fallback clone ID lookup now uses `limit=250` instead of fetching all policies without pagination.
+- **Ambiguous numeric day mapping** — `_normalize_schedule_days_input` now only accepts 0-6 (Sunday=0 through Saturday=6) instead of the ambiguous 0-6 and 1-7 dual range that silently produced different results depending on caller convention.
+- **`_normalize_filters` always wraps in wildcards** — Added `exact` parameter to allow callers to opt out of the automatic `*...*` wrapping for exact-match filters.
+- **Unused `_has_writes` variable in tool registration** — Replaced with `_` discard variable to remove dead code.
+- **Idempotency cache expired entries not proactively cleaned** — `get()` now calls `_evict_expired()` on every access, not just during `put()` operations.
+
+### Security
+
+- **V-132**: UUID type validation on path-interpolated parameters (policy_uuid, exec_token, device_uuid, extract_id) prevents URL path injection.
+- **V-133**: HTML tag and script stripping in sanitizer — `sanitize_for_llm` now removes `<script>` blocks, event handler attributes (`onerror`, `onclick`, etc.), `javascript:`/`data:` URIs, and all HTML tags. Previously only Markdown syntax was stripped.
+- **V-134**: Instruction prefix stripping default-on for unknown fields — Fields not in the explicit preserve-list (`hostname`, `name`, `tags`, etc.) now have instruction prefixes stripped by default. Expanded the strip-field list to include `comments`, `reason`, `summary`, `output`, `body`, `content`, `text`, `value`, `result`, `response`, `log`, `error`.
+- **V-135**: JWT public key file world-writable rejection — `_create_jwt_auth` now raises `RuntimeError` instead of logging a warning when the JWT public key file is world-writable. An attacker with write access could replace the key to forge tokens and bypass authentication entirely.
+- **V-136**: JWT audience claim now required — `AUTOMOX_MCP_OAUTH_AUDIENCE` is mandatory when JWT authentication is enabled. Without audience binding, any valid token from the configured issuer would be accepted, enabling cross-service token reuse.
+- **V-137**: Non-HTTPS OAuth issuer rejected — `AUTOMOX_MCP_OAUTH_ISSUER` must use `https://`. JWKS discovery over cleartext HTTP is vulnerable to MITM key substitution.
+- **V-138**: JWT algorithm validation — Rejects HMAC algorithms when a public key is configured (algorithm confusion attack), and validates the algorithm against a known allowlist.
+- **V-139**: API key file `stat()` failure no longer bypasses permission check — Previously, any `OSError` from `stat()` was silently swallowed, proceeding to read the file without permission validation.
+- **V-140**: Authentication rate limiting — New `AuthRateLimitMiddleware` blocks client IPs after 10 failed authentication attempts (401/403) within 60 seconds, with a 5-minute block period. Mitigates brute-force attacks on static API keys and JWT tokens.
+- **V-141**: HSTS header added — All HTTP responses now include `Strict-Transport-Security: max-age=63072000; includeSubDomains`.
+- **V-142**: Fenced code block regex supports 4+ backtick delimiters — Previously, code blocks using ```````` as delimiters bypassed sanitization.
+- **V-143**: OIDC discovery uses standard path — Auto-derived JWKS URI now uses `/.well-known/openid-configuration` instead of the non-standard `/.well-known/jwks.json`.
+- **V-144**: Minimum API key length warning — Keys shorter than 16 characters trigger a startup warning recommending `--generate-key`.
+- **V-145**: `is_auth_configured()` handles permission errors — No longer crashes the server when the key file exists but has incorrect permissions; returns `True` (auth is intended, just misconfigured).
+- **V-146**: API key not exposed via `repr()` — `AutomoxClient` now defines `__repr__` and `__slots__` to prevent accidental API key exposure in debug output, logging, or exception handlers.
+- **V-147**: Webhook SSRF checks for multicast/unspecified IPs — `_validate_webhook_url` now rejects `is_multicast` and `is_unspecified` addresses.
+- **V-148**: Input validation bounds on 20+ schema fields — Added `max_length`, `pattern`, `ge`/`le` constraints to `PolicyRunsV2Params`, `AuditEventsOcsfParams`, `DeviceSearchTypeaheadParams`, `SearchWisParams`, `RunDetailParams`, `GetEventsParams`, `CreateServerGroupParams`, `UpdateServerGroupParams`, and `PolicyDefinition` (bitmask fields, scheduled_timezone).
+- **V-149**: Operations list bounded to 50 — `PolicyChangeRequestParams.operations` now has `max_length=50` to prevent resource exhaustion via unbounded batch operations.
+- **S-006**: SSRF DNS fail-closed — Webhook URL validation now rejects unresolvable hostnames instead of allowing them through. Documented TOCTOU risk (S-001) remains.
+
 ## [1.0.3] - 2026-03-30
 
 ### Fixed

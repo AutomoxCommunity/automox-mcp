@@ -182,10 +182,16 @@ class TestInstructionPrefixRemoval:
         result = sanitize_for_llm(text, field_name="policy_name")
         assert result == "IMPORTANT: Firefox Update"
 
-    def test_no_field_name_skips_prefix_strip(self):
-        """When field_name is None, instruction prefixes are preserved."""
+    def test_no_field_name_strips_prefix(self):
+        """When field_name is None, instruction prefixes are stripped (fail-safe)."""
         text = "IMPORTANT: something"
         result = sanitize_for_llm(text, field_name=None)
+        assert "IMPORTANT:" not in result
+
+    def test_preserve_field_keeps_prefix(self):
+        """Fields in _PRESERVE_PREFIX_FIELDS keep instruction prefixes."""
+        text = "IMPORTANT: something"
+        result = sanitize_for_llm(text, field_name="hostname")
         assert result == "IMPORTANT: something"
 
     def test_multiline_strips_only_matching_lines(self):

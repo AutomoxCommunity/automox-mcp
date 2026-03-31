@@ -50,6 +50,14 @@ class AutomoxRateLimitError(AutomoxAPIError):
 class AutomoxClient:
     """Small HTTP client for the various Automox APIs."""
 
+    __slots__ = (
+        "_api_key", "account_uuid", "org_id", "org_uuid",
+        "_http", "_base_url_str",
+    )
+
+    def __repr__(self) -> str:
+        return f"AutomoxClient(org_id={self.org_id!r})"
+
     def __init__(
         self,
         *,

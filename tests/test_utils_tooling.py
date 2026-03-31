@@ -295,7 +295,7 @@ def test_apply_token_budget_large_response_adds_warning():
     assert meta["estimated_tokens"] > 50
     assert meta["truncated"] is True
     assert meta["total_available"] == 200
-    assert meta["returned_count"] < 200
+    assert len(result["data"]["devices"]) < 200
 
 
 def test_apply_token_budget_non_list_data_not_truncated():

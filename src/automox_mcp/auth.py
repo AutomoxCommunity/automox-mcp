@@ -86,6 +86,14 @@ def _parse_key_entry(entry: str) -> tuple[str, dict[str, Any]] | None:
     if not token:
         return None
 
+    _MIN_KEY_LENGTH = 16
+    if len(token) < _MIN_KEY_LENGTH:
+        logger.warning(
+            "API key is shorter than %d characters — consider using a stronger key. "
+            "Generate one with: automox-mcp --generate-key",
+            _MIN_KEY_LENGTH,
+        )
+
     return token, {
         "client_id": client_id,
         "scopes": [],  # scopes unused — authorization is all-or-nothing
@@ -131,8 +139,12 @@ def _load_keys_from_file() -> dict[str, dict[str, Any]]:
                 path,
                 mode,
             )
-    except OSError:
-        pass  # stat failure is non-fatal; proceed to read
+    except RuntimeError:
+        raise
+    except OSError as exc:
+        raise RuntimeError(
+            f"Cannot verify permissions on AUTOMOX_MCP_API_KEY_FILE ({path}): {exc}"
+        ) from exc
 
     tokens: dict[str, dict[str, Any]] = {}
     for line in path.read_text().splitlines():
@@ -199,13 +211,12 @@ def _create_jwt_auth() -> Any | None:
     if not issuer:
         return None
 
-    # V-125: Warn if issuer URL does not use HTTPS (MITM risk for JWKS discovery)
+    # V-125: Reject non-HTTPS issuer URLs (MITM risk for JWKS discovery)
     if not issuer.startswith("https://"):
-        logger.warning(
-            "AUTOMOX_MCP_OAUTH_ISSUER (%s) does not use HTTPS — "
+        raise RuntimeError(
+            f"AUTOMOX_MCP_OAUTH_ISSUER ({issuer}) does not use HTTPS. "
             "JWKS key discovery over cleartext HTTP is vulnerable to MITM attacks. "
-            "Use an https:// issuer URL in production.",
-            issuer,
+            "Use an https:// issuer URL."
         )
 
     jwks_uri = _env_str("AUTOMOX_MCP_OAUTH_JWKS_URI")
@@ -219,41 +230,60 @@ def _create_jwt_auth() -> Any | None:
             try:
                 mode = key_path.stat().st_mode & 0o777
                 if mode & 0o002:
+                    raise RuntimeError(
+                        f"JWT public key file ({key_path}) is world-writable ({oct(mode)}) — "
+                        f"an attacker could replace it to bypass authentication. "
+                        f"Run: chmod 644 {key_path}"
+                    )
+                if mode & 0o020:
                     logger.warning(
-                        "JWT public key file (%s) is world-writable (%s) — "
-                        "an attacker could replace it to bypass authentication. "
-                        "Run: chmod 644 %s",
+                        "JWT public key file (%s) has group-writable permissions (%s) — "
+                        "recommend chmod 644 to restrict write access.",
                         key_path,
                         oct(mode),
-                        key_path,
                     )
-            except OSError:
-                pass
+            except RuntimeError:
+                raise
+            except OSError as exc:
+                raise RuntimeError(
+                    f"Cannot verify permissions on JWT public key file ({key_path}): {exc}"
+                ) from exc
             public_key = key_path.read_text().strip()
 
     # Auto-derive JWKS URI from issuer if not explicitly set
     if not jwks_uri and not public_key:
-        # Standard OIDC: {issuer}/.well-known/openid-configuration -> jwks_uri
-        # Common convention: {issuer}/protocol/openid-connect/certs (Keycloak)
-        # Safest: just append the well-known JWKS path
-        candidate = issuer.rstrip("/") + "/.well-known/jwks.json"
+        # Standard OIDC discovery endpoint
+        candidate = issuer.rstrip("/") + "/.well-known/openid-configuration"
         logger.info(
-            "AUTOMOX_MCP_OAUTH_JWKS_URI not set — will attempt OIDC discovery "
-            "from issuer %s (fallback: %s)",
-            issuer,
+            "AUTOMOX_MCP_OAUTH_JWKS_URI not set — will use standard OIDC discovery "
+            "endpoint: %s",
             candidate,
         )
         jwks_uri = candidate
 
     audience = _env_str("AUTOMOX_MCP_OAUTH_AUDIENCE")
     if not audience:
-        logger.warning(
-            "AUTOMOX_MCP_OAUTH_AUDIENCE is not set — JWT validation will "
-            "accept any token from the configured issuer regardless of "
-            "audience. Set this variable to restrict access to tokens "
-            "intended for this resource server.",
+        raise RuntimeError(
+            "AUTOMOX_MCP_OAUTH_AUDIENCE is required when using JWT authentication. "
+            "Without audience binding, any valid token from the configured issuer "
+            "will be accepted, enabling cross-service token reuse. "
+            "Set AUTOMOX_MCP_OAUTH_AUDIENCE to your server's resource identifier."
         )
     algorithm = _env_str("AUTOMOX_MCP_OAUTH_ALGORITHM") or "RS256"
+    # Validate algorithm compatibility with key type
+    _ASYMMETRIC_ALGORITHMS = {"RS256", "RS384", "RS512", "ES256", "ES384", "ES512", "PS256", "PS384", "PS512", "EdDSA"}
+    _HMAC_ALGORITHMS = {"HS256", "HS384", "HS512"}
+    if algorithm.upper() in _HMAC_ALGORITHMS and public_key:
+        raise RuntimeError(
+            f"AUTOMOX_MCP_OAUTH_ALGORITHM={algorithm} is an HMAC algorithm but a public key "
+            "is configured. HMAC algorithms use shared secrets, not public keys. "
+            "Use an asymmetric algorithm (e.g., RS256, ES256) with public keys."
+        )
+    if algorithm.upper() not in _ASYMMETRIC_ALGORITHMS | _HMAC_ALGORITHMS:
+        raise RuntimeError(
+            f"AUTOMOX_MCP_OAUTH_ALGORITHM={algorithm} is not a recognized JWT algorithm. "
+            f"Supported: {', '.join(sorted(_ASYMMETRIC_ALGORITHMS | _HMAC_ALGORITHMS))}"
+        )
     required_scopes = env_list("AUTOMOX_MCP_OAUTH_SCOPES") or None
     server_url = _env_str("AUTOMOX_MCP_OAUTH_SERVER_URL")
 
@@ -327,7 +357,13 @@ def create_auth_provider() -> Any | None:
 
 def is_auth_configured() -> bool:
     """Return *True* if any MCP endpoint authentication is configured."""
-    return bool(load_api_keys()) or bool(_env_str("AUTOMOX_MCP_OAUTH_ISSUER"))
+    try:
+        has_keys = bool(load_api_keys())
+    except RuntimeError:
+        # Key file exists but has permission issues — auth IS configured,
+        # just misconfigured. Return True so callers know auth is intended.
+        has_keys = True
+    return has_keys or bool(_env_str("AUTOMOX_MCP_OAUTH_ISSUER"))
 
 
 def generate_api_key(prefix: str = "amx") -> str:

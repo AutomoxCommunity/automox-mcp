@@ -23,6 +23,16 @@ from ..utils.tooling import (
 )
 
 
+_BLOCKED_HOSTS: frozenset[str] = frozenset({
+    "metadata.google.internal",
+    "metadata.google",
+    "metadata.azure.com",
+    "management.azure.com",
+    "instance-data",
+    "metadata.oraclecloud.com",
+})
+
+
 def _validate_webhook_url(url: str) -> None:
     """Validate a webhook URL: HTTPS, no userinfo, no private/internal IPs."""
     parsed = urlparse(url)
@@ -34,11 +44,21 @@ def _validate_webhook_url(url: str) -> None:
         raise ValueError("Webhook URL must not contain userinfo (user:pass@host)")
     # Block private, loopback, and link-local IP addresses to prevent SSRF relay
     hostname = parsed.hostname
+    # Strip trailing dot from FQDN to prevent blocklist bypass
+    hostname_normalized = hostname.rstrip(".")
     try:
         addr = ipaddress.ip_address(hostname)
-        if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved:
+        if (
+            addr.is_private
+            or addr.is_loopback
+            or addr.is_link_local
+            or addr.is_reserved
+            or addr.is_multicast
+            or addr.is_unspecified
+        ):
             raise ValueError(
-                "Webhook URL must not target private, loopback, or link-local addresses"
+                "Webhook URL must not target private, loopback, link-local, "
+                "multicast, or unspecified addresses"
             )
     except ValueError as exc:
         if "must not target" in str(exc):
@@ -54,22 +74,19 @@ def _validate_webhook_url(url: str) -> None:
                     or resolved_addr.is_loopback
                     or resolved_addr.is_link_local
                     or resolved_addr.is_reserved
+                    or resolved_addr.is_multicast
+                    or resolved_addr.is_unspecified
                 ):
                     raise ValueError("Webhook URL hostname resolves to a private/internal address")
         except (socket.gaierror, OSError):
-            # DNS resolution failed — allow through; Automox's backend will
-            # perform its own resolution when delivering webhooks
-            pass
-    # Block well-known cloud metadata endpoints by hostname
-    _BLOCKED_HOSTS = {
-        "metadata.google.internal",
-        "metadata.google",
-        "metadata.azure.com",
-        "management.azure.com",
-        "instance-data",
-        "metadata.oraclecloud.com",
-    }
-    lower_host = hostname.lower()
+            # DNS resolution failed — reject by default (fail-closed).
+            # S-001: TOCTOU risk remains between validation and delivery.
+            raise ValueError(
+                "Webhook URL hostname could not be resolved via DNS. "
+                "Ensure the hostname is publicly resolvable."
+            )
+    # Block well-known cloud metadata endpoints by hostname (using normalized name)
+    lower_host = hostname_normalized.lower()
     if lower_host in _BLOCKED_HOSTS or lower_host.endswith(".internal"):
         raise ValueError("Webhook URL must not target cloud metadata endpoints")
 

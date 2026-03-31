@@ -86,9 +86,9 @@ class RunDetailParams(ForbidExtraModel):
     org_uuid: UUID
     policy_uuid: UUID
     exec_token: UUID
-    sort: str | None = None
-    result_status: str | None = None
-    device_name: str | None = None
+    sort: str | None = Field(None, max_length=100)
+    result_status: str | None = Field(None, max_length=100)
+    device_name: str | None = Field(None, max_length=500)
     page: int | None = Field(None, ge=0)
     limit: int | None = Field(None, ge=1, le=5000)
     max_output_length: int | None = Field(None, ge=16, le=20000)
@@ -130,17 +130,20 @@ class PolicyDefinition(BaseModel):
     schedule_days: int | None = Field(
         None,
         ge=0,
-        description="Bitmask representing scheduled days of the week.",
+        le=254,
+        description="Bitmask representing scheduled days of the week (max 254 = bits 1-7).",
     )
     schedule_weeks_of_month: int | None = Field(
         None,
         ge=0,
-        description="Bitmask representing scheduled weeks of the month.",
+        le=30,
+        description="Bitmask representing scheduled weeks of the month (max 30 = bits 1-4).",
     )
     schedule_months: int | None = Field(
         None,
         ge=0,
-        description="Bitmask representing scheduled months of the year.",
+        le=8190,
+        description="Bitmask representing scheduled months of the year (max 8190 = bits 1-12).",
     )
     schedule_time: str | None = Field(
         None,
@@ -155,6 +158,7 @@ class PolicyDefinition(BaseModel):
         description=(
             "UTC offset string required when use_scheduled_timezone is true (e.g. 'UTC+0000')."
         ),
+        pattern=r"^UTC[+-]\d{4}$",
     )
     server_groups: list[int] | None = Field(
         None,
@@ -250,7 +254,9 @@ class PolicyChangeRequestParams(OrgIdContextMixin, ForbidExtraModel):
     """Structured request for creating or updating Automox policies."""
 
     operations: list[PolicyOperation] = Field(
-        description="Ordered list of policy create/update operations to perform.", min_length=1
+        description="Ordered list of policy create/update operations to perform.",
+        min_length=1,
+        max_length=50,
     )
     preview: bool | None = Field(
         False,
@@ -439,9 +445,9 @@ class GetEventsParams(ForbidExtraModel):
     policy_id: int | None = Field(None, description="Filter by Policy ID")
     server_id: int | None = Field(None, description="Filter by Server/Device ID")
     user_id: int | None = Field(None, description="Filter by User ID")
-    event_name: str | None = Field(None, description="Filter by event name")
-    start_date: str | None = Field(None, description="Start date filter (ISO format)")
-    end_date: str | None = Field(None, description="End date filter (ISO format)")
+    event_name: str | None = Field(None, description="Filter by event name", max_length=200)
+    start_date: str | None = Field(None, description="Start date filter (ISO format)", max_length=30)
+    end_date: str | None = Field(None, description="End date filter (ISO format)", max_length=30)
     limit: int | None = Field(None, ge=1, le=500, description="Results per page")
 
 
@@ -499,9 +505,9 @@ class DeletePolicyToolParams(OrgIdContextMixin, ForbidExtraModel):
 
 class CreateServerGroupParams(ForbidExtraModel):
     name: str = Field(description="Group name")
-    refresh_interval: int = Field(description="Refresh interval in minutes")
+    refresh_interval: int = Field(description="Refresh interval in minutes", ge=1, le=525600)
     parent_server_group_id: int = Field(description="Parent group ID (required by API)")
-    ui_color: str | None = Field(None, description="UI color for group")
+    ui_color: str | None = Field(None, description="UI color for group", pattern=r"^#[0-9a-fA-F]{6}$")
     notes: str | None = Field(None, description="Group notes")
     policies: list[int] | None = Field(None, description="Policy IDs to assign")
 
@@ -509,9 +515,9 @@ class CreateServerGroupParams(ForbidExtraModel):
 class UpdateServerGroupParams(ForbidExtraModel):
     group_id: int = Field(description="Server group ID")
     name: str = Field(description="Group name")
-    refresh_interval: int = Field(description="Refresh interval in minutes")
+    refresh_interval: int = Field(description="Refresh interval in minutes", ge=1, le=525600)
     parent_server_group_id: int = Field(description="Parent group ID (required by API)")
-    ui_color: str | None = Field(None, description="UI color for group")
+    ui_color: str | None = Field(None, description="UI color for group", pattern=r"^#[0-9a-fA-F]{6}$")
     notes: str | None = Field(None, description="Group notes")
     policies: list[int] | None = Field(None, description="Policy IDs to assign")
 
@@ -574,7 +580,7 @@ class ListDataExtractsParams(OrgIdRequiredMixin, ForbidExtraModel):
 
 
 class GetDataExtractParams(OrgIdRequiredMixin, ForbidExtraModel):
-    extract_id: str = Field(description="Data extract ID")
+    extract_id: str = Field(description="Data extract ID", max_length=200, pattern=r"^[a-zA-Z0-9_\-]+$")
 
 
 class ListOrgApiKeysParams(OrgIdRequiredMixin, ForbidExtraModel):
@@ -602,7 +608,7 @@ class GetActionSetSolutionsParams(OrgIdRequiredMixin, ForbidExtraModel):
 
 
 class SearchWisParams(OrgIdRequiredMixin, ForbidExtraModel):
-    query: str | None = Field(None, description="Search query")
+    query: str | None = Field(None, description="Search query", max_length=1000)
 
 
 class GetWisItemParams(OrgIdRequiredMixin, ForbidExtraModel):
@@ -630,11 +636,11 @@ class UploadActionSetParams(OrgIdRequiredMixin, ForbidExtraModel):
 class PolicyRunsV2Params(OrgIdRequiredMixin, ForbidExtraModel):
     start_time: str | None = Field(None, description="Start time filter (ISO format)")
     end_time: str | None = Field(None, description="End time filter (ISO format)")
-    policy_name: str | None = Field(None, description="Filter by policy name")
-    policy_uuid: str | None = Field(None, description="Filter by policy UUID")
-    policy_type: str | None = Field(None, description="Filter by policy type")
-    result_status: str | None = Field(None, description="Filter by result status")
-    sort: str | None = Field(None, description="Sort order")
+    policy_name: str | None = Field(None, description="Filter by policy name", max_length=500)
+    policy_uuid: UUID | None = Field(None, description="Filter by policy UUID")
+    policy_type: str | None = Field(None, description="Filter by policy type", max_length=100)
+    result_status: str | None = Field(None, description="Filter by result status", max_length=100)
+    sort: str | None = Field(None, description="Sort order", max_length=100)
     page: int | None = Field(None, ge=0, description="Page number")
     limit: int | None = Field(None, ge=1, le=5000, description="Results per page")
 
@@ -648,21 +654,21 @@ class PolicyRunsByPolicyParams(OrgIdRequiredMixin, ForbidExtraModel):
 
 
 class PolicyHistoryDetailParams(OrgIdRequiredMixin, ForbidExtraModel):
-    policy_uuid: str = Field(description="Policy UUID")
+    policy_uuid: UUID = Field(description="Policy UUID")
 
 
 class PolicyRunsForPolicyParams(OrgIdRequiredMixin, ForbidExtraModel):
-    policy_uuid: str = Field(description="Policy UUID")
+    policy_uuid: UUID = Field(description="Policy UUID")
     report_days: int | None = Field(None, ge=1, le=365, description="Days to look back")
-    sort: str | None = Field(None, description="Sort order")
+    sort: str | None = Field(None, description="Sort order", max_length=100)
 
 
 class PolicyRunDetailV2Params(OrgIdRequiredMixin, ForbidExtraModel):
-    policy_uuid: str = Field(description="Policy UUID")
-    exec_token: str = Field(description="Execution token")
-    sort: str | None = Field(None, description="Sort order")
-    result_status: str | None = Field(None, description="Filter by result status")
-    device_name: str | None = Field(None, description="Filter by device name")
+    policy_uuid: UUID = Field(description="Policy UUID")
+    exec_token: UUID = Field(description="Execution token")
+    sort: str | None = Field(None, description="Sort order", max_length=100)
+    result_status: str | None = Field(None, description="Filter by result status", max_length=100)
+    device_name: str | None = Field(None, description="Filter by device name", max_length=500)
     page: int | None = Field(None, ge=0, description="Page number")
     limit: int | None = Field(None, ge=1, le=5000, description="Results per page")
 
@@ -673,9 +679,9 @@ class PolicyRunDetailV2Params(OrgIdRequiredMixin, ForbidExtraModel):
 
 
 class AuditEventsOcsfParams(OrgIdRequiredMixin, ForbidExtraModel):
-    date: str = Field(description="Date to query (YYYY-MM-DD)")
-    category_name: str | None = Field(None, description="OCSF event category name")
-    type_name: str | None = Field(None, description="OCSF event type name")
+    date: str = Field(description="Date to query (YYYY-MM-DD)", pattern=r"^\d{4}-\d{2}-\d{2}$")
+    category_name: str | None = Field(None, description="OCSF event category name", max_length=200)
+    type_name: str | None = Field(None, description="OCSF event type name", max_length=200)
     cursor: str | None = Field(None, description="Pagination cursor")
     limit: int | None = Field(None, ge=1, le=500, description="Maximum events to return")
 
@@ -692,12 +698,12 @@ class AdvancedDeviceSearchParams(ForbidExtraModel):
 
 
 class DeviceSearchTypeaheadParams(ForbidExtraModel):
-    field: str = Field(description="Field name to get suggestions for")
-    prefix: str = Field(description="Search prefix")
+    field: str = Field(description="Field name to get suggestions for", max_length=100)
+    prefix: str = Field(description="Search prefix", max_length=500)
 
 
 class DeviceByUuidParams(ForbidExtraModel):
-    device_uuid: str = Field(description="Device UUID")
+    device_uuid: UUID = Field(description="Device UUID")
 
 
 # ============================================================================

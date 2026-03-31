@@ -486,7 +486,14 @@ async def list_device_inventory(
     for page_num in range(max_pages):
         params["page"] = page_num
         payload = await client.get("/servers", params=params)
-        devices: Sequence[Mapping[str, Any]] = payload if isinstance(payload, list) else []
+        # Handle both list and paginated dict response formats
+        if isinstance(payload, list):
+            devices: Sequence[Mapping[str, Any]] = payload
+        elif isinstance(payload, Mapping):
+            _data = payload.get("data") or payload.get("results")
+            devices = _data if isinstance(_data, list) else []
+        else:
+            devices = []
 
         if not devices:
             break
@@ -894,10 +901,17 @@ async def search_devices(
         for sev in severity_values:
             param_tuples.append(("filters[severity][]", sev))
 
-        devices = await client.get(
+        raw_devices = await client.get(
             "/servers", params=dict(params) if not severity_values else param_tuples
         )
-        devices = devices if isinstance(devices, Sequence) else []
+        # Handle both list and paginated dict response formats
+        if isinstance(raw_devices, Sequence) and not isinstance(raw_devices, (str, bytes)):
+            devices = raw_devices
+        elif isinstance(raw_devices, Mapping):
+            _data = raw_devices.get("data") or raw_devices.get("results")
+            devices = _data if isinstance(_data, Sequence) and not isinstance(_data, (str, bytes)) else []
+        else:
+            devices = []
 
         if not devices:
             break
@@ -1003,7 +1017,14 @@ async def summarize_device_health(
     for _page_num in range(_MAX_HEALTH_PAGES):
         params["page"] = _page_num
         page_response = await client.get("/servers", params=params)
-        page_items = page_response if isinstance(page_response, Sequence) else []
+        # Handle both list and paginated dict response formats
+        if isinstance(page_response, Sequence) and not isinstance(page_response, (str, bytes)):
+            page_items = page_response
+        elif isinstance(page_response, Mapping):
+            _data = page_response.get("data") or page_response.get("results")
+            page_items = _data if isinstance(_data, Sequence) and not isinstance(_data, (str, bytes)) else []
+        else:
+            page_items = []
         all_devices.extend(page_items)
         if len(page_items) < effective_limit:
             break

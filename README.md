@@ -105,7 +105,7 @@ For the full list of tools, parameters, and MCP resources, see the **[Tool Refer
 | `AUTOMOX_MCP_API_KEY_FILE` | No | — | Path to a file containing MCP endpoint API keys (one per line) |
 | `AUTOMOX_MCP_OAUTH_ISSUER` | No | — | OIDC issuer URL for JWT auth (e.g., `https://auth.example.com/realms/main`) |
 | `AUTOMOX_MCP_OAUTH_JWKS_URI` | No | — | JWKS endpoint for JWT key rotation (auto-derived from issuer if omitted) |
-| `AUTOMOX_MCP_OAUTH_AUDIENCE` | No | — | Expected JWT audience claim (prevents token passthrough); server warns at startup if unset |
+| `AUTOMOX_MCP_OAUTH_AUDIENCE` | When JWT auth | — | Expected JWT audience claim (prevents token passthrough); **required** when `AUTOMOX_MCP_OAUTH_ISSUER` is set |
 | `AUTOMOX_MCP_OAUTH_SERVER_URL` | No | — | Canonical server URL; enables RFC 9728 Protected Resource Metadata |
 | `AUTOMOX_MCP_OAUTH_SCOPES` | No | — | Comma-separated required OAuth scopes |
 | `AUTOMOX_MCP_ALLOWED_ORIGINS` | No | — | Extra allowed Origin headers for DNS rebinding protection (comma-separated) |
@@ -177,7 +177,7 @@ The Automox MCP server is designed for enterprise deployment with defense-in-dep
 - **Rate limiting** (30 calls/60s) with token budget estimation and auto-truncation
 - **API key isolation** — stored as private attribute with per-request auth injection (no header storage)
 - **Generic error responses** — no internal paths, connection strings, or API keys in error output
-- **Prompt injection mitigation** — API response sanitization with Unicode normalization, homoglyph defense, and reference-style markdown stripping
+- **Prompt injection mitigation** — API response sanitization with Unicode normalization, homoglyph defense, HTML tag/script stripping, and reference-style markdown stripping
 - **Webhook secret handling** — secrets stripped from idempotency cache after creation
 - **Structured JSON logging** (`AUTOMOX_MCP_LOG_FORMAT=json`) for SIEM integration
 - **Tool name prefixing** (`AUTOMOX_MCP_TOOL_PREFIX`) to prevent cross-server collisions
@@ -185,9 +185,10 @@ The Automox MCP server is designed for enterprise deployment with defense-in-dep
 - **SSRF prevention** — webhook URLs validated against private/loopback IPs and cloud metadata endpoints
 - **MCP endpoint authentication** — static API keys or OAuth 2.1/JWT with audience binding and RFC 9728 Protected Resource Metadata
 - **DNS rebinding protection** — Origin and Host header validation on all HTTP/SSE connections per the MCP transport spec
-- **Security response headers** — `X-Content-Type-Options`, `X-Frame-Options`, `CSP`, `Cache-Control: no-store` on all HTTP responses
+- **Security response headers** — `X-Content-Type-Options`, `X-Frame-Options`, `CSP`, `Cache-Control: no-store`, `Strict-Transport-Security` on all HTTP responses
+- **Authentication rate limiting** — blocks IPs after repeated auth failures to mitigate brute-force attacks
 - **Remote bind protection** — non-loopback HTTP/SSE binding requires explicit `--allow-remote-bind` opt-in
-- **41 security hardening items** (V-001 through V-018, V-101 through V-108a, V-112, V-114, V-117 through V-128) documented in CHANGELOG and SECURITY.md
+- **59 security hardening items** (V-001 through V-149, S-001 through S-006) documented in CHANGELOG and SECURITY.md
 
 For vulnerability reporting and the full threat model, see [SECURITY.md](SECURITY.md).
 For deployment hardening (containers, Kubernetes, MCP gateways, TLS, authentication), see the [Deployment Security Guide](docs/deployment-security.md).

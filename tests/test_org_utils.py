@@ -67,7 +67,8 @@ async def test_resolve_org_uuid_falls_back_to_account_uuid_when_allowed():
     client = cast(AutomoxClient, stub)
     value = await resolve_org_uuid(client, allow_account_uuid=True)
     assert value == account_uuid
-    assert client.org_uuid == account_uuid
+    # Account UUID should NOT be cached as org_uuid to prevent cross-contamination
+    assert client.org_uuid is None
 
 
 @pytest.mark.asyncio
@@ -103,7 +104,8 @@ async def test_resolve_org_uuid_fallback_to_account_uuid_after_orgs_lookup():
     client = cast(AutomoxClient, stub)
     value = await resolve_org_uuid(client, allow_account_uuid=True)
     assert value == account_uuid
-    assert client.org_uuid == account_uuid
+    # Account UUID should NOT be cached as org_uuid to prevent cross-contamination
+    assert client.org_uuid is None
 
 
 @pytest.mark.asyncio

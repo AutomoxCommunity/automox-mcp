@@ -190,14 +190,22 @@ class TestBuildMiddleware:
         assert "SecurityHeadersMiddleware" in classes
         assert "DNSRebindingProtectionMiddleware" in classes
 
+    @staticmethod
+    def _find_dns_mw(mw_list):
+        """Find the DNSRebindingProtectionMiddleware entry in the middleware list."""
+        for m in mw_list:
+            if m.cls.__name__ == "DNSRebindingProtectionMiddleware":
+                return m
+        return None
+
     def test_loopback_includes_aliases(self, monkeypatch):
         monkeypatch.delenv("AUTOMOX_MCP_DNS_REBINDING_PROTECTION", raising=False)
         monkeypatch.delenv("AUTOMOX_MCP_ALLOWED_HOSTS", raising=False)
         monkeypatch.delenv("AUTOMOX_MCP_ALLOWED_ORIGINS", raising=False)
 
         mw = build_transport_security_middleware(host="127.0.0.1", port=8000)
-        # The DNS middleware should be the second one
-        dns_mw = mw[1]
+        dns_mw = self._find_dns_mw(mw)
+        assert dns_mw is not None
         allowed_hosts = dns_mw.kwargs["allowed_hosts"]
         assert "127.0.0.1:8000" in allowed_hosts
         assert "localhost:8000" in allowed_hosts
@@ -216,7 +224,8 @@ class TestBuildMiddleware:
         monkeypatch.delenv("AUTOMOX_MCP_ALLOWED_ORIGINS", raising=False)
 
         mw = build_transport_security_middleware(host="0.0.0.0", port=8000)
-        dns_mw = mw[1]
+        dns_mw = self._find_dns_mw(mw)
+        assert dns_mw is not None
         allowed_hosts = dns_mw.kwargs["allowed_hosts"]
         assert "proxy.internal:443" in allowed_hosts
         assert "cdn.example.com:443" in allowed_hosts
@@ -227,6 +236,7 @@ class TestBuildMiddleware:
         monkeypatch.setenv("AUTOMOX_MCP_ALLOWED_ORIGINS", "https://app.example.com")
 
         mw = build_transport_security_middleware(host="0.0.0.0", port=8000)
-        dns_mw = mw[1]
+        dns_mw = self._find_dns_mw(mw)
+        assert dns_mw is not None
         allowed_origins = dns_mw.kwargs["allowed_origins"]
         assert "https://app.example.com" in allowed_origins

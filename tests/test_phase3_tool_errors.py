@@ -177,13 +177,17 @@ async def test_ph_runs_by_policy_success() -> None:
     assert result["data"]["total_policies"] == 0
 
 
+_FAKE_POLICY_UUID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+_FAKE_EXEC_TOKEN = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+
+
 @pytest.mark.asyncio
 async def test_ph_history_detail_success() -> None:
     client = FakeClient()
-    client._get_response = {"uuid": "p-1", "name": "Test"}
+    client._get_response = {"uuid": _FAKE_POLICY_UUID, "name": "Test"}
     server = _register(policy_history_tools, client)
-    result = await server.tools["policy_history_detail"](policy_uuid="p-1")
-    assert result["data"]["uuid"] == "p-1"
+    result = await server.tools["policy_history_detail"](policy_uuid=_FAKE_POLICY_UUID)
+    assert result["data"]["uuid"] == _FAKE_POLICY_UUID
 
 
 @pytest.mark.asyncio
@@ -191,7 +195,7 @@ async def test_ph_runs_for_policy_success() -> None:
     client = FakeClient()
     client._get_response = []
     server = _register(policy_history_tools, client)
-    result = await server.tools["policy_runs_for_policy"](policy_uuid="p-1")
+    result = await server.tools["policy_runs_for_policy"](policy_uuid=_FAKE_POLICY_UUID)
     assert result["data"]["total_runs"] == 0
 
 
@@ -200,7 +204,9 @@ async def test_ph_run_detail_v2_success() -> None:
     client = FakeClient()
     client._get_response = []
     server = _register(policy_history_tools, client)
-    result = await server.tools["policy_run_detail_v2"](policy_uuid="p-1", exec_token="e-1")
+    result = await server.tools["policy_run_detail_v2"](
+        policy_uuid=_FAKE_POLICY_UUID, exec_token=_FAKE_EXEC_TOKEN,
+    )
     assert result["data"]["total_results"] == 0
 
 
@@ -289,13 +295,16 @@ async def test_ds_assignments_success() -> None:
     assert result["data"]["total_assignments"] == 1
 
 
+_FAKE_DEVICE_UUID = "cccccccc-cccc-cccc-cccc-cccccccccccc"
+
+
 @pytest.mark.asyncio
 async def test_ds_device_by_uuid_success() -> None:
     client = FakeClient()
-    client._get_response = {"uuid": "dev-1", "hostname": "host-1"}
+    client._get_response = {"uuid": _FAKE_DEVICE_UUID, "hostname": "host-1"}
     server = _register(device_search_tools, client)
-    result = await server.tools["get_device_by_uuid"](device_uuid="dev-1")
-    assert result["data"]["uuid"] == "dev-1"
+    result = await server.tools["get_device_by_uuid"](device_uuid=_FAKE_DEVICE_UUID)
+    assert result["data"]["uuid"] == _FAKE_DEVICE_UUID
 
 
 @pytest.mark.asyncio

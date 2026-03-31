@@ -24,12 +24,16 @@ def extract_list(response: Any) -> list[Mapping[str, Any]]:
     return []
 
 
-def normalize_status(value: Any) -> str:
+def normalize_status(value: Any, *, _depth: int = 0) -> str:
     """Normalize policy/device status values to a consistent format.
 
     Accepts strings, mappings (extracts a nested status key), and
     sequences (returns ``"mixed"`` when statuses differ).
     """
+    _MAX_STATUS_DEPTH = 20
+    if _depth > _MAX_STATUS_DEPTH:
+        return "unknown"
+
     if value in (None, "", [], {}):
         return "unknown"
 
@@ -37,13 +41,13 @@ def normalize_status(value: Any) -> str:
         for key in ("status", "policy_status", "result_status", "state"):
             inner = value.get(key)
             if inner not in (None, "", [], {}):
-                return normalize_status(inner)
+                return normalize_status(inner, _depth=_depth + 1)
         return "unknown"
 
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
         statuses: list[str] = []
         for item in value:
-            normalized = normalize_status(item)
+            normalized = normalize_status(item, _depth=_depth + 1)
             if normalized != "unknown":
                 statuses.append(normalized)
         if not statuses:

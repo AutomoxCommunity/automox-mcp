@@ -40,17 +40,28 @@ _IMAGE_RE = re.compile(r"!\[([^\]]*)\]\([^)]+\)")
 # Markdown link: [text](url) → text
 _LINK_RE = re.compile(r"\[([^\]]*)\]\([^)]+\)")
 
-# Fenced code blocks with shell/script content
+# Fenced code blocks with shell/script content (supports 3+ backtick delimiters)
 _CODE_BLOCK_RE = re.compile(
-    r"```(?:bash|sh|shell|zsh|python|py|powershell|pwsh|cmd|bat)[^\S\n]*\n.*?```",
+    r"`{3,}(?:bash|sh|shell|zsh|python|py|powershell|pwsh|cmd|bat)[^\S\n]*\n.*?`{3,}",
     re.DOTALL | re.IGNORECASE,
 )
 
-# Unlabeled fenced code blocks (any content between triple backticks)
-_UNLABELED_CODE_BLOCK_RE = re.compile(r"```[^\S\n]*\n.*?```", re.DOTALL)
+# Unlabeled fenced code blocks (any content between 3+ backticks)
+_UNLABELED_CODE_BLOCK_RE = re.compile(r"`{3,}[^\S\n]*\n.*?`{3,}", re.DOTALL)
 
-# Triple backticks (that aren't part of a code block we already removed)
-_TRIPLE_BACKTICK_RE = re.compile(r"```")
+# Triple-or-more backticks (that aren't part of a code block we already removed)
+_TRIPLE_BACKTICK_RE = re.compile(r"`{3,}")
+
+# HTML tags — strip to prevent injection via HTML in API-sourced data
+_HTML_TAG_RE = re.compile(r"</?[a-zA-Z][a-zA-Z0-9]*(?:\s[^>]*)?>")
+
+# HTML/JS dangerous patterns (script, event handlers, data URIs in tags)
+_HTML_DANGEROUS_RE = re.compile(
+    r"<script\b.*?</script>|"
+    r"<[^>]+\bon\w+\s*=|"
+    r"""<[^>]+(?:href|src)\s*=\s*["']?\s*(?:javascript|data):""",
+    re.DOTALL | re.IGNORECASE,
+)
 
 # Zero-width and invisible Unicode characters used for homoglyph bypass
 _INVISIBLE_CHARS_RE = re.compile(
@@ -94,6 +105,18 @@ _INSTRUCTION_STRIP_FIELDS: frozenset[str] = frozenset(
         "result_reason",
         "stdout",
         "stderr",
+        "comments",
+        "reason",
+        "summary",
+        "output",
+        "body",
+        "content",
+        "text",
+        "value",
+        "result",
+        "response",
+        "log",
+        "error",
     }
 )
 
@@ -149,15 +172,24 @@ def sanitize_for_llm(text: str, *, field_name: str | None = None) -> str:
     text = _REF_LINK_RE.sub(r"\1", text)
     text = _REF_DEF_RE.sub("", text)
 
-    # Step 3: Fenced code blocks (labelled shell/script, then unlabeled)
+    # Step 3: HTML dangerous patterns (script tags, event handlers, JS/data URIs)
+    text = _HTML_DANGEROUS_RE.sub("", text)
+
+    # Step 4: Strip remaining HTML tags
+    text = _HTML_TAG_RE.sub("", text)
+
+    # Step 5: Fenced code blocks (labelled shell/script, then unlabeled)
     text = _CODE_BLOCK_RE.sub("", text)
     text = _UNLABELED_CODE_BLOCK_RE.sub("", text)
 
-    # Step 4: Escape remaining triple backticks
+    # Step 6: Escape remaining triple backticks
     text = _TRIPLE_BACKTICK_RE.sub("`", text)
 
-    # Step 5: Instruction prefix removal (free-text fields only)
-    apply_prefix_strip = field_name is not None and field_name.lower() in _INSTRUCTION_STRIP_FIELDS
+    # Step 7: Instruction prefix removal (free-text fields only, or unknown fields)
+    # Apply to known free-text fields and any field not in the preserve-list
+    apply_prefix_strip = field_name is None or (
+        field_name.lower() not in _PRESERVE_PREFIX_FIELDS
+    )
     if apply_prefix_strip:
         text = _INSTRUCTION_PREFIX_RE.sub("", text)
 

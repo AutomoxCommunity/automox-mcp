@@ -69,6 +69,7 @@ class TestCreateJwtAuth:
             "AUTOMOX_MCP_OAUTH_JWKS_URI",
             "https://auth.example.com/.well-known/jwks.json",
         )
+        monkeypatch.setenv("AUTOMOX_MCP_OAUTH_AUDIENCE", "https://mcp.example.com")
         monkeypatch.setenv("AUTOMOX_MCP_OAUTH_SERVER_URL", "https://mcp.example.com")
 
         provider = _create_jwt_auth()
@@ -80,6 +81,7 @@ class TestCreateJwtAuth:
     def test_auto_derives_jwks_uri_from_issuer(self, monkeypatch):
         self._clear_oauth_env(monkeypatch)
         monkeypatch.setenv("AUTOMOX_MCP_OAUTH_ISSUER", "https://auth.example.com")
+        monkeypatch.setenv("AUTOMOX_MCP_OAUTH_AUDIENCE", "https://mcp.example.com")
         # No JWKS_URI and no PUBLIC_KEY — should auto-derive
 
         provider = _create_jwt_auth()
@@ -95,6 +97,7 @@ class TestCreateJwtAuth:
             "https://auth.example.com/.well-known/jwks.json",
         )
         monkeypatch.setenv("AUTOMOX_MCP_OAUTH_ALGORITHM", "ES256")
+        monkeypatch.setenv("AUTOMOX_MCP_OAUTH_AUDIENCE", "https://mcp.example.com")
 
         provider = _create_jwt_auth()
         assert provider is not None
@@ -108,6 +111,7 @@ class TestCreateJwtAuth:
             "https://auth.example.com/.well-known/jwks.json",
         )
         monkeypatch.setenv("AUTOMOX_MCP_OAUTH_SCOPES", "mcp:tools,mcp:read")
+        monkeypatch.setenv("AUTOMOX_MCP_OAUTH_AUDIENCE", "https://mcp.example.com")
 
         provider = _create_jwt_auth()
         assert provider is not None
@@ -124,6 +128,7 @@ class TestCreateJwtAuth:
         )
         monkeypatch.setenv("AUTOMOX_MCP_OAUTH_PUBLIC_KEY", pem)
         monkeypatch.setenv("AUTOMOX_MCP_OAUTH_ALGORITHM", "ES256")
+        monkeypatch.setenv("AUTOMOX_MCP_OAUTH_AUDIENCE", "https://mcp.example.com")
 
         provider = _create_jwt_auth()
         assert provider is not None
@@ -138,6 +143,7 @@ class TestCreateJwtAuth:
         key_file.write_text(key_content)
         monkeypatch.setenv("AUTOMOX_MCP_OAUTH_PUBLIC_KEY", str(key_file))
         monkeypatch.setenv("AUTOMOX_MCP_OAUTH_ALGORITHM", "ES256")
+        monkeypatch.setenv("AUTOMOX_MCP_OAUTH_AUDIENCE", "https://mcp.example.com")
 
         provider = _create_jwt_auth()
         assert provider is not None
@@ -179,6 +185,7 @@ class TestAuthProviderPriority:
         self._clear_all(monkeypatch)
         monkeypatch.setenv("AUTOMOX_MCP_OAUTH_ISSUER", "https://auth.example.com")
         monkeypatch.setenv("AUTOMOX_MCP_OAUTH_JWKS_URI", "https://auth.example.com/jwks")
+        monkeypatch.setenv("AUTOMOX_MCP_OAUTH_AUDIENCE", "https://mcp.example.com")
 
         provider = create_auth_provider()
         assert type(provider).__name__ == "JWTVerifier"

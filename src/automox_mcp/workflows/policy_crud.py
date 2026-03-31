@@ -245,13 +245,13 @@ def _ensure_list(value: Any) -> list[Any]:
     return [value]
 
 
-def _normalize_filters(filters: Sequence[Any]) -> list[str]:
+def _normalize_filters(filters: Sequence[Any], *, exact: bool = False) -> list[str]:
     normalized: list[str] = []
     for item in filters:
         text = str(item).strip()
         if not text:
             continue
-        if text.startswith("*") or text.endswith("*"):
+        if exact or text.startswith("*") or text.endswith("*"):
             normalized.append(text)
         else:
             normalized.append(f"*{text}*")
@@ -317,17 +317,17 @@ def _normalize_schedule_days_input(value: Any) -> int | None:
                     bitmask |= normalized_bit
                 continue
         if isinstance(item, (int, float)) and not isinstance(item, bool):
-            # Accept 0-6 (Sunday-Saturday) or 1-7 (Monday=1 or Sunday=1 depending on caller).
+            # Accept 0-6 only (Sunday=0 through Saturday=6).
+            # Previously accepted 1-7, but the ambiguous mapping (is 1=Monday
+            # or 1=Sunday?) caused incorrect schedules.
             integer_value = int(item)
-            if integer_value not in range(0, 7) and integer_value not in range(1, 8):
+            if integer_value not in range(0, 7):
                 raise ValueError(
-                    "Numeric schedule days must be in the range 0-6 (Sunday-Saturday) "
-                    "or 1-7 (Monday-Sunday)."
+                    "Numeric schedule days must be in the range 0-6 "
+                    "(0=Sunday, 1=Monday, ..., 6=Saturday). "
+                    "Use day names (e.g., 'monday') for unambiguous input."
                 )
-            if integer_value in range(1, 8):
-                index = integer_value % 7
-            else:
-                index = integer_value
+            index = integer_value
             day_name = _DAY_INDEX_TO_NAME[index]
             bitmask |= _DAY_NAME_TO_BITMASK[day_name]
             continue
@@ -1071,7 +1071,9 @@ async def clone_policy(
     if new_policy_id is None:
         clone_name = payload.get("name")
         try:
-            all_policies = await client.get("/policies", params={"o": resolved_org_id})
+            all_policies = await client.get(
+                "/policies", params={"o": resolved_org_id, "limit": 250}
+            )
             if isinstance(all_policies, Sequence):
                 for p in reversed(list(all_policies)):
                     if isinstance(p, Mapping) and p.get("name") == clone_name:

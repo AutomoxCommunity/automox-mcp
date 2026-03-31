@@ -50,7 +50,7 @@ def register_tools(server: FastMCP, *, client: AutomoxClient) -> None:
 
     all_modules = {**_MODULE_REGISTRY, **_ALWAYS_LOAD}
 
-    for module_name, (tool_module_name, _has_writes) in all_modules.items():
+    for module_name, (tool_module_name, _) in all_modules.items():
         # Skip modules not in the enabled set (unless always-load)
         if enabled is not None and module_name not in enabled and module_name not in _ALWAYS_LOAD:
             logger.info("Skipping module %s (not in AUTOMOX_MCP_MODULES)", module_name)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import json
 import logging
 import os
@@ -111,6 +112,7 @@ class IdempotencyCache:
 
     async def get(self, request_id: str, tool_name: str) -> dict[str, Any] | None:
         async with self._lock:
+            self._evict_expired()
             key = (request_id, tool_name)
             entry = self._cache.get(key)
             if entry is None:
@@ -236,7 +238,10 @@ def _sanitize_errors(value: Any) -> Any:
     return None
 
 
-def _redact_sensitive_fields(payload: Any) -> Any:
+def _redact_sensitive_fields(payload: Any, *, _depth: int = 0) -> Any:
+    _MAX_REDACTION_DEPTH = 20
+    if _depth > _MAX_REDACTION_DEPTH:
+        return "***redacted: max depth***"
     if isinstance(payload, Mapping):
         redacted: dict[Any, Any] = {}
         for key, value in payload.items():
@@ -244,10 +249,10 @@ def _redact_sensitive_fields(payload: Any) -> Any:
             if any(sensitive in lower_key for sensitive in SENSITIVE_KEYWORDS):
                 redacted[key] = "***redacted***"
             else:
-                redacted[key] = _redact_sensitive_fields(value)
+                redacted[key] = _redact_sensitive_fields(value, _depth=_depth + 1)
         return redacted
     if isinstance(payload, Sequence) and not isinstance(payload, (str, bytes, bytearray)):
-        return [_redact_sensitive_fields(item) for item in payload]
+        return [_redact_sensitive_fields(item, _depth=_depth + 1) for item in payload]
     return payload
 
 
@@ -313,9 +318,13 @@ except (ValueError, TypeError):
 def _estimate_tokens(response_dict: dict[str, Any]) -> int:
     """Rough token estimate: JSON character count / 4."""
     try:
-        return len(json.dumps(response_dict)) // _CHARS_PER_TOKEN
-    except (TypeError, ValueError):
-        return 0
+        return len(json.dumps(response_dict, default=str)) // _CHARS_PER_TOKEN
+    except (TypeError, ValueError, OverflowError):
+        # Fallback: estimate from repr length to avoid bypassing budget
+        try:
+            return len(repr(response_dict)) // _CHARS_PER_TOKEN
+        except Exception:
+            return _DEFAULT_TOKEN_BUDGET  # assume at-budget to trigger truncation check
 
 
 def _apply_token_budget(
@@ -323,11 +332,17 @@ def _apply_token_budget(
     *,
     budget: int | None = None,
 ) -> dict[str, Any]:
-    """Add a token warning and optionally truncate list data."""
+    """Add a token warning and optionally truncate list data.
+
+    Works on a deep copy to avoid mutating cached data.
+    """
     effective_budget = budget if budget is not None else _DEFAULT_TOKEN_BUDGET
     estimated = _estimate_tokens(response_dict)
     if estimated <= effective_budget:
         return response_dict
+
+    # Deep copy to avoid mutating idempotency cache entries
+    response_dict = copy.deepcopy(response_dict)
 
     meta = response_dict.setdefault("metadata", {})
     meta["estimated_tokens"] = estimated
@@ -345,14 +360,14 @@ def _apply_token_budget(
         meta["total_available"] = total
         meta["returned_count"] = len(response_dict["data"])
     elif isinstance(data, Mapping):
+        # Truncate ALL oversized lists in the mapping, not just the first
         for _key, value in data.items():
             if isinstance(value, list) and len(value) > 1:
                 total = len(value)
                 data[_key] = value[: max(total // 2, 1)]
                 meta["truncated"] = True
-                meta["total_available"] = total
-                meta["returned_count"] = len(data[_key])
-                break
+                meta.setdefault("total_available", 0)
+                meta["total_available"] += total
 
     return response_dict
 

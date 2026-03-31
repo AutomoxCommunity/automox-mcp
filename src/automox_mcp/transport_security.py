@@ -23,6 +23,8 @@ from __future__ import annotations
 
 import logging
 import os
+import time
+from collections import defaultdict, deque
 from collections.abc import MutableMapping
 from typing import Any
 
@@ -75,6 +77,10 @@ class SecurityHeadersMiddleware:
                             b"content-security-policy",
                             b"default-src 'none'; frame-ancestors 'none'",
                         ),
+                        (
+                            b"strict-transport-security",
+                            b"max-age=63072000; includeSubDomains",
+                        ),
                     ]
                 )
                 message = {**message, "headers": headers}
@@ -106,8 +112,9 @@ class DNSRebindingProtectionMiddleware:
         allowed_origins: list[str] | None = None,
     ) -> None:
         self.app = app
-        self.allowed_hosts: set[str] = set(allowed_hosts or [])
-        self.allowed_origins: set[str] = set(allowed_origins or [])
+        # Normalize to lowercase for case-insensitive matching (RFC 4343)
+        self.allowed_hosts: set[str] = {h.lower() for h in (allowed_hosts or [])}
+        self.allowed_origins: set[str] = {o.lower() for o in (allowed_origins or [])}
 
     @staticmethod
     def _parse_host_port(value: str) -> tuple[str, str | None]:
@@ -125,30 +132,36 @@ class DNSRebindingProtectionMiddleware:
         return value, None
 
     def _host_matches(self, host: str) -> bool:
-        if host in self.allowed_hosts:
+        # Case-insensitive comparison (RFC 4343)
+        host_lower = host.lower()
+        if host_lower in self.allowed_hosts:
             return True
         # Support wildcard port: "host:*" matches "host:1234"
-        host_base, _ = self._parse_host_port(host)
+        host_base, host_port = self._parse_host_port(host_lower)
         for allowed in self.allowed_hosts:
             if allowed.endswith(":*") and host_base == allowed[:-2]:
-                return True
+                # Validate that the port portion is numeric
+                if host_port is not None and host_port.isdigit():
+                    return True
         return False
 
     def _origin_matches(self, origin: str) -> bool:
-        if origin in self.allowed_origins:
+        # Case-insensitive comparison (RFC 4343)
+        origin_lower = origin.lower()
+        if origin_lower in self.allowed_origins:
             return True
         # Support wildcard port patterns — verify the suffix is a valid port
         for allowed in self.allowed_origins:
             if allowed.endswith(":*"):
                 base = allowed[:-2]
-                if origin.startswith(base + ":"):
-                    port_suffix = origin[len(base) + 1 :]
+                if origin_lower.startswith(base + ":"):
+                    port_suffix = origin_lower[len(base) + 1 :]
                     if port_suffix.isdigit():
                         return True
         return False
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        if scope["type"] != "http":
+        if scope["type"] not in ("http", "websocket"):
             await self.app(scope, receive, send)
             return
 
@@ -191,6 +204,93 @@ class DNSRebindingProtectionMiddleware:
 
 
 # ---------------------------------------------------------------------------
+# Authentication rate-limiting middleware
+# ---------------------------------------------------------------------------
+
+
+class AuthRateLimitMiddleware:
+    """ASGI middleware that rate-limits authentication failures per client IP.
+
+    Tracks 401/403 responses and blocks clients that exceed the threshold
+    within the configured window. This mitigates brute-force attacks against
+    static API keys and JWT tokens.
+    """
+
+    def __init__(
+        self,
+        app: ASGIApp,
+        max_failures: int = 10,
+        window_seconds: float = 60.0,
+        block_seconds: float = 300.0,
+    ) -> None:
+        self.app = app
+        self.max_failures = max_failures
+        self.window_seconds = window_seconds
+        self.block_seconds = block_seconds
+        self._failures: dict[str, deque[float]] = defaultdict(deque)
+        self._blocked_until: dict[str, float] = {}
+
+    def _get_client_ip(self, scope: Scope) -> str:
+        client = scope.get("client")
+        if client:
+            return client[0]
+        return "unknown"
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        client_ip = self._get_client_ip(scope)
+        now = time.monotonic()
+
+        # Check if client is blocked
+        blocked_until = self._blocked_until.get(client_ip, 0)
+        if now < blocked_until:
+            logger.warning(
+                "Auth rate limit: blocking request from %s (blocked for %.0fs more)",
+                client_ip,
+                blocked_until - now,
+            )
+            response = Response(
+                content='{"error": "Too many authentication failures. Try again later."}',
+                status_code=429,
+                media_type="application/json",
+            )
+            await response(scope, receive, send)
+            return
+
+        # Track response status
+        response_status: list[int] = []
+
+        async def send_wrapper(message: MutableMapping[str, Any]) -> None:
+            if message["type"] == "http.response.start":
+                response_status.append(message.get("status", 200))
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)
+
+        # Record auth failures (401 or 403)
+        if response_status and response_status[0] in (401, 403):
+            failures = self._failures[client_ip]
+            failures.append(now)
+            # Evict old entries outside the window
+            cutoff = now - self.window_seconds
+            while failures and failures[0] < cutoff:
+                failures.popleft()
+            if len(failures) >= self.max_failures:
+                self._blocked_until[client_ip] = now + self.block_seconds
+                logger.warning(
+                    "Auth rate limit: blocking %s for %.0fs after %d failures",
+                    client_ip,
+                    self.block_seconds,
+                    len(failures),
+                )
+                # Clean up failures tracking for this IP
+                del self._failures[client_ip]
+
+
+# ---------------------------------------------------------------------------
 # Factory: build middleware list from environment & server configuration
 # ---------------------------------------------------------------------------
 
@@ -222,6 +322,9 @@ def build_transport_security_middleware(
 
     # --- Security headers (always on) ---
     middlewares.append(ASGIMiddleware(SecurityHeadersMiddleware))
+
+    # --- Auth rate limiting (always on for HTTP/SSE) ---
+    middlewares.append(ASGIMiddleware(AuthRateLimitMiddleware))
 
     # --- DNS rebinding protection ---
     dns_protection = _env_flag("AUTOMOX_MCP_DNS_REBINDING_PROTECTION", default=True)
@@ -293,6 +396,7 @@ def build_transport_security_middleware(
 
 
 __all__ = [
+    "AuthRateLimitMiddleware",
     "DNSRebindingProtectionMiddleware",
     "SecurityHeadersMiddleware",
     "build_transport_security_middleware",

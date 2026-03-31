@@ -43,10 +43,10 @@ The following attack surfaces have been identified and mitigated:
 Tool responses pass Automox API data back to the LLM after sanitization. The `sanitize_for_llm()` module:
 
 - **Unicode normalization** (NFKC) and zero-width character stripping to defeat homoglyph attacks (V-108a)
+- **HTML tag and script stripping** — removes `<script>` blocks, event handler attributes, `javascript:`/`data:` URIs, and all HTML tags (V-133)
 - Strips inline and reference-style markdown link/image syntax that could exfiltrate data (V-117)
-- Removes fenced code blocks (labelled and unlabeled) containing shell/script commands (V-119)
-- Removes instruction-like prefixes from free-text fields (notes, descriptions) (V-104)
-- Preserves names and tags where users commonly use words like "IMPORTANT" or "SYSTEM"
+- Removes fenced code blocks (labelled and unlabeled, including 4+ backtick delimiters) containing shell/script commands (V-119, V-142)
+- Removes instruction-like prefixes from all fields except an explicit preserve-list (names, tags, hostnames) (V-104, V-134)
 - Configurable via `AUTOMOX_MCP_SANITIZE_RESPONSES` (default: enabled)
 
 For sensitive deployments, we recommend using an MCP gateway with inline guardrails for additional defense-in-depth.
@@ -61,19 +61,21 @@ For sensitive deployments, we recommend using an MCP gateway with inline guardra
 ### Network Exposure
 
 - Non-loopback HTTP/SSE binding requires explicit opt-in via `--allow-remote-bind` or `AUTOMOX_MCP_ALLOW_REMOTE_BIND=true` (V-106); server exits with an error otherwise
-- **DNS rebinding protection**: Origin and Host header validation on all HTTP/SSE connections per the MCP transport specification (V-120); configurable via `AUTOMOX_MCP_ALLOWED_ORIGINS` and `AUTOMOX_MCP_ALLOWED_HOSTS`
-- **Security response headers** on all HTTP responses: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`, `Cache-Control: no-store`, `Referrer-Policy`, `Permissions-Policy` (V-121)
-- Built-in Bearer-token endpoint authentication for HTTP/SSE transports via `AUTOMOX_MCP_API_KEYS` or `AUTOMOX_MCP_API_KEY_FILE` (V-108); for additional defense-in-depth, an authenticating reverse proxy or MCP gateway is recommended
-- **OAuth 2.1 / JWT authentication** for enterprise IdP integration (V-122): validate JWTs from external authorization servers (Keycloak, Auth0, Azure AD, Okta) with audience binding, issuer validation, and automatic JWKS key rotation; serves RFC 9728 Protected Resource Metadata at `/.well-known/oauth-protected-resource`
+- **DNS rebinding protection**: Origin and Host header validation (case-insensitive per RFC 4343) on all HTTP/SSE and WebSocket connections per the MCP transport specification (V-120); configurable via `AUTOMOX_MCP_ALLOWED_ORIGINS` and `AUTOMOX_MCP_ALLOWED_HOSTS`
+- **Security response headers** on all HTTP responses: `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'`, `Cache-Control: no-store`, `Referrer-Policy`, `Permissions-Policy`, `Strict-Transport-Security` (V-121, V-141)
+- **Authentication rate limiting**: clients are blocked for 5 minutes after 10 failed authentication attempts within 60 seconds (V-140)
+- Built-in Bearer-token endpoint authentication for HTTP/SSE transports via `AUTOMOX_MCP_API_KEYS` or `AUTOMOX_MCP_API_KEY_FILE` (V-108); minimum key length warning at startup (V-144); for additional defense-in-depth, an authenticating reverse proxy or MCP gateway is recommended
+- **OAuth 2.1 / JWT authentication** for enterprise IdP integration (V-122): validate JWTs from external authorization servers (Keycloak, Auth0, Azure AD, Okta) with mandatory audience binding (V-136), HTTPS-only issuer (V-137), algorithm validation (V-138), and automatic JWKS key rotation; serves RFC 9728 Protected Resource Metadata at `/.well-known/oauth-protected-resource`
 - Tool name prefixing (`AUTOMOX_MCP_TOOL_PREFIX`) prevents cross-server collisions
-- Webhook URLs validated against private/loopback/link-local IPs and cloud metadata endpoints (Google, Azure, Oracle Cloud, generic `*.internal`) to prevent SSRF (V-103, V-114). **Accepted risk (S-001):** DNS resolution is checked at validation time but the Automox backend performs its own resolution at delivery time; a DNS rebinding attack between those two points is theoretically possible. This is inherent to the split-validation architecture and mitigated by the backend's own controls
+- Webhook URLs validated against private/loopback/link-local/multicast/unspecified IPs and cloud metadata endpoints (Google, Azure, Oracle Cloud, generic `*.internal`) with trailing-dot FQDN normalization to prevent SSRF (V-103, V-114, V-147). DNS resolution failures are now fail-closed (S-006). **Accepted risk (S-001):** DNS resolution is checked at validation time but the Automox backend performs its own resolution at delivery time; a DNS rebinding attack between those two points is theoretically possible. This is inherent to the split-validation architecture and mitigated by the backend's own controls
 
 ### Denial of Service
 
-- Rate limiter: 30 calls per 60 seconds (applies to Automox API calls, not MCP endpoint authentication)
-- Token budget estimation with auto-truncation (configurable via `AUTOMOX_MCP_TOKEN_BUDGET`)
+- Rate limiter: 30 calls per 60 seconds (applies to Automox API calls)
+- Token budget estimation with auto-truncation (configurable via `AUTOMOX_MCP_TOKEN_BUDGET`); deep-copies response before truncation to prevent cache corruption
+- Policy operations bounded to 50 per request (V-149)
 - Resource quotas (CPU/RAM) are the deployer's responsibility (see [Deployment Security Guide](docs/deployment-security.md))
-- **Authentication brute-force protection (S-002):** The built-in rate limiter does not cover MCP endpoint authentication attempts. Deploy a reverse proxy with request rate limiting (e.g., nginx `limit_req`, Envoy circuit breaker) to throttle failed authentication attempts. Generated keys use 128-bit entropy (`secrets.token_hex(16)`) making brute-force infeasible, but operator-chosen keys may be weaker
+- **Authentication rate limiting (V-140):** Built-in `AuthRateLimitMiddleware` blocks client IPs after 10 failed auth attempts within 60 seconds for 5 minutes. For additional defense-in-depth, deploy a reverse proxy with rate limiting (e.g., nginx `limit_req`). Generated keys use 128-bit entropy (`secrets.token_hex(16)`) making brute-force infeasible, but operator-chosen keys may be weaker
 
 ## Security Features Reference
 
@@ -128,13 +130,31 @@ For sensitive deployments, we recommend using an MCP gateway with inline guardra
 | V-130 | IPv6 DNS rebinding protection with bracket-formatted hosts | `transport_security.py` |
 | V-131 | Origin wildcard port validation (numeric-only suffix) | `transport_security.py` |
 | S-005 | Patch names format/length validation via Pydantic | `schemas.py` |
+| V-132 | UUID type validation on path-interpolated params | `schemas.py` |
+| V-133 | HTML tag and script stripping in sanitizer | `utils/sanitize.py` |
+| V-134 | Instruction prefix stripping default-on for unknown fields | `utils/sanitize.py` |
+| V-135 | JWT public key file world-writable rejection (not just warning) | `auth.py` |
+| V-136 | JWT audience claim mandatory when JWT auth enabled | `auth.py` |
+| V-137 | Non-HTTPS OAuth issuer rejected | `auth.py` |
+| V-138 | JWT algorithm validation (HMAC/asymmetric mismatch, allowlist) | `auth.py` |
+| V-139 | API key file stat() failure no longer bypasses permission check | `auth.py` |
+| V-140 | Authentication rate limiting middleware (10 failures/60s = 5min block) | `transport_security.py` |
+| V-141 | HSTS header on all HTTP responses | `transport_security.py` |
+| V-142 | Fenced code block regex supports 4+ backtick delimiters | `utils/sanitize.py` |
+| V-143 | OIDC discovery uses standard openid-configuration path | `auth.py` |
+| V-144 | Minimum API key length warning at startup | `auth.py` |
+| V-145 | `is_auth_configured()` handles key file permission errors | `auth.py` |
+| V-146 | API key not exposed via `repr()` or `__slots__` | `client.py` |
+| V-147 | Webhook SSRF checks for multicast/unspecified IPs | `tools/webhook_tools.py` |
+| V-148 | Input validation bounds on 20+ schema fields | `schemas.py` |
+| V-149 | Operations list bounded to 50 | `schemas.py` |
+| S-006 | SSRF DNS fail-closed (reject unresolvable hostnames) | `tools/webhook_tools.py` |
 
 ## Scope and Limitations
 
 This server does **not** provide:
 
 - **Authorization / RBAC** — The server operates with a single Automox API key; multi-user access control is the gateway's responsibility. MCP endpoint authentication (V-108, V-122) controls *who may connect*, not *what they may do*. OAuth scopes can be enforced via `AUTOMOX_MCP_OAUTH_SCOPES`.
-- **Authentication brute-force protection** — The server does not rate-limit authentication attempts; deploy a reverse proxy with rate limiting (S-002)
 - **TLS termination** — Use a reverse proxy (nginx, Envoy, Caddy) or MCP gateway
 - **Container isolation** — Run in a container with dropped capabilities and read-only filesystem
 - **Egress filtering** — Restrict outbound traffic to `console.automox.com:443` at the network layer

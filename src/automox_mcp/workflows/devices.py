@@ -560,6 +560,73 @@ async def list_device_inventory(
     }
 
 
+def _build_device_core(
+    device_data: Mapping[str, Any],
+    *,
+    device_id: int,
+    status_value: Any,
+    ip_addresses_preview: list[str] | None,
+    tags_preview: list[str] | None,
+    policy_status_summary: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Assemble the ``core`` section of a describe-device response."""
+
+    core: dict[str, Any] = {"device_id": device_id}
+
+    # Fields that use an alternate key as fallback.
+    _ALT_KEY_FIELDS: list[tuple[str, str, str | None]] = [
+        ("device_uuid", "device_uuid", "uuid"),
+        ("os", "os_name", "platform"),
+        ("patch_status", "patch_status", "patchStatus"),
+    ]
+    for out_key, primary, fallback in _ALT_KEY_FIELDS:
+        value = device_data.get(primary) or (device_data.get(fallback) if fallback else None)
+        if value:
+            core[out_key] = value
+
+    # Simple single-key fields (truthy check).
+    _SIMPLE_FIELDS: list[tuple[str, str]] = [
+        ("os_version", "os_version"),
+        ("agent_version", "agent_version"),
+        ("ip_address", "ip_address"),
+        ("server_group_id", "server_group_id"),
+        ("last_check_in", "last_check_in"),
+        ("last_refresh_time", "last_refresh_time"),
+        ("next_patch_time", "next_patch_time"),
+    ]
+    for out_key, src_key in _SIMPLE_FIELDS:
+        value = device_data.get(src_key)
+        if value:
+            core[out_key] = value
+
+    # Fields that must preserve falsy values like 0 or False (None-check only).
+    _NONE_CHECK_FIELDS: list[tuple[str, str]] = [
+        ("uptime", "uptime"),
+        ("managed", "managed"),
+    ]
+    for out_key, src_key in _NONE_CHECK_FIELDS:
+        value = device_data.get(src_key)
+        if value is not None:
+            core[out_key] = value
+
+    display_name = _format_device_display_name(device_data)
+    if display_name:
+        core["hostname"] = display_name
+
+    if ip_addresses_preview:
+        core["ip_addresses"] = ip_addresses_preview
+
+    normalized_status = _normalize_status(status_value)
+    if normalized_status != "unknown":
+        core["status"] = normalized_status
+
+    if tags_preview:
+        core["tags"] = tags_preview
+
+    core["policy_status"] = policy_status_summary
+    return core
+
+
 async def describe_device(
     client: AutomoxClient,
     *,
@@ -681,70 +748,14 @@ async def describe_device(
             or status_value.get("status")
         )
 
-    core: dict[str, Any] = {"device_id": device_id}
-    device_uuid_val = device_data.get("device_uuid") or device_data.get("uuid")
-    if device_uuid_val:
-        core["device_uuid"] = device_uuid_val
-
-    display_name = _format_device_display_name(device_data)
-    if display_name:
-        core["hostname"] = display_name
-
-    os_name = device_data.get("os_name") or device_data.get("platform")
-    if os_name:
-        core["os"] = os_name
-
-    os_version = device_data.get("os_version")
-    if os_version:
-        core["os_version"] = os_version
-
-    agent_version = device_data.get("agent_version")
-    if agent_version:
-        core["agent_version"] = agent_version
-
-    ip_address = device_data.get("ip_address")
-    if ip_address:
-        core["ip_address"] = ip_address
-
-    if ip_addresses_preview:
-        core["ip_addresses"] = ip_addresses_preview
-
-    server_group_id = device_data.get("server_group_id")
-    if server_group_id:
-        core["server_group_id"] = server_group_id
-
-    last_check_in = device_data.get("last_check_in")
-    if last_check_in:
-        core["last_check_in"] = last_check_in
-
-    last_refresh_time = device_data.get("last_refresh_time")
-    if last_refresh_time:
-        core["last_refresh_time"] = last_refresh_time
-
-    uptime = device_data.get("uptime")
-    if uptime is not None:
-        core["uptime"] = uptime
-
-    next_patch_time = device_data.get("next_patch_time")
-    if next_patch_time:
-        core["next_patch_time"] = next_patch_time
-
-    managed_value = device_data.get("managed")
-    if managed_value is not None:
-        core["managed"] = managed_value
-
-    patch_status = device_data.get("patch_status") or device_data.get("patchStatus")
-    if patch_status:
-        core["patch_status"] = patch_status
-
-    normalized_status = _normalize_status(status_value)
-    if normalized_status != "unknown":
-        core["status"] = normalized_status
-
-    if tags_preview:
-        core["tags"] = tags_preview
-
-    core["policy_status"] = policy_status_summary
+    core = _build_device_core(
+        device_data,
+        device_id=device_id,
+        status_value=status_value,
+        ip_addresses_preview=ip_addresses_preview,
+        tags_preview=tags_preview,
+        policy_status_summary=policy_status_summary,
+    )
 
     try:
         raw_payload_bytes = len(json.dumps(device_data))

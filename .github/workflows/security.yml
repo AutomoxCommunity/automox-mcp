@@ -69,7 +69,10 @@ jobs:
           set -euo pipefail
           source .venv/bin/activate
           uv pip install cisco-ai-mcp-scanner
-          mcp-scanner stdio \
+          mcp-scanner \
+            --analyzers yara \
+            --format summary \
+            stdio \
             --stdio-command uv \
             --stdio-arg run \
             --stdio-arg automox-mcp \
@@ -77,8 +80,6 @@ jobs:
             --stdio-env AUTOMOX_ACCOUNT_UUID=test-account \
             --stdio-env AUTOMOX_ORG_ID=0 \
             --stdio-env AUTOMOX_MCP_SKIP_DOTENV=1 \
-            --analyzers yara \
-            --format summary \
             | tee mcp-scanner.txt
 
       - name: Fail if MCP Scanner reports unsafe tools

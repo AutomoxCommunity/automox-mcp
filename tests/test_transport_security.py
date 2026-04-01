@@ -367,11 +367,11 @@ class TestAuthRateLimitMiddleware:
         mw.window_seconds = 60.0
         mw.block_seconds = 10.0
         mw._failures = {}
-        mw._blocked_until = {"1.2.3.4": time.monotonic() - 1}  # already expired
-        mw._last_cleanup = 0.0
+        now = time.monotonic()
+        mw._blocked_until = {"1.2.3.4": now - 1}  # already expired
+        mw._last_cleanup = now - mw.window_seconds - 1  # ensure cleanup runs
 
         # After block expires, _blocked_until entry should get cleaned up
-        now = time.monotonic()
         mw._cleanup_stale_entries(now)
         assert "1.2.3.4" not in mw._blocked_until
 
@@ -385,9 +385,9 @@ class TestAuthRateLimitMiddleware:
         mw.block_seconds = 300.0
         mw._failures = defaultdict(deque)
         mw._blocked_until = {}
-        mw._last_cleanup = 0.0
 
         now = time.monotonic()
+        mw._last_cleanup = now - mw.window_seconds - 1  # ensure cleanup runs
         # Add failures that are outside the window
         mw._failures["old-ip"] = deque([now - 120, now - 100])
         mw._cleanup_stale_entries(now)
@@ -402,9 +402,9 @@ class TestAuthRateLimitMiddleware:
         mw.max_failures = 5
         mw.window_seconds = 60.0
         mw.block_seconds = 300.0
-        mw._last_cleanup = 0.0
 
         now = time.monotonic()
+        mw._last_cleanup = now - mw.window_seconds - 1  # ensure cleanup runs
         # Fill beyond the hard cap with blocked entries
         mw._blocked_until = {f"ip-{i}": now + i for i in range(mw._MAX_TRACKED_IPS + 50)}
         mw._failures = defaultdict(deque)
@@ -420,9 +420,9 @@ class TestAuthRateLimitMiddleware:
         mw.max_failures = 5
         mw.window_seconds = 60.0
         mw.block_seconds = 300.0
-        mw._last_cleanup = 0.0
 
         now = time.monotonic()
+        mw._last_cleanup = now - mw.window_seconds - 1  # ensure cleanup runs
         mw._blocked_until = {}
         # Fill failures beyond the hard cap
         mw._failures = defaultdict(deque)

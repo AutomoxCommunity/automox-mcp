@@ -2,19 +2,18 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+import logging
 from typing import Any
 
 from fastmcp import FastMCP
-from fastmcp.exceptions import ToolError
-from pydantic import BaseModel, ValidationError
 
 from .. import workflows
-from ..client import AutomoxAPIError, AutomoxClient
+from ..client import AutomoxClient
 from ..schemas import (
+    ClonePolicyParams,
+    DeletePolicyToolParams,
     ExecutePolicyParams,
-    OrgIdContextMixin,
-    OrgIdRequiredMixin,
+    GetPolicyStatsParams,
     PatchApprovalDecisionParams,
     PatchApprovalSummaryParams,
     PolicyChangeRequestParams,
@@ -24,58 +23,18 @@ from ..schemas import (
     PolicySummaryParams,
     RunDetailParams,
 )
-from ..utils import resolve_org_uuid
 from ..utils.tooling import (
-    RateLimitError,
-    as_tool_response,
-    enforce_rate_limit,
-    format_error,
+    call_tool_workflow,
+    check_idempotency,
+    maybe_format_markdown,
+    store_idempotency,
 )
 
+logger = logging.getLogger(__name__)
 
-def register(server: FastMCP) -> None:
+
+def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient) -> None:
     """Register policy-related tools."""
-
-    async def _call(
-        func: Callable[..., Awaitable[dict[str, Any]]],
-        params_model: type[BaseModel],
-        raw_params: dict[str, Any],
-        api: str | None = None,
-        org_uuid_field: str | None = None,
-        allow_account_uuid: bool = False,
-    ) -> dict[str, Any]:
-        try:
-            await enforce_rate_limit(api)
-            client = AutomoxClient(default_api=api)
-            client_org_id = getattr(client, "org_id", None)
-            async with client as session:
-                params = dict(raw_params)
-                if org_uuid_field is not None:
-                    resolved_uuid = await resolve_org_uuid(
-                        session,
-                        explicit_uuid=params.get(org_uuid_field),
-                        org_id=params.get("org_id") or client_org_id,
-                        allow_account_uuid=allow_account_uuid,
-                    )
-                    params[org_uuid_field] = resolved_uuid
-                if issubclass(params_model, (OrgIdContextMixin, OrgIdRequiredMixin)):
-                    params.setdefault("org_id", client_org_id)
-                    if params.get("org_id") is None:
-                        raise ToolError(
-                            "org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly."
-                        )
-                model = params_model(**params)
-                payload = model.model_dump(mode="python", exclude_none=True)
-                if isinstance(model, (OrgIdContextMixin, OrgIdRequiredMixin)):
-                    payload["org_id"] = model.org_id
-                result: dict[str, Any] = await func(session, **payload)
-        except (ValidationError, ValueError) as exc:
-            raise ToolError(str(exc)) from exc
-        except RateLimitError as exc:
-            raise ToolError(str(exc)) from exc
-        except AutomoxAPIError as exc:
-            raise ToolError(format_error(exc)) from exc
-        return as_tool_response(result)
 
     @server.tool(
         name="policy_health_overview", description="Summarize recent Automox policy activity."
@@ -92,11 +51,11 @@ def register(server: FastMCP) -> None:
             "top_failures": top_failures,
             "max_runs": max_runs,
         }
-        return await _call(
+        return await call_tool_workflow(
+            client,
             workflows.summarize_policy_activity,
-            PolicyHealthSummaryParams,
             params,
-            api="policyreport",
+            params_model=PolicyHealthSummaryParams,
             org_uuid_field="org_uuid",
             allow_account_uuid=True,
         )
@@ -116,11 +75,11 @@ def register(server: FastMCP) -> None:
             "report_days": report_days,
             "limit": limit,
         }
-        return await _call(
+        return await call_tool_workflow(
+            client,
             workflows.summarize_policy_execution_history,
-            PolicyExecutionTimelineParams,
             params,
-            api="policyreport",
+            params_model=PolicyExecutionTimelineParams,
             org_uuid_field="org_uuid",
             allow_account_uuid=True,
         )
@@ -151,11 +110,11 @@ def register(server: FastMCP) -> None:
             "limit": limit,
             "max_output_length": max_output_length,
         }
-        return await _call(
+        return await call_tool_workflow(
+            client,
             workflows.describe_policy_run_result,
-            RunDetailParams,
             params,
-            api="policyreport",
+            params_model=RunDetailParams,
             org_uuid_field="org_uuid",
             allow_account_uuid=True,
         )
@@ -167,18 +126,21 @@ def register(server: FastMCP) -> None:
         limit: int | None = 20,
         page: int | None = 0,
         include_inactive: bool | None = False,
+        output_format: str | None = "json",
     ) -> dict[str, Any]:
         params = {
             "limit": limit,
             "page": page,
             "include_inactive": include_inactive,
         }
-        return await _call(
+        result = await call_tool_workflow(
+            client,
             workflows.summarize_policies,
-            PolicySummaryParams,
             params,
-            api="console",
+            params_model=PolicySummaryParams,
         )
+
+        return maybe_format_markdown(result, output_format)
 
     @server.tool(
         name="policy_detail", description="Retrieve configuration and recent history for a policy."
@@ -191,11 +153,26 @@ def register(server: FastMCP) -> None:
             "policy_id": policy_id,
             "include_recent_runs": include_recent_runs,
         }
-        return await _call(
+        return await call_tool_workflow(
+            client,
             workflows.describe_policy,
-            PolicyDetailParams,
             params,
-            api="console",
+            params_model=PolicyDetailParams,
+        )
+
+    @server.tool(
+        name="policy_compliance_stats",
+        description=(
+            "Retrieve per-policy compliance statistics showing compliant vs "
+            "non-compliant device counts and compliance rates for the organization."
+        ),
+    )
+    async def policy_compliance_stats() -> dict[str, Any]:
+        return await call_tool_workflow(
+            client,
+            workflows.get_policy_compliance_stats,
+            {},
+            params_model=GetPolicyStatsParams,
         )
 
     @server.tool(
@@ -205,85 +182,166 @@ def register(server: FastMCP) -> None:
     async def patch_approvals_summary(
         status: str | None = None,
         limit: int | None = 25,
+        output_format: str | None = "json",
     ) -> dict[str, Any]:
         params = {
             "status": status,
             "limit": limit,
         }
-        return await _call(
+        result = await call_tool_workflow(
+            client,
             workflows.summarize_patch_approvals,
-            PatchApprovalSummaryParams,
             params,
-            api="console",
+            params_model=PatchApprovalSummaryParams,
         )
 
-    @server.tool(
-        name="decide_patch_approval",
-        description="Approve or reject an Automox patch approval request.",
-        annotations={"destructiveHint": True},
-    )
-    async def decide_patch_approval(
-        approval_id: int,
-        decision: str,
-        notes: str | None = None,
-    ) -> dict[str, Any]:
-        params = {
-            "approval_id": approval_id,
-            "decision": decision,
-            "notes": notes,
-        }
-        return await _call(
-            workflows.resolve_patch_approval,
-            PatchApprovalDecisionParams,
-            params,
-            api="console",
-        )
+        return maybe_format_markdown(result, output_format)
 
-    @server.tool(
-        name="apply_policy_changes",
-        description="Create or update Automox policies with automatic format correction.",
-        annotations={"destructiveHint": True},
-    )
-    async def apply_policy_changes_tool(
-        operations: list[dict[str, Any]],
-        preview: bool | None = False,
-    ) -> dict[str, Any]:
-        normalized_operations = workflows.normalize_policy_operations_input(operations)
-        params = {
-            "operations": normalized_operations,
-            "preview": preview,
-        }
-        return await _call(
-            workflows.apply_policy_changes,
-            PolicyChangeRequestParams,
-            params,
-            api="console",
-        )
+    if not read_only:
 
-    @server.tool(
-        name="execute_policy_now",
-        description=(
-            "Execute an Automox policy immediately for remediation "
-            "(all devices or specific device)."
-        ),
-        annotations={"destructiveHint": True},
-    )
-    async def execute_policy_now(
-        policy_id: int,
-        action: str,
-        device_id: int | None = None,
-    ) -> dict[str, Any]:
-        params = {
-            "policy_id": policy_id,
-            "action": action,
-            "device_id": device_id,
-        }
-        return await _call(
-            workflows.execute_policy,
-            ExecutePolicyParams,
-            params,
-            api="console",
+        @server.tool(
+            name="decide_patch_approval",
+            description="Approve or reject an Automox patch approval request.",
+            annotations={"destructiveHint": True},
         )
+        async def decide_patch_approval(
+            approval_id: int,
+            decision: str,
+            notes: str | None = None,
+            request_id: str | None = None,
+        ) -> dict[str, Any]:
+            cached = await check_idempotency(request_id, "decide_patch_approval")
+            if cached is not None:
+                return cached
+
+            params = {
+                "approval_id": approval_id,
+                "decision": decision,
+                "notes": notes,
+            }
+            result = await call_tool_workflow(
+                client,
+                workflows.resolve_patch_approval,
+                params,
+                params_model=PatchApprovalDecisionParams,
+            )
+            await store_idempotency(request_id, "decide_patch_approval", result)
+            return result
+
+        @server.tool(
+            name="delete_policy",
+            description="Permanently delete an Automox policy by ID.",
+            annotations={"destructiveHint": True},
+        )
+        async def delete_policy(
+            policy_id: int,
+            request_id: str | None = None,
+        ) -> dict[str, Any]:
+            cached = await check_idempotency(request_id, "delete_policy")
+            if cached is not None:
+                return cached
+
+            params = {"policy_id": policy_id}
+            result = await call_tool_workflow(
+                client,
+                workflows.delete_policy,
+                params,
+                params_model=DeletePolicyToolParams,
+            )
+            await store_idempotency(request_id, "delete_policy", result)
+            return result
+
+        @server.tool(
+            name="clone_policy",
+            description=(
+                "Clone an existing Automox policy. Creates a copy with an optional "
+                "new name and server group assignments."
+            ),
+            annotations={"destructiveHint": True},
+        )
+        async def clone_policy(
+            policy_id: int,
+            name: str | None = None,
+            server_groups: list[int] | None = None,
+            request_id: str | None = None,
+        ) -> dict[str, Any]:
+            cached = await check_idempotency(request_id, "clone_policy")
+            if cached is not None:
+                return cached
+
+            params: dict[str, Any] = {"policy_id": policy_id}
+            if name is not None:
+                params["name"] = name
+            if server_groups is not None:
+                params["server_groups"] = server_groups
+            result = await call_tool_workflow(
+                client,
+                workflows.clone_policy,
+                params,
+                params_model=ClonePolicyParams,
+            )
+            await store_idempotency(request_id, "clone_policy", result)
+            return result
+
+        @server.tool(
+            name="apply_policy_changes",
+            description="Create or update Automox policies with automatic format correction.",
+            annotations={"destructiveHint": True},
+        )
+        async def apply_policy_changes_tool(
+            operations: list[dict[str, Any]],
+            preview: bool | None = False,
+            request_id: str | None = None,
+        ) -> dict[str, Any]:
+            cached = await check_idempotency(request_id, "apply_policy_changes")
+            if cached is not None:
+                return cached
+
+            normalized_operations = workflows.normalize_policy_operations_input(operations)
+            params = {
+                "operations": normalized_operations,
+                "preview": preview,
+            }
+            result = await call_tool_workflow(
+                client,
+                workflows.apply_policy_changes,
+                params,
+                params_model=PolicyChangeRequestParams,
+            )
+            await store_idempotency(request_id, "apply_policy_changes", result)
+            return result
+
+        @server.tool(
+            name="execute_policy_now",
+            description=(
+                "Execute an Automox policy immediately for remediation "
+                "(all devices or specific device)."
+            ),
+            annotations={"destructiveHint": True},
+        )
+        async def execute_policy_now(
+            policy_id: int,
+            action: str,
+            device_id: int | None = None,
+            request_id: str | None = None,
+        ) -> dict[str, Any]:
+            cached = await check_idempotency(request_id, "execute_policy_now")
+            if cached is not None:
+                return cached
+
+            params = {
+                "policy_id": policy_id,
+                "action": action,
+                "device_id": device_id,
+            }
+            result = await call_tool_workflow(
+                client,
+                workflows.execute_policy,
+                params,
+                params_model=ExecutePolicyParams,
+            )
+            await store_idempotency(request_id, "execute_policy_now", result)
+            return result
 
 
 __all__ = ["register"]

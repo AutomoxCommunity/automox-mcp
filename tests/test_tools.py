@@ -13,6 +13,8 @@ from automox_mcp.utils.tooling import (
 )
 from automox_mcp.workflows.policy import _normalize_status, _take
 
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+
 
 def test_as_tool_response_normalizes_metadata():
     original = {
@@ -101,8 +103,7 @@ def test_format_error_redacts_sensitive_values_on_fallback():
 
 @pytest.mark.asyncio
 async def test_create_server_registers_core_tools(monkeypatch):
-    repo_root = Path(__file__).resolve().parents[1]
-    monkeypatch.syspath_prepend(str(repo_root / "src"))
+    monkeypatch.syspath_prepend(str(_REPO_ROOT / "src"))
     monkeypatch.setenv("AUTOMOX_API_KEY", "test-key")
     monkeypatch.setenv("AUTOMOX_ACCOUNT_UUID", "test-account")
     monkeypatch.setenv("AUTOMOX_ORG_ID", "123")
@@ -114,7 +115,16 @@ async def test_create_server_registers_core_tools(monkeypatch):
     import automox_mcp
 
     server = automox_mcp.create_server()
-    tools = await server.get_tools()
-    tool_names = set(tools.keys())
-    required = {"execute_policy_now", "execute_device_command", "audit_trail_user_activity"}
+    tools = await server.list_tools()
+    tool_names = {t.name for t in tools}
+    required = {
+        "execute_policy_now",
+        "execute_device_command",
+        "audit_trail_user_activity",
+        "get_patch_tuesday_readiness",
+        "get_compliance_snapshot",
+        "delete_policy",
+        "clone_policy",
+        "policy_compliance_stats",
+    }
     assert required.issubset(tool_names)

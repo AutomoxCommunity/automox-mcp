@@ -2,66 +2,35 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+import logging
 from typing import Any, Literal
 
 from fastmcp import FastMCP
-from fastmcp.exceptions import ToolError
-from pydantic import BaseModel, ValidationError
 
 from .. import workflows
-from ..client import AutomoxAPIError, AutomoxClient
+from ..client import AutomoxClient
 from ..schemas import (
     DeviceDetailParams,
     DeviceHealthSummaryParams,
+    DeviceIdOnlyParams,
     DeviceInventoryOverviewParams,
+    DeviceInventoryParams,
     DeviceSearchParams,
     DevicesNeedingAttentionParams,
     IssueDeviceCommandParams,
-    OrgIdContextMixin,
-    OrgIdRequiredMixin,
 )
 from ..utils.tooling import (
-    RateLimitError,
-    as_tool_response,
-    enforce_rate_limit,
-    format_error,
+    call_tool_workflow,
+    check_idempotency,
+    maybe_format_markdown,
+    store_idempotency,
 )
 
+logger = logging.getLogger(__name__)
 
-def register(server: FastMCP) -> None:
+
+def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient) -> None:
     """Register device-related tools."""
-
-    async def _call(
-        func: Callable[..., Awaitable[dict[str, Any]]],
-        params_model: type[BaseModel],
-        raw_params: dict[str, Any],
-        api: str | None = None,
-    ) -> dict[str, Any]:
-        try:
-            await enforce_rate_limit(api)
-            client = AutomoxClient(default_api=api)
-            client_org_id = getattr(client, "org_id", None)
-            async with client as session:
-                params = dict(raw_params)
-                if issubclass(params_model, (OrgIdContextMixin, OrgIdRequiredMixin)):
-                    params.setdefault("org_id", client_org_id)
-                    if params.get("org_id") is None:
-                        raise ToolError(
-                            "org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly."
-                        )
-                model = params_model(**params)
-                payload = model.model_dump(mode="python", exclude_none=True)
-                if isinstance(model, (OrgIdContextMixin, OrgIdRequiredMixin)):
-                    payload["org_id"] = model.org_id
-                result: dict[str, Any] = await func(session, **payload)
-        except (ValidationError, ValueError) as exc:
-            raise ToolError(str(exc)) from exc
-        except RateLimitError as exc:
-            raise ToolError(str(exc)) from exc
-        except AutomoxAPIError as exc:
-            raise ToolError(format_error(exc)) from exc
-        return as_tool_response(result)
 
     @server.tool(
         name="list_devices",
@@ -78,6 +47,7 @@ def register(server: FastMCP) -> None:
         include_unmanaged: bool | None = True,
         policy_status: str | None = None,
         managed: bool | None = None,
+        output_format: str | None = "json",
     ) -> dict[str, Any]:
         params = {
             "group_id": group_id,
@@ -86,12 +56,14 @@ def register(server: FastMCP) -> None:
             "policy_status": policy_status,
             "managed": managed,
         }
-        return await _call(
+        result = await call_tool_workflow(
+            client,
             workflows.list_device_inventory,
-            DeviceInventoryOverviewParams,
             params,
-            api="console",
+            params_model=DeviceInventoryOverviewParams,
         )
+
+        return maybe_format_markdown(result, output_format)
 
     @server.tool(
         name="device_detail",
@@ -111,7 +83,9 @@ def register(server: FastMCP) -> None:
             "include_queue": include_queue,
             "include_raw_details": include_raw_details,
         }
-        return await _call(workflows.describe_device, DeviceDetailParams, params, api="console")
+        return await call_tool_workflow(
+            client, workflows.describe_device, params, params_model=DeviceDetailParams
+        )
 
     @server.tool(
         name="devices_needing_attention",
@@ -120,17 +94,20 @@ def register(server: FastMCP) -> None:
     async def devices_needing_attention(
         group_id: int | None = None,
         limit: int | None = 20,
+        output_format: str | None = "json",
     ) -> dict[str, Any]:
         params = {
             "group_id": group_id,
             "limit": limit,
         }
-        return await _call(
+        result = await call_tool_workflow(
+            client,
             workflows.list_devices_needing_attention,
-            DevicesNeedingAttentionParams,
             params,
-            api="console",
+            params_model=DevicesNeedingAttentionParams,
         )
+
+        return maybe_format_markdown(result, output_format)
 
     @server.tool(
         name="search_devices",
@@ -148,6 +125,7 @@ def register(server: FastMCP) -> None:
         managed: bool | None = None,
         group_id: int | None = None,
         limit: int | None = 50,
+        output_format: str | None = "json",
     ) -> dict[str, Any]:
         params = {
             "hostname_contains": hostname_contains,
@@ -159,12 +137,14 @@ def register(server: FastMCP) -> None:
             "group_id": group_id,
             "limit": limit,
         }
-        return await _call(
+        result = await call_tool_workflow(
+            client,
             workflows.search_devices,
-            DeviceSearchParams,
             params,
-            api="console",
+            params_model=DeviceSearchParams,
         )
+
+        return maybe_format_markdown(result, output_format)
 
     @server.tool(
         name="device_health_metrics",
@@ -186,34 +166,84 @@ def register(server: FastMCP) -> None:
             "limit": limit,
             "max_stale_devices": max_stale_devices,
         }
-        return await _call(
+        return await call_tool_workflow(
+            client,
             workflows.summarize_device_health,
-            DeviceHealthSummaryParams,
             params,
-            api="console",
+            params_model=DeviceHealthSummaryParams,
         )
 
     @server.tool(
-        name="execute_device_command",
-        description="Issue an immediate command to a device (scan, patch, or reboot).",
-        annotations={"destructiveHint": True},
+        name="get_device_inventory",
+        description=(
+            "Retrieve detailed device inventory data including hardware, network, "
+            "security, services, system, and user information. Optionally filter "
+            "by category. Uses the Console API device-details endpoint."
+        ),
     )
-    async def execute_device_command(
+    async def get_device_inventory_tool(
         device_id: int,
-        command_type: str,
-        patch_names: str | None = None,
+        category: str | None = None,
     ) -> dict[str, Any]:
-        params = {
-            "device_id": device_id,
-            "command_type": command_type,
-            "patch_names": patch_names,
-        }
-        return await _call(
-            workflows.issue_device_command,
-            IssueDeviceCommandParams,
+        params: dict[str, Any] = {"device_id": device_id}
+        if category is not None:
+            params["category"] = category
+        return await call_tool_workflow(
+            client,
+            workflows.get_device_inventory,
             params,
-            api="console",
+            params_model=DeviceInventoryParams,
         )
+
+    @server.tool(
+        name="get_device_inventory_categories",
+        description=(
+            "List available inventory categories for a device. Categories are "
+            "dynamic per device. Use this to discover what inventory data is "
+            "available before requesting specific categories."
+        ),
+    )
+    async def get_device_inventory_categories_tool(
+        device_id: int,
+    ) -> dict[str, Any]:
+        params = {"device_id": device_id}
+        return await call_tool_workflow(
+            client,
+            workflows.get_device_inventory_categories,
+            params,
+            params_model=DeviceIdOnlyParams,
+        )
+
+    if not read_only:
+
+        @server.tool(
+            name="execute_device_command",
+            description="Issue an immediate command to a device (scan, patch, or reboot).",
+            annotations={"destructiveHint": True},
+        )
+        async def execute_device_command(
+            device_id: int,
+            command_type: str,
+            patch_names: str | None = None,
+            request_id: str | None = None,
+        ) -> dict[str, Any]:
+            cached = await check_idempotency(request_id, "execute_device_command")
+            if cached is not None:
+                return cached
+
+            params = {
+                "device_id": device_id,
+                "command_type": command_type,
+                "patch_names": patch_names,
+            }
+            result = await call_tool_workflow(
+                client,
+                workflows.issue_device_command,
+                params,
+                params_model=IssueDeviceCommandParams,
+            )
+            await store_idempotency(request_id, "execute_device_command", result)
+            return result
 
 
 __all__ = ["register"]

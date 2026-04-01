@@ -1,6 +1,6 @@
 [project]
 name = "automox-mcp"
-version = "0.1.0"
+version = "1.0.11"
 description = "An MCP server implementation for Automox"
 readme = "README.md"
 authors = [
@@ -9,7 +9,7 @@ authors = [
 license = "MIT"
 requires-python = ">=3.11"
 classifiers = [
-  "Development Status :: 4 - Beta",
+  "Development Status :: 5 - Production/Stable",
   "Intended Audience :: System Administrators",
   "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
@@ -19,7 +19,7 @@ classifiers = [
   "Topic :: System :: Systems Administration"
 ]
 dependencies = [
-  "fastmcp>=2.0.0",
+  "fastmcp>=3.2.0",
   "httpx>=0.28",
   "pydantic>=2.12",
   "python-dotenv>=1.1"
@@ -32,6 +32,7 @@ automox-mcp = "automox_mcp:main"
 dev = [
   "pytest>=8.2",
   "pytest-asyncio>=0.23",
+  "pytest-cov>=6.0",
   "ruff>=0.4",
   "mypy>=1.9",
   "build>=1.2.2",
@@ -60,11 +61,40 @@ line-length = 100
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "ASYNC"]
 
+[tool.ruff.lint.per-file-ignores]
+"src/automox_mcp/prompts/*.py" = ["E501"]
+
 [tool.mypy]
 python_version = "3.13"
 warn_return_any = true
 warn_unused_configs = true
-packages = ["automox_mcp"]
+exclude = ["tests/"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+asyncio_mode = "auto"
+
+[tool.bandit]
+targets = ["src/"]
+exclude_dirs = ["tests", ".venv"]
+
+[tool.uv]
+constraint-dependencies = [
+  "authlib>=1.6.6",       # CVE-2025-68158: CSRF in cache-backed state storage
+  "cryptography>=46.0.6", # CVE-2026-26007, CVE-2026-34073
+  "fastmcp>=3.2.0",       # CVE-2025-69196, CVE-2025-64340, CVE-2026-27124, GHSA-rcfx-77hg-w2wv
+  "jaraco-context>=6.1.0",# CVE-2026-23949
+  "mcp>=1.23.0",          # CVE-2025-66416
+  "pygments>=2.20.0",     # CVE-2026-4539
+  "pyjwt>=2.12.0",        # CVE-2026-32597
+  "python-multipart>=0.0.22", # CVE-2026-24486
+  "requests>=2.33.0",     # CVE-2026-25645
+  "urllib3>=2.6.3",        # CVE-2025-66418, CVE-2025-66471, CVE-2026-21441
+]
+
+[tool.coverage.run]
+source = ["automox_mcp"]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true

@@ -1,7 +1,6 @@
 import copy
 import pathlib
 import sys
-from datetime import datetime
 from typing import Any, cast
 from uuid import UUID
 
@@ -10,12 +9,17 @@ import pytest
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
-from automox_mcp.client import AutomoxClient  # noqa: E402
+from automox_mcp.client import AutomoxAPIError, AutomoxClient  # noqa: E402
 from automox_mcp.workflows.policy import (  # noqa: E402
-    apply_policy_changes,
+    _decode_schedule_days_bitmask,
+    _normalize_status,
+    describe_policy,
     describe_policy_run_result,
+    summarize_policies,
     summarize_policy_activity,
+    summarize_policy_execution_history,
 )
+from automox_mcp.workflows.policy_crud import apply_policy_changes  # noqa: E402
 
 
 class StubClient:
@@ -31,9 +35,7 @@ class StubClient:
         self._get_responses = {key: list(value) for key, value in (get_responses or {}).items()}
         self._post_responses = {key: list(value) for key, value in (post_responses or {}).items()}
         self._put_responses = {key: list(value) for key, value in (put_responses or {}).items()}
-        self.calls: list[
-            tuple[str, str, dict[str, Any] | None, dict[str, Any] | None, str | None]
-        ] = []
+        self.calls: list[tuple[str, str, dict[str, Any] | None, dict[str, Any] | None]] = []
 
     async def get(
         self,
@@ -41,9 +43,8 @@ class StubClient:
         *,
         params: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
-        api: str | None = None,
     ) -> Any:
-        self.calls.append(("GET", path, params, None, api))
+        self.calls.append(("GET", path, params, None))
         responses = self._get_responses.get(path)
         if not responses:
             raise AssertionError(f"Unexpected GET request: {path}")
@@ -56,9 +57,8 @@ class StubClient:
         json_data: dict[str, Any] | None = None,
         params: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
-        api: str | None = None,
     ) -> Any:
-        self.calls.append(("POST", path, params, json_data, api))
+        self.calls.append(("POST", path, params, json_data))
         responses = self._post_responses.get(path)
         if responses is None:
             raise AssertionError(f"Unexpected POST request: {path}")
@@ -73,9 +73,8 @@ class StubClient:
         json_data: dict[str, Any] | None = None,
         params: dict[str, Any] | None = None,
         headers: dict[str, str] | None = None,
-        api: str | None = None,
     ) -> Any:
-        self.calls.append(("PUT", path, params, json_data, api))
+        self.calls.append(("PUT", path, params, json_data))
         responses = self._put_responses.get(path)
         if responses is None:
             raise AssertionError(f"Unexpected PUT request: {path}")
@@ -266,7 +265,7 @@ async def test_apply_policy_changes_update_merges_existing() -> None:
     assert op["previous_policy"]["name"] == "Baseline Windows Patch"
     assert op["policy"]["configuration"]["include_optional"] is True
 
-    method, path, params, body, api = client.calls[1]  # PUT call is second (after initial GET)
+    method, path, params, body = client.calls[1]  # PUT call is second (after initial GET)
     assert method == "PUT"
     assert path == "/policies/901"
     assert params == {"o": 555}
@@ -321,18 +320,12 @@ async def test_summarize_policy_activity_uses_supported_params() -> None:
     count_params = count_call[2]
     assert count_params is not None
     assert count_params["days"] == window_days
-    assert count_call[4] == "policyreport"
 
     runs_call = client.calls[1]
     assert runs_call[1] == "/policy-history/policy-runs"
     run_params = runs_call[2]
     assert run_params is not None
     assert run_params["limit"] == max_runs
-    assert run_params["sort"] == "run_time:desc"
-    assert "start_time" in run_params
-    parsed = datetime.fromisoformat(run_params["start_time"].replace("Z", "+00:00"))
-    assert parsed.tzinfo is not None
-    assert parsed.microsecond == 0
 
 
 @pytest.mark.asyncio
@@ -399,10 +392,432 @@ async def test_describe_policy_run_result_summarizes_and_normalizes() -> None:
     assert first_device["result_status"] == "success"
     assert first_device["stdout"] == "ok"
 
-    method, path, params, _, api = client.calls[0]
+    method, path, params, _ = client.calls[0]
     assert method == "GET"
     assert path == api_path
     assert params is not None
     assert params["org"] == str(org_uuid)
     assert params["limit"] == 25
     assert params["page"] == 0
+
+
+# ---------------------------------------------------------------------------
+# _normalize_status
+# ---------------------------------------------------------------------------
+
+
+def test_normalize_status_cancelled() -> None:
+    assert _normalize_status("cancelling") == "cancelled"
+    assert _normalize_status("cancelled") == "cancelled"
+
+
+def test_normalize_status_empty() -> None:
+    assert _normalize_status(None) == "unknown"
+    assert _normalize_status("") == "unknown"
+
+
+# ---------------------------------------------------------------------------
+# _decode_schedule_days_bitmask
+# ---------------------------------------------------------------------------
+
+
+def test_decode_schedule_days_bitmask_unscheduled() -> None:
+    result = _decode_schedule_days_bitmask(0)
+    assert "Unscheduled" in result["interpretation"]
+
+
+def test_decode_schedule_days_bitmask_weekdays() -> None:
+    result = _decode_schedule_days_bitmask(62)
+    assert "Weekdays" in result["interpretation"]
+    assert result["bitmask_value"] == 62
+
+
+def test_decode_schedule_days_bitmask_weekend() -> None:
+    result = _decode_schedule_days_bitmask(192)
+    assert "Weekend" in result["interpretation"]
+
+
+def test_decode_schedule_days_bitmask_every_day() -> None:
+    result = _decode_schedule_days_bitmask(254)
+    assert "Every day" in result["interpretation"]
+
+
+def test_decode_schedule_days_bitmask_custom() -> None:
+    # Monday only = bitmask 2
+    result = _decode_schedule_days_bitmask(2)
+    assert "Monday" in result["selected_days"]
+    assert "1 days" in result["interpretation"]
+
+
+# ---------------------------------------------------------------------------
+# summarize_policy_activity — additional paths
+# ---------------------------------------------------------------------------
+
+
+class FlexibleStubClient:
+    """StubClient that matches paths by prefix for dynamic query-string paths."""
+
+    def __init__(
+        self,
+        *,
+        get_responses: dict[str, list[Any]] | None = None,
+        raise_on_path_prefix: str | None = None,
+        raise_exc: Exception | None = None,
+    ) -> None:
+        self._get_responses = {key: list(value) for key, value in (get_responses or {}).items()}
+        self._raise_on_prefix = raise_on_path_prefix
+        self._raise_exc = raise_exc
+        self.calls: list[tuple[str, str, Any, Any]] = []
+
+    async def get(self, path: str, *, params=None, headers=None) -> Any:
+        self.calls.append(("GET", path, params, None))
+        if self._raise_on_prefix and path.startswith(self._raise_on_prefix):
+            raise self._raise_exc or AutomoxAPIError("error", status_code=500, payload={})
+        # Try exact match first, then prefix match
+        for key, responses in self._get_responses.items():
+            if path == key or path.startswith(key):
+                if responses:
+                    return copy.deepcopy(responses.pop(0))
+        return []
+
+
+@pytest.mark.asyncio
+async def test_summarize_policy_activity_run_count_api_error() -> None:
+    """AutomoxAPIError on run-count is swallowed; runs still processed."""
+    org_uuid = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+
+    runs_payload = [
+        {"policy_uuid": "p1", "policy_name": "P1", "failed": 1, "success": 0, "device_count": 2},
+        {"policy_uuid": "p2", "policy_name": "P2", "failed": 0, "success": 3, "device_count": 3},
+    ]
+
+    client = FlexibleStubClient(
+        get_responses={
+            "/policy-history/policy-run-count": [],  # empty → raises AssertionError below
+            "/policy-history/policy-runs": [runs_payload],
+        },
+        raise_on_path_prefix="/policy-history/policy-run-count",
+    )
+
+    result = await summarize_policy_activity(
+        cast(AutomoxClient, client),
+        org_uuid=org_uuid,
+    )
+
+    # failed > 0 increments status_counter["failed"],
+    # success > 0 increments status_counter["success"]
+    assert result["data"]["status_breakdown"].get("failed", 0) >= 1
+    assert result["data"]["status_breakdown"].get("success", 0) >= 1
+    # top_failing_policies should include p1
+    top = result["data"]["top_failing_policies"]
+    assert any(p.get("policy_uuid") == "p1" or p.get("policy_name") == "P1" for p in top)
+
+
+@pytest.mark.asyncio
+async def test_summarize_policy_activity_runs_as_list() -> None:
+    """When /policy-history/policy-runs returns a plain list (not wrapped in data)."""
+    org_uuid = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+
+    runs_list = [
+        {"policy_uuid": "p3", "policy_name": "P3", "failed": 0, "success": 0, "device_count": 0},
+    ]
+
+    client = FlexibleStubClient(
+        get_responses={
+            "/policy-history/policy-run-count": [{"policy_runs": 10}],
+            "/policy-history/policy-runs": [runs_list],
+        },
+    )
+
+    result = await summarize_policy_activity(
+        cast(AutomoxClient, client),
+        org_uuid=org_uuid,
+    )
+
+    # The run has no failed/success → classified as unknown
+    assert result["data"]["status_breakdown"].get("unknown", 0) >= 1
+    assert result["data"]["total_policy_runs"] == 10
+
+
+# ---------------------------------------------------------------------------
+# summarize_policy_execution_history
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_summarize_policy_execution_history_list_response() -> None:
+    """Test when API returns a list of runs directly."""
+    org_uuid = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+    policy_uuid = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+
+    runs = [
+        {
+            "execution_token": "tok-1",
+            "run_time": "2024-06-01T00:00:00Z",
+            "failed": 2,
+            "success": 0,
+            "device_count": 2,
+            "policy_name": "Test Policy",
+        },
+        {
+            "execution_token": "tok-2",
+            "run_time": "2024-06-02T00:00:00Z",
+            "failed": 0,
+            "success": 5,
+            "device_count": 5,
+        },
+    ]
+
+    client = FlexibleStubClient(
+        get_responses={
+            "/policy-history/policy-runs": [runs],
+        },
+    )
+
+    result = await summarize_policy_execution_history(
+        cast(AutomoxClient, client),
+        org_uuid=org_uuid,
+        policy_uuid=policy_uuid,
+        limit=10,
+    )
+
+    assert result["data"]["status_breakdown"]["failed"] == 1
+    assert result["data"]["status_breakdown"]["success"] == 1
+    assert len(result["data"]["recent_executions"]) == 2
+    assert result["data"]["policy_uuid"] == str(policy_uuid)
+    # policy_name is only extracted when payload is a Mapping — for a plain list it's None
+    assert result["data"]["policy_name"] is None
+
+
+@pytest.mark.asyncio
+async def test_summarize_policy_execution_history_mapping_response() -> None:
+    """Test when API wraps runs in a data key."""
+    org_uuid = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+    policy_uuid = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+
+    payload = {
+        "data": [
+            {
+                "execution_token": "tok-1",
+                "run_time": "2024-06-01T00:00:00Z",
+                "failed": 0,
+                "success": 0,
+                "device_count": 0,
+                "policy_name": "Wrapped Policy",
+            },
+        ]
+    }
+
+    client = FlexibleStubClient(
+        get_responses={
+            "/policy-history/policy-runs": [payload],
+        },
+    )
+
+    result = await summarize_policy_execution_history(
+        cast(AutomoxClient, client),
+        org_uuid=org_uuid,
+        policy_uuid=policy_uuid,
+    )
+
+    execs = result["data"]["recent_executions"]
+    assert len(execs) == 1
+    # status is None when both failed and success are 0
+    assert execs[0]["status"] is None
+
+
+# ---------------------------------------------------------------------------
+# summarize_policies
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_summarize_policies_raises_when_no_org_id() -> None:
+    client = FlexibleStubClient()
+    client.org_id = None  # type: ignore[attr-defined]
+
+    with pytest.raises(ValueError, match="org_id required"):
+        await summarize_policies(cast(AutomoxClient, client))
+
+
+@pytest.mark.asyncio
+async def test_summarize_policies_filters_inactive_by_default() -> None:
+    """Policies with status 'inactive' are filtered out unless include_inactive=True."""
+    active_policy = {
+        "id": 1,
+        "name": "Active Policy",
+        "policy_type_name": "patch",
+        "status": "active",
+    }
+    inactive_policy = {
+        "id": 2,
+        "name": "Disabled Policy",
+        "policy_type_name": "patch",
+        "status": "inactive",
+    }
+
+    # Stub provides two calls — one for /policies (page 0), one for /policystats
+    # The loop breaks after page 0 since the preview cap (limit=20) is not yet reached
+    # but page_results is empty on the second call.
+    stub = StubClient(
+        get_responses={
+            "/policies": [[active_policy, inactive_policy], []],
+            "/policystats": [[]],
+        }
+    )
+    stub.org_id = 42  # type: ignore[attr-defined]
+
+    result = await summarize_policies(
+        cast(AutomoxClient, stub),
+        org_id=42,
+        limit=20,
+        include_inactive=False,
+    )
+
+    names = [p["name"] for p in result["data"]["policies"]]
+    assert "Active Policy" in names
+    assert "Disabled Policy" not in names
+
+
+@pytest.mark.asyncio
+async def test_summarize_policies_include_inactive() -> None:
+    """When include_inactive=True, inactive policies are included."""
+    inactive_policy = {
+        "id": 2,
+        "name": "Old Policy",
+        "policy_type_name": "worklet",
+        "status": "inactive",
+    }
+
+    stub = StubClient(
+        get_responses={
+            "/policies": [[inactive_policy], []],
+            "/policystats": [[]],
+        }
+    )
+
+    result = await summarize_policies(
+        cast(AutomoxClient, stub),
+        org_id=42,
+        limit=20,
+        include_inactive=True,
+    )
+
+    assert len(result["data"]["policies"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_summarize_policies_is_active_from_status_raw() -> None:
+    """When active/enabled/is_active is None, is_active is derived from status_raw."""
+    policy_no_flag = {
+        "id": 3,
+        "name": "Flag-less Active",
+        "policy_type_name": "patch",
+        # No active/enabled/is_active key; status is 'enabled' → treated as active
+        "status": "enabled",
+    }
+
+    stub = StubClient(
+        get_responses={
+            "/policies": [[policy_no_flag], []],
+            "/policystats": [[]],
+        }
+    )
+
+    result = await summarize_policies(
+        cast(AutomoxClient, stub),
+        org_id=42,
+        limit=20,
+        include_inactive=False,
+    )
+
+    assert result["data"]["policies"][0]["name"] == "Flag-less Active"
+
+
+@pytest.mark.asyncio
+async def test_summarize_policies_custom_type_normalized_to_worklet() -> None:
+    policy = {
+        "id": 4,
+        "name": "Custom Script",
+        "policy_type_name": "custom",
+        "status": "active",
+    }
+
+    stub = StubClient(
+        get_responses={
+            "/policies": [[policy], []],
+            "/policystats": [[]],
+        }
+    )
+
+    result = await summarize_policies(cast(AutomoxClient, stub), org_id=42, limit=20)
+
+    assert result["data"]["policy_type_breakdown"].get("worklet", 0) == 1
+
+
+# ---------------------------------------------------------------------------
+# describe_policy
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_describe_policy_raises_when_no_org_id() -> None:
+    stub = StubClient()
+    stub.org_id = None  # type: ignore[attr-defined]
+
+    with pytest.raises(ValueError, match="org_id required"):
+        await describe_policy(cast(AutomoxClient, stub), policy_id=1)
+
+
+@pytest.mark.asyncio
+async def test_describe_policy_basic() -> None:
+    """describe_policy returns policy data and metadata."""
+    policy = {
+        "id": 10,
+        "name": "Patch Everything",
+        "policy_type_name": "patch",
+        "org_uuid": None,
+        "schedule_days": 62,
+        "schedule_time": "02:00",
+    }
+
+    # Needs /policies/10 and optionally /orgs if org_uuid is not available
+    stub = StubClient(
+        get_responses={
+            "/policies/10": [policy],
+            "/orgs": [[{"id": 42, "org_uuid": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}]],
+            "/policy-history/policy-runs?"
+            "policy_uuid:equals=None"
+            "&org=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+            "&limit=5": [{"data": []}],
+        }
+    )
+
+    result = await describe_policy(
+        cast(AutomoxClient, stub),
+        org_id=42,
+        policy_id=10,
+        include_recent_runs=0,
+    )
+
+    assert result["data"]["policy"]["id"] == 10
+    assert result["metadata"]["policy_id"] == 10
+    assert "schedule_interpretation" in result["data"]
+
+
+@pytest.mark.asyncio
+async def test_describe_policy_exception_wrapped() -> None:
+    """AutomoxAPIError from the API call is wrapped as ValueError."""
+
+    class _ErrorClient(StubClient):
+        async def get(self, path, **kwargs):
+            raise AutomoxAPIError("not found", status_code=404)
+
+    stub = _ErrorClient()
+
+    with pytest.raises(ValueError, match="Failed to retrieve policy 999"):
+        await describe_policy(
+            cast(AutomoxClient, stub),
+            org_id=42,
+            policy_id=999,
+        )

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import date as Date
-from datetime import datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
@@ -26,19 +25,6 @@ class OrgIdRequiredMixin(BaseModel):
     """Org-scoped models that must explicitly receive an org_id."""
 
     org_id: int = Field(description="Organization ID")
-
-
-class AccountIdMixin(BaseModel):
-    """Shared account_id field used by account-level endpoints."""
-
-    account_id: str = Field(description="Account ID (UUID)")
-
-
-class PaginationMixin(BaseModel):
-    """Standard pagination arguments used by several list endpoints."""
-
-    page: int | None = Field(None, ge=0, description="Page number")
-    limit: int | None = Field(None, ge=1, le=500, description="Results per page")
 
 
 class PaginationMetadata(BaseModel):
@@ -79,6 +65,7 @@ class AuditTrailEventsParams(OrgIdContextMixin, ForbidExtraModel):
     cursor: str | None = Field(
         None,
         description="Resume the search from this Automox event cursor",
+        max_length=2000,
     )
     limit: int | None = Field(
         None,
@@ -96,47 +83,16 @@ class AuditTrailEventsParams(OrgIdContextMixin, ForbidExtraModel):
     )
 
 
-class ListPoliciesParams(ForbidExtraModel):
-    org_uuid: UUID
-    start_time: datetime | None = None
-    end_time: datetime | None = None
-
-
-class ListPolicyRunsParams(ForbidExtraModel):
-    org_uuid: UUID
-    start_time: datetime | None = None
-    end_time: datetime | None = None
-    policy_name: str | None = None
-    policy_uuid: UUID | None = None
-    policy_type: str | None = None
-    result_status: str | None = None
-    sort: str | None = None
-    page: int | None = Field(None, ge=0)
-    limit: int | None = Field(None, ge=1, le=5000)
-
-
-class RunsForPolicyParams(ForbidExtraModel):
-    org_uuid: UUID
-    policy_uuid: UUID
-    report_days: int | None = Field(None, ge=1)
-    sort: str | None = None
-
-
 class RunDetailParams(ForbidExtraModel):
     org_uuid: UUID
     policy_uuid: UUID
     exec_token: UUID
-    sort: str | None = None
-    result_status: str | None = None
-    device_name: str | None = None
+    sort: str | None = Field(None, max_length=100)
+    result_status: str | None = Field(None, max_length=100)
+    device_name: str | None = Field(None, max_length=500)
     page: int | None = Field(None, ge=0)
     limit: int | None = Field(None, ge=1, le=5000)
     max_output_length: int | None = Field(None, ge=16, le=20000)
-
-
-class RunCountParams(ForbidExtraModel):
-    org_uuid: UUID
-    days: int | None = Field(None, ge=1)
 
 
 class PolicyHealthSummaryParams(ForbidExtraModel):
@@ -150,13 +106,18 @@ class PolicyExecutionTimelineParams(ForbidExtraModel):
     org_uuid: UUID
     policy_uuid: UUID
     report_days: int | None = Field(7, ge=1, le=180)
-    limit: int | None = Field(50, ge=10, le=200)
+    limit: int | None = Field(50, ge=1, le=5000)
 
 
 class PolicyDefinition(BaseModel):
-    """Generic policy definition payload passed to Automox."""
+    """Generic policy definition payload passed to Automox.
 
-    model_config = ConfigDict(extra="allow")
+    Uses ``extra="ignore"`` to silently drop unrecognized fields rather than
+    passing arbitrary keys to the API (``extra="allow"``) or rejecting the
+    request entirely (``extra="forbid"`` — too strict for forward-compat).
+    """
+
+    model_config = ConfigDict(extra="ignore")
 
     name: str | None = Field(None, description="Display name for the policy")
     policy_type_name: Literal["patch", "custom", "required_software"] | None = Field(
@@ -170,22 +131,25 @@ class PolicyDefinition(BaseModel):
     schedule_days: int | None = Field(
         None,
         ge=0,
-        description="Bitmask representing scheduled days of the week.",
+        le=254,
+        description="Bitmask representing scheduled days of the week (max 254 = bits 1-7).",
     )
     schedule_weeks_of_month: int | None = Field(
         None,
         ge=0,
-        description="Bitmask representing scheduled weeks of the month.",
+        le=62,
+        description="Bitmask representing scheduled weeks of the month (max 62 = bits 1-5).",
     )
     schedule_months: int | None = Field(
         None,
         ge=0,
-        description="Bitmask representing scheduled months of the year.",
+        le=8190,
+        description="Bitmask representing scheduled months of the year (max 8190 = bits 1-12).",
     )
     schedule_time: str | None = Field(
         None,
         description="Scheduled execution time in HH:MM format.",
-        pattern=r"^\d{2}:\d{2}$",
+        pattern=r"^([01]\d|2[0-3]):[0-5]\d$",
     )
     use_scheduled_timezone: bool | None = Field(
         None, description="When true, schedule is interpreted in UTC."
@@ -195,6 +159,7 @@ class PolicyDefinition(BaseModel):
         description=(
             "UTC offset string required when use_scheduled_timezone is true (e.g. 'UTC+0000')."
         ),
+        pattern=r"^UTC[+-]\d{4}$",
     )
     server_groups: list[int] | None = Field(
         None,
@@ -290,7 +255,9 @@ class PolicyChangeRequestParams(OrgIdContextMixin, ForbidExtraModel):
     """Structured request for creating or updating Automox policies."""
 
     operations: list[PolicyOperation] = Field(
-        description="Ordered list of policy create/update operations to perform.", min_length=1
+        description="Ordered list of policy create/update operations to perform.",
+        min_length=1,
+        max_length=50,
     )
     preview: bool | None = Field(
         False,
@@ -329,6 +296,22 @@ class DeviceDetailParams(OrgIdContextMixin, ForbidExtraModel):
     include_raw_details: bool | None = Field(
         False, description="Include a sanitized slice of the full Automox device payload"
     )
+
+
+class DeviceInventoryParams(OrgIdContextMixin, ForbidExtraModel):
+    device_id: int = Field(description="Device identifier", ge=1)
+    category: str | None = Field(
+        None,
+        description=(
+            "Inventory category to retrieve. Use get_device_inventory_categories "
+            "to discover available categories. Common values: Hardware, Health, "
+            "Network, Security, Services, Summary, System, Users."
+        ),
+    )
+
+
+class DeviceIdOnlyParams(OrgIdContextMixin, ForbidExtraModel):
+    device_id: int = Field(description="Device identifier", ge=1)
 
 
 class DeviceSearchParams(OrgIdContextMixin, ForbidExtraModel):
@@ -411,67 +394,13 @@ class PolicyDetailParams(OrgIdContextMixin, ForbidExtraModel):
     include_recent_runs: int | None = Field(5, ge=0, le=50)
 
 
-class ListDevicesParams(ForbidExtraModel):
-    group_id: int | None = Field(None, description="Filter by Server Group ID")
-    managed: bool | None = Field(None, description="Filter by managed status")
-    patch_status: str | None = Field(None, description="Filter by patch status (e.g., 'missing')")
-    limit: int | None = Field(None, ge=1, le=500, description="Number of results (1-500)")
-    page: int | None = Field(None, ge=0, description="Page number (0-indexed)")
-
-
-# ============================================================================
-# DEVICE ENDPOINT SCHEMAS
-# ============================================================================
-
-
-class GetDeviceParams(ForbidExtraModel):
-    device_id: int = Field(description="Device ID")
-    include_details: bool | None = Field(None, description="Include detailed device information")
-    include_server_events: bool | None = Field(None, description="Include server event history")
-    include_next_patch_time: bool | None = Field(
-        None, description="Include next scheduled patch time"
-    )
-    exclude_policy_status: bool | None = Field(
-        None, description="Exclude policy status information"
-    )
-
-
 class GetDevicePackagesParams(ForbidExtraModel):
     device_id: int = Field(description="Device ID")
     page: int | None = Field(None, ge=0, description="Page number")
     limit: int | None = Field(None, ge=1, le=500, description="Results per page")
 
 
-class GetDeviceQueuesParams(ForbidExtraModel):
-    device_id: int = Field(description="Device ID")
-
-
-class GetDeviceInventoryParams(ForbidExtraModel):
-    org_uuid: UUID = Field(description="Organization UUID")
-    device_uuid: UUID = Field(description="Device UUID")
-    category: str | None = Field(None, description="Filter by inventory category")
-
-
-class GetDeviceInventoryCategoriesParams(ForbidExtraModel):
-    org_uuid: UUID = Field(description="Organization UUID")
-    device_uuid: UUID = Field(description="Device UUID")
-
-
-# ============================================================================
-# POLICY ENDPOINT SCHEMAS
-# ============================================================================
-
-
-class ListPoliciesConfigParams(ForbidExtraModel):
-    page: int | None = Field(None, ge=0, description="Page number")
-    limit: int | None = Field(None, ge=1, le=500, description="Results per page")
-
-
-class GetPolicyParams(ForbidExtraModel):
-    policy_id: int = Field(description="Policy ID")
-
-
-class GetPolicyStatsParams(ForbidExtraModel):
+class GetPolicyStatsParams(OrgIdContextMixin, ForbidExtraModel):
     pass  # Only requires org_id from context
 
 
@@ -490,33 +419,19 @@ class GetServerGroupParams(ForbidExtraModel):
 
 
 # ============================================================================
-# USER ENDPOINT SCHEMAS
-# ============================================================================
-
-
-class ListUsersParams(ForbidExtraModel):
-    page: int | None = Field(None, ge=0, description="Page number")
-    limit: int | None = Field(None, ge=1, le=500, description="Results per page")
-
-
-class GetUserParams(ForbidExtraModel):
-    user_id: int = Field(description="User ID")
-
-
-# ============================================================================
 # REPORT ENDPOINT SCHEMAS
 # ============================================================================
 
 
 class GetPrepatchReportParams(ForbidExtraModel):
     group_id: int | None = Field(None, description="Filter by Server Group ID")
-    limit: int | None = Field(None, ge=1, description="Maximum number of results")
+    limit: int | None = Field(None, ge=1, le=500, description="Maximum number of results")
     offset: int | None = Field(None, ge=0, description="Offset for pagination")
 
 
 class GetNeedsAttentionReportParams(ForbidExtraModel):
     group_id: int | None = Field(None, description="Filter by Server Group ID")
-    limit: int | None = Field(None, ge=1, description="Maximum number of results")
+    limit: int | None = Field(None, ge=1, le=500, description="Maximum number of results")
     offset: int | None = Field(None, ge=0, description="Offset for pagination")
 
 
@@ -531,19 +446,13 @@ class GetEventsParams(ForbidExtraModel):
     policy_id: int | None = Field(None, description="Filter by Policy ID")
     server_id: int | None = Field(None, description="Filter by Server/Device ID")
     user_id: int | None = Field(None, description="Filter by User ID")
-    event_name: str | None = Field(None, description="Filter by event name")
-    start_date: str | None = Field(None, description="Start date filter (ISO format)")
-    end_date: str | None = Field(None, description="End date filter (ISO format)")
-    limit: int | None = Field(None, ge=1, le=500, description="Results per page")
-
-
-# ============================================================================
-# ORGANIZATION ENDPOINT SCHEMAS
-# ============================================================================
-
-
-class ListOrganizationsParams(ForbidExtraModel):
-    page: int | None = Field(None, ge=0, description="Page number")
+    event_name: str | None = Field(None, description="Filter by event name", max_length=200)
+    start_date: str | None = Field(
+        None,
+        description="Start date filter (ISO format)",
+        max_length=30,
+    )
+    end_date: str | None = Field(None, description="End date filter (ISO format)", max_length=30)
     limit: int | None = Field(None, ge=1, le=500, description="Results per page")
 
 
@@ -564,20 +473,6 @@ class GetOrganizationPackagesParams(OrgIdRequiredMixin, ForbidExtraModel):
 # ============================================================================
 
 
-class UpdateDeviceParams(ForbidExtraModel):
-    device_id: int = Field(description="Device ID")
-    server_group_id: int = Field(description="Server group ID to assign device to")
-    exception: bool = Field(description="Mark device as exception")
-    ip_addrs: list | None = Field(None, description="IP addresses")
-    tags: list | None = Field(None, description="Device tags")
-    custom_name: str | None = Field(None, description="Custom device name")
-
-
-class BatchUpdateDevicesParams(ForbidExtraModel):
-    devices: list = Field(description="List of device IDs")
-    actions: list = Field(description="List of actions to perform")
-
-
 class ExecutePolicyParams(OrgIdContextMixin, ForbidExtraModel):
     policy_id: int = Field(description="Policy ID to execute", ge=1)
     action: Literal["remediateAll", "remediateServer"] = Field(
@@ -594,45 +489,50 @@ class IssueDeviceCommandParams(OrgIdContextMixin, ForbidExtraModel):
         "scan", "get_os", "refresh", "patch", "patch_all", "patch_specific", "reboot"
     ] = Field(description="Command to execute on the device")
     patch_names: str | None = Field(
-        None, description="Comma-separated patch names (required for patch_specific command)"
+        None,
+        description="Comma-separated patch names (required for patch_specific command)",
+        max_length=2000,
+        pattern=r"^[a-zA-Z0-9 _.,:;()\[\]+\-/]+$",
     )
 
 
-class ClonePolicyParams(ForbidExtraModel):
+class ClonePolicyParams(OrgIdContextMixin, ForbidExtraModel):
     policy_id: int = Field(description="Policy ID to clone")
-    target_zone_ids: list = Field(description="List of target zone IDs")
+    name: str | None = Field(
+        None, description="Name for the cloned policy (defaults to '<source> (Clone)')"
+    )
+    server_groups: list[int] | None = Field(None, description="Server group IDs for the clone")
 
 
-class PreviewPolicyDeviceFiltersParams(ForbidExtraModel):
-    device_filters: list | None = Field(None, description="Device filter criteria")
-    server_groups: list | None = Field(None, description="Server group IDs")
-    page: int | None = Field(None, ge=0, description="Page number")
-    limit: int | None = Field(None, ge=1, le=500, description="Results per page")
+class DeletePolicyToolParams(OrgIdContextMixin, ForbidExtraModel):
+    policy_id: int = Field(description="Policy ID to delete", ge=1)
 
 
 class CreateServerGroupParams(ForbidExtraModel):
     name: str = Field(description="Group name")
-    refresh_interval: int = Field(description="Refresh interval in minutes")
-    parent_server_group_id: int | None = Field(None, description="Parent group ID")
-    ui_color: str | None = Field(None, description="UI color for group")
+    refresh_interval: int = Field(description="Refresh interval in minutes", ge=1, le=525600)
+    parent_server_group_id: int = Field(description="Parent group ID (required by API)")
+    ui_color: str | None = Field(
+        None,
+        description="UI color for group",
+        pattern=r"^#[0-9a-fA-F]{6}$",
+    )
     notes: str | None = Field(None, description="Group notes")
-    policies: list | None = Field(None, description="Policy IDs to assign")
+    policies: list[int] | None = Field(None, description="Policy IDs to assign")
 
 
 class UpdateServerGroupParams(ForbidExtraModel):
     group_id: int = Field(description="Server group ID")
     name: str = Field(description="Group name")
-    refresh_interval: int = Field(description="Refresh interval in minutes")
-    parent_server_group_id: int | None = Field(None, description="Parent group ID")
-    ui_color: str | None = Field(None, description="UI color for group")
+    refresh_interval: int = Field(description="Refresh interval in minutes", ge=1, le=525600)
+    parent_server_group_id: int = Field(description="Parent group ID (required by API)")
+    ui_color: str | None = Field(
+        None,
+        description="UI color for group",
+        pattern=r"^#[0-9a-fA-F]{6}$",
+    )
     notes: str | None = Field(None, description="Group notes")
-    policies: list | None = Field(None, description="Policy IDs to assign")
-
-
-class UpdateApprovalParams(ForbidExtraModel):
-    approval_id: int = Field(description="Approval ID")
-    status: str = Field(description="Status: approved or rejected")
-    notes: str | None = Field(None, description="Approval notes")
+    policies: list[int] | None = Field(None, description="Policy IDs to assign")
 
 
 class ZoneAssignment(ForbidExtraModel):
@@ -679,31 +579,8 @@ class InviteUserParams(ForbidExtraModel):
         return self
 
 
-class ListZonesParams(AccountIdMixin, ForbidExtraModel):
-    page: int | None = Field(None, ge=0, description="Page number")
-    limit: int | None = Field(None, ge=1, le=500, description="Results per page")
-
-
-# ------------------------------------------------------------------------
-# DELETE Operation Params
-# ------------------------------------------------------------------------
-
-
-class DeleteDeviceParams(OrgIdRequiredMixin, ForbidExtraModel):
-    device_id: int = Field(description="Device/Server ID to delete")
-
-
 class DeleteServerGroupParams(OrgIdRequiredMixin, ForbidExtraModel):
     group_id: int = Field(description="Server group ID to delete")
-
-
-class DeletePolicyParams(OrgIdRequiredMixin, ForbidExtraModel):
-    policy_id: int = Field(description="Policy ID to delete")
-
-
-class DeleteUserApiKeyParams(ForbidExtraModel):
-    user_id: int = Field(description="User ID")
-    api_key_id: int = Field(description="API key ID to delete")
 
 
 class RemoveUserFromAccountParams(ForbidExtraModel):
@@ -711,58 +588,16 @@ class RemoveUserFromAccountParams(ForbidExtraModel):
     user_id: UUID = Field(description="User UUID to remove from account")
 
 
-class DeleteActionSetParams(OrgIdRequiredMixin, ForbidExtraModel):
-    action_set_id: int = Field(description="Action set ID to delete")
-
-
-class BulkDeleteActionSetsParams(OrgIdRequiredMixin, ForbidExtraModel):
-    action_set_ids: list = Field(description="List of action set IDs to delete")
-
-
-class DeleteGlobalApiKeyParams(ForbidExtraModel):
-    key_id: str = Field(description="Global API key ID to delete")
-
-
-# ------------------------------------------------------------------------
-# Additional GET Operation Params
-# ------------------------------------------------------------------------
-
-
-class GetAccountParams(AccountIdMixin, ForbidExtraModel):
-    pass
-
-
-class ListAccountRbacRolesParams(AccountIdMixin, ForbidExtraModel):
-    pass
-
-
-class GetAccountUserParams(AccountIdMixin, ForbidExtraModel):
-    user_id: str = Field(description="User UUID")
-
-
-class GetUserZonesParams(AccountIdMixin, ForbidExtraModel):
-    user_id: str = Field(description="User UUID")
-
-
-class GetZoneParams(AccountIdMixin, ForbidExtraModel):
-    zone_id: str = Field(description="Zone ID (UUID)")
-
-
-class GetZoneUsersParams(AccountIdMixin, ForbidExtraModel):
-    zone_id: str = Field(description="Zone ID (UUID)")
-
-
-class ListApprovalsParams(OrgIdRequiredMixin, ForbidExtraModel):
-    page: int | None = Field(None, ge=0, description="Page number")
-    limit: int | None = Field(None, ge=1, le=500, description="Results per page")
-
-
 class ListDataExtractsParams(OrgIdRequiredMixin, ForbidExtraModel):
     pass
 
 
 class GetDataExtractParams(OrgIdRequiredMixin, ForbidExtraModel):
-    extract_id: str = Field(description="Data extract ID")
+    extract_id: str = Field(
+        description="Data extract ID",
+        max_length=200,
+        pattern=r"^[a-zA-Z0-9_\-]+$",
+    )
 
 
 class ListOrgApiKeysParams(OrgIdRequiredMixin, ForbidExtraModel):
@@ -789,21 +624,16 @@ class GetActionSetSolutionsParams(OrgIdRequiredMixin, ForbidExtraModel):
     action_set_id: int = Field(description="Action set ID")
 
 
-class ListUserApiKeysParams(ForbidExtraModel):
-    user_id: int = Field(description="User ID")
-
-
-class GetUserApiKeyParams(ForbidExtraModel):
-    user_id: int = Field(description="User ID")
-    api_key_id: int = Field(description="API key ID")
-
-
 class SearchWisParams(OrgIdRequiredMixin, ForbidExtraModel):
-    query: str | None = Field(None, description="Search query")
+    query: str | None = Field(None, description="Search query", max_length=1000)
 
 
 class GetWisItemParams(OrgIdRequiredMixin, ForbidExtraModel):
-    item_id: str = Field(description="WIS item ID")
+    item_id: str = Field(
+        description="WIS item ID",
+        max_length=200,
+        pattern=r"^[a-zA-Z0-9_\-]+$",
+    )
 
 
 # ------------------------------------------------------------------------
@@ -811,80 +641,135 @@ class GetWisItemParams(OrgIdRequiredMixin, ForbidExtraModel):
 # ------------------------------------------------------------------------
 
 
-class CreateZoneParams(AccountIdMixin, ForbidExtraModel):
-    zone_data: dict = Field(description="Zone configuration data")
-
-
 class CreateDataExtractParams(OrgIdRequiredMixin, ForbidExtraModel):
-    extract_data: dict = Field(description="Data extract configuration")
+    extract_data: dict[str, Any] = Field(description="Data extract configuration")
 
+    @model_validator(mode="after")
+    def _limit_extract_data_size(self) -> CreateDataExtractParams:
+        import json
 
-class CreateGlobalApiKeyParams(ForbidExtraModel):
-    key_data: dict = Field(description="API key configuration")
-
-
-class DecryptGlobalApiKeyParams(ForbidExtraModel):
-    key_id: str = Field(description="Global API key ID to decrypt")
+        raw = json.dumps(self.extract_data, default=str)
+        if len(raw) > 50_000:
+            raise ValueError("extract_data payload exceeds 50 KB limit")
+        return self
 
 
 class UploadActionSetParams(OrgIdRequiredMixin, ForbidExtraModel):
-    action_set_data: dict = Field(description="Action set upload data")
+    action_set_data: dict[str, Any] = Field(description="Action set upload data")
+
+    @model_validator(mode="after")
+    def _limit_action_set_data_size(self) -> UploadActionSetParams:
+        import json
+
+        raw = json.dumps(self.action_set_data, default=str)
+        if len(raw) > 50_000:
+            raise ValueError("action_set_data payload exceeds 50 KB limit")
+        return self
 
 
-class AddActionToActionSetParams(OrgIdRequiredMixin, ForbidExtraModel):
-    action_set_id: int = Field(description="Action set ID")
-    action_data: dict = Field(description="Action configuration")
+# ============================================================================
+# POLICY HISTORY V2 SCHEMAS
+# ============================================================================
 
 
-class UploadPolicyFilesParams(OrgIdRequiredMixin, ForbidExtraModel):
-    policy_id: int = Field(description="Policy ID")
-    file_data: dict = Field(description="File upload data")
+class PolicyRunsV2Params(OrgIdRequiredMixin, ForbidExtraModel):
+    start_time: str | None = Field(None, description="Start time filter (ISO format)")
+    end_time: str | None = Field(None, description="End time filter (ISO format)")
+    policy_name: str | None = Field(None, description="Filter by policy name", max_length=500)
+    policy_uuid: UUID | None = Field(None, description="Filter by policy UUID")
+    policy_type: str | None = Field(None, description="Filter by policy type", max_length=100)
+    result_status: str | None = Field(None, description="Filter by result status", max_length=100)
+    sort: str | None = Field(None, description="Sort order", max_length=100)
+    page: int | None = Field(None, ge=0, description="Page number")
+    limit: int | None = Field(None, ge=1, le=5000, description="Results per page")
 
 
-class AddDeviceQueueCommandParams(OrgIdRequiredMixin, ForbidExtraModel):
-    device_id: int = Field(description="Device ID")
-    command_data: dict = Field(description="Command configuration")
+class PolicyRunCountParams(OrgIdRequiredMixin, ForbidExtraModel):
+    days: int | None = Field(None, ge=1, le=365, description="Number of days to look back")
 
 
-class CreateUserApiKeyParams(ForbidExtraModel):
-    user_id: int = Field(description="User ID")
-    key_data: dict = Field(description="API key configuration")
+class PolicyRunsByPolicyParams(OrgIdRequiredMixin, ForbidExtraModel):
+    pass
 
 
-class DecryptUserApiKeyParams(ForbidExtraModel):
-    user_id: int = Field(description="User ID")
-    api_key_id: int = Field(description="API key ID to decrypt")
+class PolicyHistoryDetailParams(OrgIdRequiredMixin, ForbidExtraModel):
+    policy_uuid: UUID = Field(description="Policy UUID")
 
 
-# ------------------------------------------------------------------------
-# Additional PUT/PATCH Operation Params
-# ------------------------------------------------------------------------
+class PolicyRunsForPolicyParams(OrgIdRequiredMixin, ForbidExtraModel):
+    policy_uuid: UUID = Field(description="Policy UUID")
+    report_days: int | None = Field(None, ge=1, le=365, description="Days to look back")
+    sort: str | None = Field(None, description="Sort order", max_length=100)
 
 
-class UpdateGlobalApiKeyParams(ForbidExtraModel):
-    key_id: str = Field(description="Global API key ID")
-    key_data: dict = Field(description="Updated API key configuration")
+class PolicyRunDetailV2Params(OrgIdRequiredMixin, ForbidExtraModel):
+    policy_uuid: UUID = Field(description="Policy UUID")
+    exec_token: UUID = Field(description="Execution token")
+    sort: str | None = Field(None, description="Sort order", max_length=100)
+    result_status: str | None = Field(None, description="Filter by result status", max_length=100)
+    device_name: str | None = Field(None, description="Filter by device name", max_length=500)
+    page: int | None = Field(None, ge=0, description="Page number")
+    limit: int | None = Field(None, ge=1, le=5000, description="Results per page")
 
 
-class PatchUserParams(OrgIdRequiredMixin, ForbidExtraModel):
-    user_id: int = Field(description="User ID")
-    user_data: dict = Field(description="Partial user update data")
+# ============================================================================
+# AUDIT V2 (OCSF) SCHEMAS
+# ============================================================================
 
 
-class UpdateUserApiKeyParams(ForbidExtraModel):
-    user_id: int = Field(description="User ID")
-    api_key_id: int = Field(description="API key ID")
-    key_data: dict = Field(description="Updated API key configuration")
+class AuditEventsOcsfParams(OrgIdRequiredMixin, ForbidExtraModel):
+    date: str = Field(description="Date to query (YYYY-MM-DD)", pattern=r"^\d{4}-\d{2}-\d{2}$")
+    category_name: str | None = Field(None, description="OCSF event category name", max_length=200)
+    type_name: str | None = Field(None, description="OCSF event type name", max_length=200)
+    cursor: str | None = Field(None, description="Pagination cursor", max_length=2000)
+    limit: int | None = Field(None, ge=1, le=500, description="Maximum events to return")
 
 
-class MCPError(BaseModel):
-    code: str | None
-    message: str
-    status: int
+# ============================================================================
+# ADVANCED DEVICE SEARCH SCHEMAS
+# ============================================================================
 
 
-class ToolResult(BaseModel):
-    response: ToolResponse
-    deprecated_endpoint: bool = Field(
-        True, description="Whether Automox notes this endpoint as deprecated"
-    )
+class AdvancedDeviceSearchParams(ForbidExtraModel):
+    query: dict[str, Any] | None = Field(None, description="Structured query for device search")
+
+    @model_validator(mode="after")
+    def _limit_query_size(self) -> AdvancedDeviceSearchParams:
+        if self.query is not None:
+            import json
+
+            raw = json.dumps(self.query, default=str)
+            if len(raw) > 50_000:
+                raise ValueError("query payload exceeds 50 KB limit")
+        return self
+
+    page: int | None = Field(None, ge=0, description="Page number")
+    limit: int | None = Field(None, ge=1, le=500, description="Results per page")
+
+
+class DeviceSearchTypeaheadParams(ForbidExtraModel):
+    field: str = Field(description="Field name to get suggestions for", max_length=100)
+    prefix: str = Field(description="Search prefix", max_length=500)
+
+
+class DeviceByUuidParams(ForbidExtraModel):
+    device_uuid: UUID = Field(description="Device UUID")
+
+
+# ============================================================================
+# COMPOUND TOOL SCHEMAS
+# ============================================================================
+
+
+class PatchTuesdayReadinessParams(OrgIdRequiredMixin, ForbidExtraModel):
+    group_id: int | None = Field(None, ge=1, description="Restrict to a specific server group")
+    org_uuid: str | None = Field(None, description="Organization UUID (auto-resolved)")
+
+
+class ComplianceSnapshotParams(OrgIdRequiredMixin, ForbidExtraModel):
+    group_id: int | None = Field(None, ge=1, description="Restrict to a specific server group")
+
+
+class DeviceFullProfileParams(OrgIdRequiredMixin, ForbidExtraModel):
+    device_id: int = Field(description="Device identifier", ge=1)
+    max_packages: int = Field(25, ge=0, le=500, description="Max packages to include")

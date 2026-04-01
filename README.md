@@ -5,349 +5,240 @@
 [![Publish Release](https://github.com/AutomoxCommunity/automox-mcp/actions/workflows/release.yml/badge.svg)](https://github.com/AutomoxCommunity/automox-mcp/actions/workflows/release.yml)
 [![PyPI version](https://badge.fury.io/py/automox-mcp.svg)](https://badge.fury.io/py/automox-mcp)
 
-This project provides a Model Context Protocol (MCP) server that enables Automox customers to access
-their Automox console through AI assistants. The server exposes several high-level workflow tools for
-managing devices, policies, and user accounts with a focus on common operational tasks.
+Talk to your Automox console using natural language. This [MCP server](https://modelcontextprotocol.io/) connects AI assistants like Claude to your Automox environment so you can manage devices, check compliance, run policies, and more — just by asking.
 
-Rather than a full API wrapper, this package aims to offer a curated set of Automox workflows tailored to
-common operational scenarios.
+```
+You:   "Are we ready for Patch Tuesday?"
+Claude: Here's your readiness summary — 3 devices need patches,
+        2 approvals are pending, and your patch policies run tonight at 2 AM...
+```
 
 > [!IMPORTANT]
-> The project is under active development. Functionality may change before a stable 1.0 release. Contributions and suggestions for additional workflows are welcome! Please provide any feedback through [GitHub Issues](https://github.com/AutomoxCommunity/automox-mcp/issues).
+> The project is under active development. Contributions and suggestions are welcome via [GitHub Issues](https://github.com/AutomoxCommunity/automox-mcp/issues).
 
 > [!CAUTION]
-> Please keep in mind that AI is still nowhere near perfect and it can make mistakes. The data it produces can be incorrect or incomplete. If you see this happening consistently with the MCP server, please open a [GitHub Issue](https://github.com/AutomoxCommunity/automox-mcp/issues) so we can investigate and add stronger guardrails around responses.
+> AI assistants can make mistakes. Data produced by the MCP server may be incorrect or incomplete. If you see this happening consistently, please [open an issue](https://github.com/AutomoxCommunity/automox-mcp/issues).
 
-## Table of Contents
+## Quick Start
 
-- [Available Tools](#available-tools)
-  - [Device Management (6 tools)](#device-management-6-tools)
-  - [Policy Management (9 tools)](#policy-management-9-tools)
-  - [Account Management (2 tools)](#account-management-2-tools)
-  - [Audit Trail (1 tool)](#audit-trail-1-tool)
-  - [Example Workflows](#example-workflows)
-  - [Tool Parameters](#tool-parameters)
-- [Setup & Usage](#setup--usage)
-  - [Prerequisites](#prerequisites)
-  - [Finding the values in your console](#finding-the-values-in-your-console)
-  - [Environment Configuration](#environment-configuration)
-  - [Quick Start (No Installation Required)](#quick-start-no-installation-required)
-  - [Run Over HTTP or SSE](#run-over-http-or-sse)
-  - [Alternative: Persistent Installation](#alternative-persistent-installation)
-- [Editor/Assistant Integrations](#editorassistant-integrations)
-  - [If you have Claude CLI installed](#if-you-have-claude-cli-installed)
-  - [Using uvx (recommended)](#using-uvx-recommended)
-  - [With Individual Environment Variables](#with-individual-environment-variables)
-- [Contributing](#contributing)
-  - [Getting started](#getting-started)
-  - [Testing](#testing)
-  - [Running tests](#running-tests)
-  - [MCP Scanner](#mcp-scanner)
-- [Versioning & Release Notes](#versioning--release-notes)
-- [License](#license)
-- [Support](#support)
+### 1. Get your Automox credentials
 
-## Available Tools
+You need three values from the [Automox Console](https://console.automox.com):
 
-The MCP server exposes 18 high-level workflow tools designed for common Automox management tasks:
+| Value | Where to find it |
+|---|---|
+| **API Key** | Settings > Secrets & Keys > Add API Key ([docs](https://docs.automox.com/product/Product_Documentation/Settings/Managing_Keys.htm)) |
+| **Account UUID** | Settings > Secrets & Keys (shown on the page) |
+| **Org ID** | The numeric ID in the URL when viewing your organization |
 
-### Device Management (6 tools)
-- **`list_devices`** - Summarize device inventory and policy status across the organization. Includes unmanaged devices by default and supports `policy_status`/`managed` filters so you can zero in on, for example, non-compliant managed endpoints.
-- **`device_detail`** - Return curated device context (recent policy status, assignments, queued commands, key facts). Pass `include_raw_details=true` only when you explicitly need a sanitized slice of the raw Automox payload.
-- **`devices_needing_attention`** - Surface Automox devices flagged for immediate action.
-- **`search_devices`** - Search Automox devices by hostname, IP, tag, status, or severity of missing patches.
-- **`device_health_metrics`** - Aggregate device health metrics for the organization. Supply `limit` to sample fewer devices (default 500) and `max_stale_devices` to cap the stale-device list for token-friendly responses.
-- **`execute_device_command`** - Issue an immediate command to a device (scan, patch_all, patch_specific, reboot).
+> Both global and org-scoped API keys work. API Key and Account UUID are always required. Org ID is recommended but optional — some tools that don't require org context will work without it.
 
-### Policy Management (9 tools)
-- **`policy_health_overview`** - Summarize recent Automox policy activity. Omit `org_uuid` to let the server resolve it from `AUTOMOX_ORG_ID` / `AUTOMOX_ORG_UUID`.
-- **`policy_execution_timeline`** - Review recent executions for a policy.
-- **`policy_run_results`** - Fetch per-device results (stdout, stderr, exit codes) for a specific execution token returned by `policy_execution_timeline`.
-- **`policy_catalog`** - List Automox policies with type and status summaries. Supports `page` (0-indexed) and `limit` pagination; inspect `metadata.pagination.has_more`, read `metadata.notes`, and follow the optional `metadata.suggested_next_call` hint to keep fetching additional slices when needed.
-- **`policy_detail`** - Retrieve configuration and recent history for a policy.
-- **`apply_policy_changes`** - Preview or submit structured policy create/update operations. Automatically normalizes helper fields (`filter_name`, `filter_names`) and friendly schedule blocks into Automox’s expected payloads, ensuring required fields (e.g., `schedule_days`, `schedule_time`) are present before submission.
-- **`patch_approvals_summary`** - Summarize pending patch approvals and their severity.
-- **`decide_patch_approval`** - Approve or reject an Automox patch approval request.
-- **`execute_policy_now`** - Execute a policy immediately for remediation (all devices or specific device).
-
-### Account Management (2 tools)
-- **`invite_user_to_account`** - Invite a user to the Automox account with optional zone assignments.
-- **`remove_user_from_account`** - Remove a user from the Automox account by UUID.
-
-### Audit Trail (1 tool)
-- **`audit_trail_user_activity`** - Retrieve Automox audit trail events performed by a specific user on a given date, with optional pagination cursor support. Set `include_raw_events=true` to include sanitized event payloads when deeper investigation is required. Pass either the full email address or provide `actor_name`/partial email hints and the tool will resolve the matching Automox user automatically.
-
-
-### Example Workflows
-
-Below are some real-world examples of how you can utilize the MCP server with your AI assistant.
-
-#### Device Health Summary
-
-Get a quick snapshot of your device health:
-
-```
-Ask: "What can you tell me about the health of my devices in Automox?"
-```
-
-The MCP server will return a comprehensive summary including:
-- Overall fleet health (total devices, compliance rate)
-- Device status breakdown (ready, not ready, needs reboot, refreshing)
-- Patching status (devices with pending patches, devices needing attention)
-- Check-in recency analysis (last 24 hours, 7 days, 30 days, 30+ days)
-- Key observations and suggested next steps
-
-#### Reboot a Device
-
-Simple yet effective device management:
-
-```
-Ask: "Can you reboot the device 'Testing box' in Automox?"
-```
-
-The AI assistant will:
-1. Search for devices matching the hostname
-2. Present matching devices if there are multiple
-3. Execute the reboot command once confirmed
-4. Can even verify the reboot was successful by checking device uptime
-
-#### Create and Update Policies
-
-Create a patch policy to keep Firefox up to date:
-
-```
-Ask: "Can you create a patch policy that keeps Firefox up to date?
-     Make sure to include 'henry' somewhere in the name of the patch policy
-     and target the devices in the 'MCP testing' group."
-```
-
-The MCP server will:
-1. Look up the server group by name
-2. Create a patch policy with auto-patching enabled
-3. Configure the schedule (weekdays at 2 AM by default)
-4. Set up user notifications
-5. Display the created policy configuration
-
-You can also easily update policy schedules:
-
-```
-Ask: "Can you update the 'Auto-Patch Firefox - henry' policy to only run on weekdays?"
-```
-
-The AI will update the schedule from weekend to weekdays automatically.
-
-#### Check the Audit Log
-
-Review user activity in your Automox console:
-
-```
-Ask: "What did Mark Hansen do in our Automox console last week?"
-```
-
-The MCP server will:
-1. Query the audit trail for each day in the specified date range
-2. Summarize all activities by day
-3. Provide totals and highlight key actions (policy changes, device operations, user management)
-4. Identify patterns like policy cleanup or reorganization activities
-
-#### Report Generation
-
-The MCP server supports generating comprehensive reports (works best with Claude Desktop due to PDF generation capabilities):
-
-```
-Ask: "Generate a comprehensive report on our policy health and device status"
-```
-
-The AI can:
-- Gather data from multiple endpoints
-- Compile statistics and trends
-- Format the information into a readable report
-- Export to PDF format (when using Claude Desktop)
-
-> [!NOTE]
-> Report generation may take several minutes depending on organization size. Using a lighter model like Haiku can speed this up, though with potential trade-offs in detail. The process is highly customizable based on your needs.
-
-### Tool Parameters
-
-Most tools accept optional parameters for filtering and pagination:
-- **Device tools**: `group_id`, `limit`, `include_unmanaged`, `device_id`
-- **Policy tools**: `org_uuid` (optional; auto-resolved from configured Automox org), `window_days`, `report_days`, `policy_id`
-- **Search tools**: `hostname_contains`, `ip_address`, `tag`, `patch_status`
-- **Audit tools**: `date`, `actor_email`, `actor_uuid`, `cursor`, `limit`, `include_raw_events`, `org_uuid` (optional)
-- **Execution tools**:
-  - `execute_policy_now`: `policy_id` (required), `action` (remediateAll or remediateDevice), `device_id` (optional, required for remediateDevice)
-  - `execute_device_command`: `device_id` (required), `command_type` (scan, patch_all, patch_specific, reboot), `patch_names` (optional, required for patch_specific)
-  - `apply_policy_changes`: accepts one or more `operations` where each entry contains `action` (`create`/`update`) and a policy payload. The helper accepts convenient shorthands (`filter_name`, `filter_names`), converts friendly `schedule` blocks, and enforces Automox-friendly defaults (e.g., inclusion of `id` during updates).
-  - `policy_run_results`: `policy_uuid`, `exec_token`, and optional filters (`org_uuid`, `result_status`, `device_name`, pagination arguments).
-
-
-## Setup & Usage
-
-### Prerequisites
-- Python 3.11 or newer
-- [`uv`](https://docs.astral.sh/uv/) (recommended) or pip
-- Automox Account info
-  - Account UUID
-  - Org ID
-  - API credentials
-
-#### Finding the values in your console
-
-- **API Key**: Log in to Automox Console → Ellipsis (Top Right) → Secrets & Keys → Add API Key ([Docs](https://docs.automox.com/product/Product_Documentation/Settings/Managing_Keys.htm))
-- **Account UUID**: Also found in Secrets & Keys section.
-- **Org ID**: Your organization's 6 digit numeric identifier - you can usually find this in the URL when managing your organization in the Automox Console.
-
-### Environment Configuration
-
-Create a `.env` file with your API credentials:
-
-```bash
-cp .env.example .env
-```
-
-Then edit `.env` to add your credentials:
+### 2. Create a `.env` file
 
 ```bash
 AUTOMOX_API_KEY=your-api-key
-AUTOMOX_ACCOUNT_UUID=your-account-uuid-here
-AUTOMOX_ORG_ID=your-org-id-here
+AUTOMOX_ACCOUNT_UUID=your-account-uuid
+AUTOMOX_ORG_ID=your-org-id
 ```
 
-### Quick Start (No Installation Required)
+### 3. Connect to your AI assistant
 
-The easiest way to run the Automox MCP server is using `uvx`, which automatically downloads and runs the package:
-
-```bash
-uvx --env-file .env automox-mcp
-```
-
-This approach:
-- Requires no installation step
-- Automatically uses the latest version
-- Loads environment variables from your `.env` file
-- Used in MCP client configurations (see Editor/Assistant Integrations below)
-
-### Run Over HTTP or SSE
-
-The CLI entry point now supports all FastMCP transports. Pass `--transport http` to enable the modern streamable HTTP transport or `--transport sse` for Server-Sent Events.
-
-```bash
-# Streamable HTTP (recommended)
-uvx --env-file .env automox-mcp --transport http --host 127.0.0.1 --port 8000
-
-# Legacy SSE transport (only when your client requires SSE)
-uvx --env-file .env automox-mcp --transport sse --host 127.0.0.1 --port 8000
-```
-
-If you omit `--host`/`--port`, the CLI defaults to `127.0.0.1:8000`. The same values can be provided with environment variables (`AUTOMOX_MCP_TRANSPORT`, `AUTOMOX_MCP_HOST`, `AUTOMOX_MCP_PORT`, `AUTOMOX_MCP_PATH`) for headless deployments.
-
-### Alternative: Persistent Installation
-
-If you prefer a persistent installation, you can install the package globally:
-
-#### Using uv
-```bash
-uv tool install automox-mcp
-```
-
-#### Using pip
-```bash
-pip install automox-mcp
-```
-
-Then run with environment variables set in your shell:
-```bash
-export AUTOMOX_API_KEY="your-api-key"
-export AUTOMOX_ACCOUNT_UUID="your-account-uuid"
-export AUTOMOX_ORG_ID="your-org-id"
-automox-mcp
-```
-
-
-
-## Editor/Assistant Integrations
-
-You can integrate the Automox MCP server with your editor or AI assistant. Here are configuration examples for popular MCP clients:
-
-### If you have Claude CLI installed
-
+**Claude Code (CLI):**
 ```bash
 claude mcp add automox-mcp uvx -- --env-file /path/to/.env automox-mcp
 ```
 
-### Using uvx (recommended)
+**Claude Desktop / Cursor / any MCP client** — add to your MCP config:
 ```json
 {
   "mcpServers": {
     "automox-mcp": {
       "command": "uvx",
-      "args": [
-        "--env-file",
-        "/path/to/.env",
-        "automox-mcp"
-      ]
+      "args": ["--env-file", "/path/to/.env", "automox-mcp"]
     }
   }
 }
 ```
 
-### With Individual Environment Variables
-```json
-{
-  "mcpServers": {
-    "automox-mcp": {
-      "command": "uvx",
-      "args": ["automox-mcp"],
-      "env": {
-        "AUTOMOX_API_KEY": "your-api-key",
-        "AUTOMOX_ACCOUNT_UUID": "your-account-uuid-here",
-        "AUTOMOX_ORG_ID": "your-org-id-here"
-      }
-    }
-  }
-}
+That's it. Start asking questions.
+
+## What Can I Ask?
+
+The server exposes 80 tools across devices, policies, patches, groups, webhooks, worklets, vulnerability sync, maintenance windows, and more. You don't need to know the tool names — just describe what you want:
+
+| Ask this | What happens |
+|---|---|
+| "Are we ready for Patch Tuesday?" | Checks pending patches, approvals, and policy schedules |
+| "What is our compliance posture?" | Returns compliance rates, non-compliant devices, and health breakdown |
+| "Give me the full profile for the Caldera server" | Combines device details, inventory, packages, and policy status |
+| "What devices need attention?" | Surfaces devices flagged for immediate action |
+| "Reboot the device 'Testing box'" | Searches for the device and issues a reboot command |
+| "Create a patch policy for Firefox targeting the 'MCP testing' group" | Creates the policy with sensible defaults |
+| "What did Mark Hansen do in Automox last week?" | Queries the audit trail across the date range |
+| "Find all Windows devices not seen in 30 days" | Uses advanced device search with structured queries |
+| "Show me vulnerability remediation status" | Lists action sets with issues, solutions, and progress |
+| "Search the worklet catalog for USB security" | Browses community worklets with evaluation/remediation code |
+
+For the full list of tools, parameters, and MCP resources, see the **[Tool Reference](docs/tool-reference.md)**.
+
+> **Tip:** You can also ask the server itself — the `discover_capabilities` tool returns all available tools organized by domain.
+
+## Configuration
+
+### Environment Variables
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `AUTOMOX_API_KEY` | Yes | — | Automox API key |
+| `AUTOMOX_ACCOUNT_UUID` | Yes | — | Account UUID from Secrets & Keys |
+| `AUTOMOX_ORG_ID` | Recommended | — | Numeric organization ID (required by most tools) |
+| `AUTOMOX_MCP_READ_ONLY` | No | `false` | Disable all write operations (58 of 80 tools remain) |
+| `AUTOMOX_MCP_MODULES` | No | all | Comma-separated list of modules to load (see below) |
+| `AUTOMOX_MCP_TOKEN_BUDGET` | No | `4000` | Max estimated tokens per response before truncation |
+| `AUTOMOX_MCP_SANITIZE_RESPONSES` | No | `true` | Sanitize API data to mitigate prompt injection |
+| `AUTOMOX_MCP_TOOL_PREFIX` | No | — | Prefix all tool names (e.g., `automox`) to prevent cross-server collisions |
+| `AUTOMOX_MCP_LOG_FORMAT` | No | `text` | Log format: `text` or `json` (structured JSON for SIEM integration) |
+| `AUTOMOX_MCP_TRANSPORT` | No | `stdio` | Transport: `stdio`, `http`, or `sse` |
+| `AUTOMOX_MCP_HOST` | No | `127.0.0.1` | Bind address for HTTP/SSE |
+| `AUTOMOX_MCP_PORT` | No | `8000` | Bind port for HTTP/SSE |
+| `AUTOMOX_MCP_API_KEYS` | No | — | Comma-separated MCP endpoint API keys for HTTP/SSE Bearer-token auth (e.g., `key1,label:key2`) |
+| `AUTOMOX_MCP_API_KEY_FILE` | No | — | Path to a file containing MCP endpoint API keys (one per line) |
+| `AUTOMOX_MCP_OAUTH_ISSUER` | No | — | OIDC issuer URL for JWT auth (e.g., `https://auth.example.com/realms/main`) |
+| `AUTOMOX_MCP_OAUTH_JWKS_URI` | No | — | JWKS endpoint for JWT key rotation (auto-derived from issuer if omitted) |
+| `AUTOMOX_MCP_OAUTH_AUDIENCE` | When JWT auth | — | Expected JWT audience claim (prevents token passthrough); **required** when `AUTOMOX_MCP_OAUTH_ISSUER` is set |
+| `AUTOMOX_MCP_OAUTH_SERVER_URL` | No | — | Canonical server URL; enables RFC 9728 Protected Resource Metadata |
+| `AUTOMOX_MCP_OAUTH_SCOPES` | No | — | Comma-separated required OAuth scopes |
+| `AUTOMOX_MCP_ALLOWED_ORIGINS` | No | — | Extra allowed Origin headers for DNS rebinding protection (comma-separated) |
+| `AUTOMOX_MCP_ALLOWED_HOSTS` | No | — | Extra allowed Host headers for DNS rebinding protection (comma-separated) |
+| `AUTOMOX_MCP_DNS_REBINDING_PROTECTION` | No | `true` | Set to `false` to disable DNS rebinding protection (not recommended) |
+| `AUTOMOX_MCP_ALLOW_REMOTE_BIND` | No | `false` | Allow binding to non-loopback addresses (required for `0.0.0.0` or external IPs) |
+
+### Read-Only Mode
+
+```bash
+AUTOMOX_MCP_READ_ONLY=true
 ```
+
+Disables all write operations. Only read-only tools are registered (58 of 80). Useful for auditing and monitoring.
+
+### Modular Loading
+
+Load only the tool modules you need:
+
+```bash
+AUTOMOX_MCP_MODULES=devices,policies
+```
+
+Available modules: `audit`, `audit_v2`, `devices`, `device_search`, `policies`, `policy_history`, `users`, `groups`, `events`, `reports`, `packages`, `webhooks`, `worklets`, `data_extracts`, `vuln_sync`, `compound`, `policy_windows`
+
+Both settings can be combined:
+
+```bash
+AUTOMOX_MCP_READ_ONLY=true
+AUTOMOX_MCP_MODULES=devices,policies
+```
+
+### HTTP Transport
+
+For non-stdio deployments:
+
+```bash
+uvx --env-file .env automox-mcp --transport http --host 127.0.0.1 --port 8000
+```
+
+### Endpoint Authentication
+
+When deploying over HTTP or SSE, you can require authentication on the MCP endpoint (separate from the Automox API key). Two strategies are supported:
+
+**Static API keys** (simple):
+```bash
+automox-mcp --generate-key                         # generate a key
+export AUTOMOX_MCP_API_KEYS="amx_mcp_a1b2c3..."    # or use a key file
+```
+
+**OAuth 2.1 / JWT** (enterprise IdP integration):
+```bash
+export AUTOMOX_MCP_OAUTH_ISSUER="https://auth.example.com/realms/main"
+export AUTOMOX_MCP_OAUTH_AUDIENCE="https://mcp.example.com"
+export AUTOMOX_MCP_OAUTH_SERVER_URL="https://mcp.example.com"  # enables RFC 9728 metadata
+```
+
+Clients must include `Authorization: Bearer <token>` on every request. Unauthenticated requests receive `401 Unauthorized` with proper `WWW-Authenticate` headers. No effect on stdio transport.
+
+## Security
+
+The Automox MCP server is designed for enterprise deployment with defense-in-depth security controls.
+
+**Highlights:**
+
+- **Read-only mode** (`AUTOMOX_MCP_READ_ONLY`) disables all 22 write tools
+- **Module filtering** (`AUTOMOX_MCP_MODULES`) for least-privilege tool loading
+- **Correlation IDs** on every tool call, forwarded to Automox API as `X-Correlation-ID`
+- **Rate limiting** (30 calls/60s) with token budget estimation and auto-truncation
+- **API key isolation** — stored as private attribute with per-request auth injection (no header storage)
+- **Generic error responses** — no internal paths, connection strings, or API keys in error output
+- **Prompt injection mitigation** — API response sanitization with Unicode normalization, homoglyph defense, HTML tag/script stripping, and reference-style markdown stripping
+- **Webhook secret handling** — secrets stripped from idempotency cache after creation
+- **Structured JSON logging** (`AUTOMOX_MCP_LOG_FORMAT=json`) for SIEM integration
+- **Tool name prefixing** (`AUTOMOX_MCP_TOOL_PREFIX`) to prevent cross-server collisions
+- **Sigstore-signed releases** with CycloneDX SBOM
+- **SSRF prevention** — webhook URLs validated against private/loopback IPs and cloud metadata endpoints
+- **MCP endpoint authentication** — static API keys or OAuth 2.1/JWT with audience binding and RFC 9728 Protected Resource Metadata
+- **DNS rebinding protection** — Origin and Host header validation on all HTTP/SSE connections per the MCP transport spec
+- **Security response headers** — `X-Content-Type-Options`, `X-Frame-Options`, `CSP`, `Cache-Control: no-store`, `Strict-Transport-Security` on all HTTP responses
+- **Authentication rate limiting** — blocks IPs after repeated auth failures to mitigate brute-force attacks
+- **Remote bind protection** — non-loopback HTTP/SSE binding requires explicit `--allow-remote-bind` opt-in
+- **59 security hardening items** (V-001 through V-149, S-001 through S-006) documented in CHANGELOG and SECURITY.md
+
+For vulnerability reporting and the full threat model, see [SECURITY.md](SECURITY.md).
+For deployment hardening (containers, Kubernetes, MCP gateways, TLS, authentication), see the [Deployment Security Guide](docs/deployment-security.md).
+Security posture is benchmarked against the [Wiz MCP Security Best Practices](https://www.wiz.io/blog/mcp-security-best-practices) cheat sheet.
+
+> **Note**: For network-accessible deployments, enable endpoint authentication (static keys via `AUTOMOX_MCP_API_KEYS` or JWT via `AUTOMOX_MCP_OAUTH_ISSUER`) and/or place the server behind an MCP gateway or authenticating reverse proxy. TLS termination is the deployer's responsibility.
+
+## Alternative Installation
+
+The Quick Start above uses `uvx` which requires no installation. If you prefer a persistent install:
+
+```bash
+# Using uv
+uv tool install automox-mcp
+
+# Using pip
+pip install automox-mcp
+```
+
+Then set the environment variables in your shell and run `automox-mcp`.
 
 ## Contributing
-
-### Getting started
-Clone the repository:
 
 ```bash
 git clone https://github.com/AutomoxCommunity/automox-mcp.git
 cd automox-mcp
-```
-
-Install in development mode (the repo pins Python 3.13 via `.python-version`):
-```bash
-# Ensure the pinned interpreter is available
 uv python install
-
-# Create .venv and install project + dev dependencies
 uv sync --python 3.13 --dev
 ```
 
-#### Testing
+### Testing
 
-We recommend using the **MCP Inspector** for interactive debugging. We include a `fastmcp.json` configuration for easy startup.
-
+Interactive debugging with MCP Inspector:
 ```bash
 fastmcp dev
 ```
-This should open at http://localhost:6274 where you can test tools interactively.
 
-If you want to test locally with something like Claude Code:
-```bash
-claude mcp add automox-mcp uvx -- --from . --env-file .env automox-mcp
-```
-
-### Running tests
+Run unit tests:
 ```bash
 uv run --python 3.13 --dev pytest
 ```
 
+Run production smoke tests (requires Automox credentials):
+```bash
+uv run python tests/smoke_production.py
+```
+
 ### MCP Scanner
-We use [Cisco's MCP Scanner](https://github.com/cisco-ai-defense/mcp-scanner) for static analysis of the MCP server implementation.
+
+Static analysis with [Cisco's MCP Scanner](https://github.com/cisco-ai-defense/mcp-scanner):
 
 ```bash
 mcp-scanner \
@@ -355,7 +246,7 @@ mcp-scanner \
   --stdio-args run automox-mcp \
   --stdio-env AUTOMOX_API_KEY=test-api-key \
   --stdio-env AUTOMOX_ACCOUNT_UUID=test-account \
-  --stdio-env AUTOMOX_ORG_ID=0 \
+  --stdio-env AUTOMOX_ORG_ID=1 \
   --stdio-env AUTOMOX_MCP_SKIP_DOTENV=1 \
   --analyzers yara \
   --format summary
@@ -363,17 +254,12 @@ mcp-scanner \
 
 ## Versioning
 
-The project follows [Semantic Versioning](https://semver.org).
-
-When preparing a release:
-1. Update `pyproject.toml` with the new version number.
-2. Commit the changes and create a matching Git tag (for example, `v0.1.0`).
-3. The release workflow will automatically build and publish to PyPI when you push the tag.
+Follows [Semantic Versioning](https://semver.org). Update `pyproject.toml`, commit, tag (e.g., `v0.1.0`), and push — the release workflow publishes to PyPI automatically.
 
 ## License
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+MIT License. See [LICENSE](LICENSE).
 
 ## Support
-This is a community-driven project, actively maintained but not officially supported by Automox. 
 
-To request assistance, please open a GitHub Issue. This is the appropriate channel for questions, bug reports, feature requests, enhancement suggestions, and documentation updates.
+Community-driven project, actively maintained but not officially supported by Automox. For questions, bugs, or feature requests, [open a GitHub Issue](https://github.com/AutomoxCommunity/automox-mcp/issues).

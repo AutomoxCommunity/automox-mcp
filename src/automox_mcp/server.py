@@ -10,6 +10,10 @@ from typing import Any, cast
 
 from fastmcp import FastMCP
 
+from .auth import create_auth_provider
+from .client import AutomoxClient
+from .middleware import CorrelationMiddleware
+from .prompts import register_prompts
 from .resources import register_resources
 from .tools import register_tools
 
@@ -23,7 +27,7 @@ else:
     _load_dotenv_fn = _dotenv_loader
 
 
-def _patch_stdio_transport() -> None:
+def _patch_stdio_transport() -> None:  # pragma: no cover - patches MCP internals
     """Ensure stdio transport shuts down gracefully when pipes close."""
     try:
         from mcp.server import stdio as stdio_module
@@ -126,11 +130,24 @@ def _get_env(name: str) -> str | None:
 
 
 def _validate_env() -> None:
-    """Validate required environment variables are present."""
-    required_vars = ["AUTOMOX_API_KEY", "AUTOMOX_ACCOUNT_UUID", "AUTOMOX_ORG_ID"]
-    missing = [var for var in required_vars if _get_env(var) is None]
+    """Validate required environment variables are present and well-formed."""
+    required_vars = ["AUTOMOX_API_KEY", "AUTOMOX_ACCOUNT_UUID"]
+    env_values = {var: _get_env(var) for var in required_vars}
+    missing = [var for var, val in env_values.items() if val is None]
     if missing:
         raise RuntimeError(f"Missing required environment variables: {missing}")
+
+    # AUTOMOX_ORG_ID must be a positive integer when provided
+    org_id_raw = _get_env("AUTOMOX_ORG_ID")
+    if org_id_raw is not None:
+        try:
+            org_id_int = int(org_id_raw)
+        except ValueError as exc:
+            raise RuntimeError(
+                f"AUTOMOX_ORG_ID must be a positive integer, got: {org_id_raw!r}"
+            ) from exc
+        if org_id_int <= 0:
+            raise RuntimeError(f"AUTOMOX_ORG_ID must be a positive integer, got: {org_id_int}")
 
 
 def _load_env_file() -> None:
@@ -143,23 +160,68 @@ def _load_env_file() -> None:
 
 
 def create_server() -> FastMCP:
+    """Create and configure the Automox MCP server with all tools, resources, and prompts."""
     _patch_stdio_transport()
     _load_env_file()
     _validate_env()
+
+    from .utils.logging import configure_logging
+
+    configure_logging()
+
+    from contextlib import asynccontextmanager
+
+    client = AutomoxClient()
+
+    @asynccontextmanager
+    async def _lifespan(app):
+        yield
+        await client.aclose()
+
+    auth = create_auth_provider()
+
     server: FastMCP = FastMCP(
         name="Automox MCP",
+        lifespan=_lifespan,
+        auth=auth,
+        middleware=[CorrelationMiddleware()],
         instructions=(
-            "Curated Automox workflows for policy health, device insights, remediation, and "
-            "account management. Use these tools to summarize policies, inspect devices, "
-            "surface devices needing attention, execute policies, run device commands for "
-            "immediate remediation, and manage account invitations.\n\n"
+            "Curated Automox workflows for policy health, device insights, remediation, "
+            "account management, server group management, package/patch visibility, "
+            "event history, compliance reports, and webhook subscriptions.\n\n"
+            "CAPABILITIES:\n"
+            "- Devices: list, search, detail (with inventory), health metrics, "
+            "devices needing attention, execute commands (scan/patch/reboot)\n"
+            "- Advanced Device Search: saved searches, structured queries, "
+            "typeahead, field metadata, device assignments (Server Groups API v2)\n"
+            "- Policies: catalog, detail, health overview, execution timeline, "
+            "run results, create/update, execute, patch approvals\n"
+            "- Policy History v2: runs with time-range filters, run counts, "
+            "runs grouped by policy, UUID-based queries\n"
+            "- Packages: list device packages, search organization packages\n"
+            "- Groups: list, get, create, update, delete server groups\n"
+            "- Events: list organization events with filters\n"
+            "- Reports: pre-patch readiness, non-compliant devices\n"
+            "- Webhooks: list event types, list/get/create/update/delete webhooks, "
+            "test delivery, rotate signing secret\n"
+            "- Worklets: search community worklet catalog, get worklet details\n"
+            "- Data Extracts: list, get, create bulk data extracts\n"
+            "- Vuln Sync: remediation action sets, issues, solutions, uploads\n"
+            "- Compound: patch tuesday readiness, compliance snapshot\n"
+            "- Audit: audit trail activity search, OCSF-formatted events (v2)\n"
+            "- Account: invite/remove users, list org API keys\n\n"
             "IMPORTANT: When working with Automox data, proactively check available resources:\n"
             "- Use resource://servergroups/list to translate server_group_id values to "
             "human-readable names\n"
             "- Use resource://policies/quick-start for copy-paste policy creation templates "
             "(RECOMMENDED)\n"
             "- Use resource://policies/schema when creating or updating policies\n"
-            "- Use resource://policies/schedule-syntax for scheduling help\n\n"
+            "- Use resource://policies/schedule-syntax for scheduling help\n"
+            "- Use resource://webhooks/event-types for available webhook event types\n"
+            "- Use resource://filters/syntax for device filtering reference\n"
+            "- Use resource://patches/categories for patch severity and classification reference\n"
+            "- Use resource://platform/supported-os for supported OS matrix\n"
+            "- Use resource://api/rate-limits for rate limiting guidance\n\n"
             "SCHEDULE INTERPRETATION:\n"
             "- When you retrieve a policy with policy_detail, check the '_important' field "
             "for current schedule\n"
@@ -171,13 +233,18 @@ def create_server() -> FastMCP:
             "- Use format: {'action': 'update', 'policy_id': 12345, 'policy': "
             "{'schedule': {'days': ['weekend'], 'time': '02:00'}}}\n"
             "- Only include fields you want to change in the policy object\n\n"
+            "WEBHOOKS:\n"
+            "- When creating a webhook, SAVE THE SECRET immediately — it is only shown once\n"
+            "- When rotating a webhook secret, the old secret is immediately invalidated\n"
+            "- Max 5 webhooks per organization, HTTPS URLs only\n\n"
             "Always translate numeric server_group_id values to group names in your responses."
         ),
     )
 
-    # Register tools and resources
-    register_tools(server)
-    register_resources(server)
+    # Register tools, resources, and prompts
+    register_tools(server, client=client)
+    register_resources(server, client=client)
+    register_prompts(server)
 
     return server
 
@@ -185,7 +252,7 @@ def create_server() -> FastMCP:
 __all__ = ["create_server"]
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     server: FastMCP = create_server()
     run = getattr(server, "run", None)
     if callable(run):

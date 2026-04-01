@@ -2,50 +2,33 @@
 
 from __future__ import annotations
 
+import logging
 import os
-from collections.abc import Awaitable, Callable
 from typing import Any, Literal
 
 from fastmcp import FastMCP
 from fastmcp.exceptions import ToolError
-from pydantic import BaseModel, ValidationError
 
 from .. import workflows
-from ..client import AutomoxAPIError, AutomoxClient
-from ..schemas import InviteUserParams, RemoveUserFromAccountParams, ZoneAssignment
+from ..client import AutomoxClient
+from ..schemas import (
+    InviteUserParams,
+    ListOrgApiKeysParams,
+    RemoveUserFromAccountParams,
+    ZoneAssignment,
+)
 from ..utils.tooling import (
-    RateLimitError,
-    as_tool_response,
-    enforce_rate_limit,
-    format_error,
+    call_tool_workflow,
+    check_idempotency,
+    maybe_format_markdown,
+    store_idempotency,
 )
 
+logger = logging.getLogger(__name__)
 
-def register(server: FastMCP) -> None:
+
+def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient) -> None:
     """Register account-related tools."""
-
-    async def _call(
-        func: Callable[..., Awaitable[dict[str, Any]]],
-        params_model: type[BaseModel] | None,
-        raw_params: dict[str, Any],
-        api: str | None = None,
-    ) -> dict[str, Any]:
-        try:
-            await enforce_rate_limit(api)
-            params = dict(raw_params)
-            payload = params
-            if params_model is not None:
-                model = params_model(**params)
-                payload = model.model_dump(mode="python", exclude_none=True)
-            async with AutomoxClient(default_api=api) as client:
-                result: dict[str, Any] = await func(client, **payload)
-        except (ValidationError, ValueError) as exc:
-            raise ToolError(str(exc)) from exc
-        except RateLimitError as exc:
-            raise ToolError(str(exc)) from exc
-        except AutomoxAPIError as exc:
-            raise ToolError(format_error(exc)) from exc
-        return as_tool_response(result)
 
     def _resolve_account_id(explicit: str | None = None) -> str:
         if explicit:
@@ -58,47 +41,84 @@ def register(server: FastMCP) -> None:
             )
         return env_value
 
-    @server.tool(
-        name="invite_user_to_account",
-        description="Invite a user to the Automox account with optional zone assignments.",
-        annotations={"destructiveHint": True},
-    )
-    async def invite_user_to_account(
-        email: str,
-        account_rbac_role: Literal["global-admin", "no-global-access"],
-        zone_assignments: list[ZoneAssignment] | None = None,
-    ) -> dict[str, Any]:
-        params = {
-            "account_id": _resolve_account_id(None),
-            "email": email,
-            "account_rbac_role": account_rbac_role,
-            "zone_assignments": zone_assignments,
-        }
-        return await _call(
-            workflows.invite_user_to_account,
-            InviteUserParams,
-            params,
-            api="console",
+    if not read_only:
+
+        @server.tool(
+            name="invite_user_to_account",
+            description="Invite a user to the Automox account with optional zone assignments.",
+            annotations={"destructiveHint": True},
         )
+        async def invite_user_to_account(
+            email: str,
+            account_rbac_role: Literal["global-admin", "no-global-access"],
+            zone_assignments: list[ZoneAssignment] | None = None,
+            request_id: str | None = None,
+        ) -> dict[str, Any]:
+            cached = await check_idempotency(request_id, "invite_user_to_account")
+            if cached is not None:
+                return cached
+
+            params = {
+                "account_id": _resolve_account_id(None),
+                "email": email,
+                "account_rbac_role": account_rbac_role,
+                "zone_assignments": zone_assignments,
+            }
+            result = await call_tool_workflow(
+                client,
+                workflows.invite_user_to_account,
+                params,
+                params_model=InviteUserParams,
+            )
+            await store_idempotency(request_id, "invite_user_to_account", result)
+            return result
+
+        @server.tool(
+            name="remove_user_from_account",
+            description="Remove a user from the Automox account by UUID.",
+            annotations={"destructiveHint": True},
+        )
+        async def remove_user_from_account(
+            user_id: str,
+            request_id: str | None = None,
+        ) -> dict[str, Any]:
+            cached = await check_idempotency(request_id, "remove_user_from_account")
+            if cached is not None:
+                return cached
+
+            params = {
+                "account_id": _resolve_account_id(None),
+                "user_id": user_id,
+            }
+            result = await call_tool_workflow(
+                client,
+                workflows.remove_user_from_account,
+                params,
+                params_model=RemoveUserFromAccountParams,
+            )
+            await store_idempotency(request_id, "remove_user_from_account", result)
+            return result
 
     @server.tool(
-        name="remove_user_from_account",
-        description="Remove a user from the Automox account by UUID.",
-        annotations={"destructiveHint": True},
+        name="list_org_api_keys",
+        description=(
+            "List API keys for the Automox organization. "
+            "Returns key names and IDs only — secrets are never exposed."
+        ),
     )
-    async def remove_user_from_account(
-        user_id: str,
+    async def list_org_api_keys(
+        output_format: str | None = "json",
     ) -> dict[str, Any]:
-        params = {
-            "account_id": _resolve_account_id(None),
-            "user_id": user_id,
-        }
-        return await _call(
-            workflows.remove_user_from_account,
-            RemoveUserFromAccountParams,
-            params,
-            api="console",
+        org_id = client.org_id
+        if org_id is None:
+            raise ToolError("org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly.")
+        result = await call_tool_workflow(
+            client,
+            workflows.list_org_api_keys,
+            {"org_id": org_id},
+            params_model=ListOrgApiKeysParams,
         )
+        return maybe_format_markdown(result, output_format)
 
 
 __all__ = ["register"]

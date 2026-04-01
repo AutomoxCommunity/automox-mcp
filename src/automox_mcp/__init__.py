@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 from collections.abc import Sequence
 
 from fastmcp import FastMCP
 
 from .server import create_server
+
+logger = logging.getLogger(__name__)
 
 
 class _LazyServer:
@@ -86,14 +89,35 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
         dest="show_banner",
         help="Suppress the FastMCP startup banner.",
     )
-    parser.set_defaults(show_banner=_env_flag("AUTOMOX_MCP_SHOW_BANNER"))
-
+    parser.add_argument(
+        "--allow-remote-bind",
+        action="store_true",
+        default=_env_flag("AUTOMOX_MCP_ALLOW_REMOTE_BIND"),
+        help=(
+            "Allow binding HTTP/SSE transports to non-loopback addresses. "
+            "Required when --host is not 127.0.0.1/::1/localhost. "
+            "Set AUTOMOX_MCP_API_KEYS or AUTOMOX_MCP_API_KEY_FILE to enable "
+            "built-in Bearer-token authentication, or use a reverse proxy."
+        ),
+    )
+    parser.add_argument(
+        "--generate-key",
+        action="store_true",
+        help="Generate a cryptographically secure MCP endpoint API key and exit.",
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: Sequence[str] | None = None) -> None:
     """Initialize and run the MCP server using the configured transport."""
     args = _parse_args(argv)
+
+    # --generate-key: print a new API key and exit (no server startup needed).
+    if args.generate_key:
+        from .auth import generate_api_key
+
+        print(generate_api_key())
+        return
 
     transport_env = _env_str("AUTOMOX_MCP_TRANSPORT")
     transport = args.transport or (transport_env or "stdio")
@@ -122,10 +146,56 @@ def main(argv: Sequence[str] | None = None) -> None:
             transport_kwargs["port"] = port
         if path is not None:
             transport_kwargs["path"] = path
-        if host is None and port is None:
-            # Provide sensible defaults that mirror the FastMCP CLI.
+        if host is None:
             transport_kwargs.setdefault("host", "127.0.0.1")
+        if port is None:
             transport_kwargs.setdefault("port", 8000)
+
+        # Transport security: DNS rebinding protection + security headers
+        from .transport_security import build_transport_security_middleware
+
+        resolved_host_for_sec = str(transport_kwargs.get("host", "127.0.0.1"))
+        resolved_port_for_sec = int(str(transport_kwargs.get("port", 8000)))
+        transport_kwargs["middleware"] = build_transport_security_middleware(
+            host=resolved_host_for_sec,
+            port=resolved_port_for_sec,
+        )
+
+        resolved_host = str(transport_kwargs.get("host", "127.0.0.1"))
+        _LOOPBACK = {"127.0.0.1", "::1", "localhost"}
+        if resolved_host not in _LOOPBACK:
+            from .auth import is_auth_configured
+
+            auth_active = is_auth_configured()
+
+            if not args.allow_remote_bind:
+                auth_hint = (
+                    "Set AUTOMOX_MCP_API_KEYS or AUTOMOX_MCP_API_KEY_FILE to enable "
+                    "built-in Bearer-token authentication, or use a reverse proxy."
+                )
+                raise SystemExit(
+                    f"Refusing to bind {transport} transport to non-loopback address "
+                    f"{resolved_host}.\n"
+                    f"Pass --allow-remote-bind (or set AUTOMOX_MCP_ALLOW_REMOTE_BIND=true) "
+                    f"to override.\n{auth_hint}"
+                )
+
+            if auth_active:
+                logger.info(
+                    "Binding %s transport to non-loopback address %s with "
+                    "MCP endpoint authentication enabled.",
+                    transport,
+                    resolved_host,
+                )
+            else:
+                logger.warning(
+                    "Binding %s transport to non-loopback address %s WITHOUT "
+                    "MCP endpoint authentication. Set AUTOMOX_MCP_API_KEYS or "
+                    "AUTOMOX_MCP_API_KEY_FILE to require Bearer tokens, or use "
+                    "an authenticating reverse proxy.",
+                    transport,
+                    resolved_host,
+                )
 
     mcp.run(transport=transport, show_banner=args.show_banner, **transport_kwargs)
 

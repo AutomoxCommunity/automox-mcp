@@ -195,13 +195,16 @@ def register_policy_resources(server: FastMCP) -> None:
         return {
             "overview": {
                 "description": (
-                    "Automox supports three policy types: patch, custom, and required_software"
+                    "Automox supports three policy types: patch, worklet (custom),"
+                    " and required_software"
                 ),
                 "supported_types": ["patch", "custom", "required_software"],
                 "operations": ["create", "update"],
                 "notes": [
                     "Updates require the policy 'id' field",
-                    "schedule_days uses a bitmask (Sunday=1, Monday=2, Tuesday=4, etc.)",
+                    "schedule_days uses a bitmask "
+                    "(Monday=2, Tuesday=4, Wednesday=8, Thursday=16, "
+                    "Friday=32, Saturday=64, Sunday=128)",
                     "You can use friendly schedule syntax with a 'schedule' block",
                     "Filter names can be specified using 'filter_name' or 'filter_names' shortcuts",
                 ],
@@ -215,7 +218,7 @@ def register_policy_resources(server: FastMCP) -> None:
                 "optional_for_all": {
                     "notes": "str - Policy description/notes",
                     "enabled": "bool - Whether policy is active (default: true)",
-                    "schedule_days": "int - Bitmask of days (1-127 for all 7 days)",
+                    "schedule_days": "int - Bitmask of days (254 for all 7 days)",
                     "schedule_time": "str - Time in HH:MM format (24-hour)",
                     "schedule_weeks_of_month": (
                         "int - Bitmask for weeks (1-62, default: 62 = all 5 weeks)"
@@ -286,13 +289,13 @@ def register_policy_resources(server: FastMCP) -> None:
                     "numeric": "0-6 (Sunday=0) or list of numeric indexes",
                 },
                 "bitmask_values": {
-                    "sunday": 1,
                     "monday": 2,
                     "tuesday": 4,
                     "wednesday": 8,
                     "thursday": 16,
                     "friday": 32,
                     "saturday": 64,
+                    "sunday": 128,
                     "example": "weekdays = 2+4+8+16+32 = 62",
                 },
             },
@@ -420,9 +423,9 @@ def register_policy_resources(server: FastMCP) -> None:
                         "shell_type": "str - Shell to use (depends on os_family)",
                     },
                     "shell_types_by_os": {
-                        "Windows": ["PowerShell", "Cmd"],
-                        "Mac": ["Bash", "Zsh"],
-                        "Linux": ["Bash", "Zsh"],
+                        "Windows": ["PowerShell"],
+                        "Mac": ["Bash"],
+                        "Linux": ["Bash"],
                     },
                     "examples": {
                         "check_service": {
@@ -456,7 +459,7 @@ def register_policy_resources(server: FastMCP) -> None:
                                 "os_family": "Windows",
                                 "shell_type": "PowerShell",
                             },
-                            "schedule_days": 127,
+                            "schedule_days": 254,
                             "schedule_time": "12:00",
                         },
                     },
@@ -493,7 +496,7 @@ def register_policy_resources(server: FastMCP) -> None:
             },
             "update_operations": {
                 "description": "Updating policies requires the policy ID and uses PATCH semantics",
-                "required_fields": ["policy_id" or "id within policy object"],
+                "required_fields": ["policy_id", "id within policy object"],
                 "two_ways_to_update": {
                     "method_1_recommended": {
                         "description": "Specify policy_id at top level, changes in policy object",
@@ -628,9 +631,9 @@ FastMCP provides a friendly 'schedule' helper block that automatically converts 
 
 ## IMPORTANT: Scheduling Requirements
 Automox requires ALL THREE of these fields when scheduling a policy:
-1. **schedule_days** - Which days of the week (bitmask 1-127, where 127 = all 7 days)
-2. **schedule_weeks_of_month** - Which weeks of the month (bitmask 1-62, where
-   1=first week, 2=second, 4=third, 8=fourth, 16=fifth)
+1. **schedule_days** - Which days of the week (bitmask 2-254, where 254 = all 7 days)
+2. **schedule_weeks_of_month** - Which weeks of the month (bitmask 2-62, where
+   2=first week, 4=second, 8=third, 16=fourth, 32=fifth; bit 0 is trailing zero)
 3. **schedule_months** - Which months of the year (bitmask 1-8190, where each bit
    represents a month)
 
@@ -640,7 +643,7 @@ If you only provide schedule_days, the MCP will automatically set:
 
 This means your policy will run on the specified days EVERY week of EVERY month.
 
-Reference: https://developer.automox.com/developer-portal/policy_filters_schedule/
+Reference: https://docs.automox.com/product/Developer/policy_filters_schedule.htm
 
 ## Friendly Schedule Syntax (Recommended)
 

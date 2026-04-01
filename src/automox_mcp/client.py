@@ -6,10 +6,13 @@ import importlib.metadata
 import json
 import logging
 import os
+import re
 from collections.abc import Mapping, Sequence
 from typing import Any
 
 import httpx
+
+from .middleware import get_correlation_id
 
 logger = logging.getLogger(__name__)
 
@@ -17,8 +20,6 @@ logger = logging.getLogger(__name__)
 JsonDict = Mapping[str, Any]
 JsonList = Sequence[Any]
 AutomoxResponse = JsonDict | JsonList
-
-VALID_API_TARGETS = {"console", "policyreport"}
 
 
 def _resolve_user_agent() -> str:
@@ -50,6 +51,18 @@ class AutomoxRateLimitError(AutomoxAPIError):
 class AutomoxClient:
     """Small HTTP client for the various Automox APIs."""
 
+    __slots__ = (
+        "_api_key",
+        "account_uuid",
+        "org_id",
+        "org_uuid",
+        "_http",
+        "_base_url_str",
+    )
+
+    def __repr__(self) -> str:
+        return f"AutomoxClient(org_id={self.org_id!r})"
+
     def __init__(
         self,
         *,
@@ -57,11 +70,10 @@ class AutomoxClient:
         account_uuid: str | None = None,
         org_id: int | None = None,
         org_uuid: str | None = None,
-        default_api: str | None = None,
     ) -> None:
         # Read from environment if not provided
         try:
-            self.api_key = api_key or os.environ["AUTOMOX_API_KEY"]
+            self._api_key = (api_key or os.environ["AUTOMOX_API_KEY"]).strip()
         except KeyError as exc:
             raise ValueError(
                 "AUTOMOX_API_KEY environment variable is required. "
@@ -70,43 +82,39 @@ class AutomoxClient:
             ) from exc
 
         try:
-            self.account_uuid = account_uuid or os.environ["AUTOMOX_ACCOUNT_UUID"]
+            raw_account_uuid = (account_uuid or os.environ["AUTOMOX_ACCOUNT_UUID"]).strip()
         except KeyError as exc:
             raise ValueError(
                 "AUTOMOX_ACCOUNT_UUID environment variable is required. "
                 "Set it to your Automox account UUID. "
                 "You can find it in the Automox console URL or API responses."
             ) from exc
+        # V-157: Validate format before using in URL paths to prevent path injection.
+        # Allow hex digits, hyphens, and lowercase letters (Automox UUIDs).
+        # Block path separators, dots, and control characters.
+        if not re.fullmatch(r"[a-zA-Z0-9\-]+", raw_account_uuid):
+            raise ValueError(
+                f"AUTOMOX_ACCOUNT_UUID contains invalid characters: {raw_account_uuid!r}. "
+                "Expected alphanumeric characters and hyphens only."
+            )
+        self.account_uuid = raw_account_uuid
 
-        self.org_id = org_id or (
-            int(os.environ["AUTOMOX_ORG_ID"]) if os.environ.get("AUTOMOX_ORG_ID") else None
-        )
+        self.org_id: int | None
+        if org_id is not None:
+            self.org_id = org_id
+        else:
+            raw_org = os.environ.get("AUTOMOX_ORG_ID", "").strip()
+            self.org_id = int(raw_org) if raw_org else None
         env_org_uuid = os.environ.get("AUTOMOX_ORG_UUID")
         self.org_uuid = (org_uuid or env_org_uuid or "").strip() or None
 
         logger.debug(
-            f"AutomoxClient initialized with org_id={self.org_id} org_uuid={self.org_uuid}"
+            "AutomoxClient initialized with org_id=%s org_uuid=%s",
+            self.org_id,
+            self.org_uuid,
         )
 
-        self._default_api: str | None
-        if default_api is not None:
-            if not isinstance(default_api, str):
-                raise TypeError(
-                    f"default_api must be a string, got "
-                    f"{type(default_api).__name__}: {default_api!r}"
-                )
-            normalized_default_api = default_api.strip().lower()
-            if not normalized_default_api:
-                self._default_api = None
-            elif normalized_default_api not in VALID_API_TARGETS:
-                raise ValueError(f"Unknown Automox API target: {default_api!r}")
-            else:
-                self._default_api = normalized_default_api
-        else:
-            self._default_api = None
-
         headers = {
-            "Authorization": f"Bearer {self.api_key}",
             "User-Agent": USER_AGENT,
             "Accept": "application/json",
             "Content-Type": "application/json",
@@ -114,16 +122,18 @@ class AutomoxClient:
 
         timeout = httpx.Timeout(15.0)
 
-        self._console = httpx.AsyncClient(
+        self._http = httpx.AsyncClient(
             base_url="https://console.automox.com/api",
             headers=headers,
             timeout=timeout,
+            auth=self._bearer_auth,
         )
-        self._policyreport = httpx.AsyncClient(
-            base_url="https://policyreport.automox.com",
-            headers=headers,
-            timeout=timeout,
-        )
+        self._base_url_str = str(self._http.base_url)
+
+    def _bearer_auth(self, request: httpx.Request) -> httpx.Request:
+        """Inject the Bearer token per-request to avoid storing it in shared headers."""
+        request.headers["Authorization"] = f"Bearer {self._api_key}"
+        return request
 
     async def __aenter__(self) -> AutomoxClient:
         return self
@@ -132,23 +142,20 @@ class AutomoxClient:
         await self.aclose()
 
     async def aclose(self) -> None:
-        await self._console.aclose()
-        await self._policyreport.aclose()
+        await self._http.aclose()
 
     async def get(
         self,
         path: str,
         *,
-        params: Mapping[str, Any] | None = None,
+        params: Mapping[str, Any] | Sequence[tuple[str, Any]] | None = None,
         headers: Mapping[str, str] | None = None,
-        api: str | None = None,
     ) -> AutomoxResponse:
         return await self._request(
             "GET",
             path,
             params=params,
             headers=headers,
-            api=api,
         )
 
     async def post(
@@ -158,7 +165,6 @@ class AutomoxClient:
         json_data: Mapping[str, Any] | None = None,
         params: Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
-        api: str | None = None,
     ) -> AutomoxResponse:
         return await self._request(
             "POST",
@@ -166,7 +172,6 @@ class AutomoxClient:
             params=params,
             json_data=json_data,
             headers=headers,
-            api=api,
         )
 
     async def put(
@@ -176,7 +181,6 @@ class AutomoxClient:
         json_data: Mapping[str, Any] | None = None,
         params: Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
-        api: str | None = None,
     ) -> AutomoxResponse:
         return await self._request(
             "PUT",
@@ -184,7 +188,6 @@ class AutomoxClient:
             params=params,
             json_data=json_data,
             headers=headers,
-            api=api,
         )
 
     async def delete(
@@ -193,14 +196,12 @@ class AutomoxClient:
         *,
         params: Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
-        api: str | None = None,
     ) -> AutomoxResponse:
         return await self._request(
             "DELETE",
             path,
             params=params,
             headers=headers,
-            api=api,
         )
 
     async def patch(
@@ -210,7 +211,6 @@ class AutomoxClient:
         json_data: Mapping[str, Any] | None = None,
         params: Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
-        api: str | None = None,
     ) -> AutomoxResponse:
         return await self._request(
             "PATCH",
@@ -218,7 +218,6 @@ class AutomoxClient:
             params=params,
             json_data=json_data,
             headers=headers,
-            api=api,
         )
 
     async def _request(
@@ -226,49 +225,42 @@ class AutomoxClient:
         method: str,
         path: str,
         *,
-        params: Mapping[str, Any] | None = None,
+        params: Mapping[str, Any] | Sequence[tuple[str, Any]] | None = None,
         json_data: Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
-        api: str | None = None,
-        _fallback_attempted: bool = False,
     ) -> AutomoxResponse:
-        if api is not None:
-            if not isinstance(api, str):
-                raise TypeError(f"api must be a string, got {type(api).__name__}: {api!r}")
-            target_key = api.strip().lower()
-            if not target_key:
-                target_key = self._default_api or "console"
-            if target_key not in VALID_API_TARGETS:
-                raise ValueError(f"Unknown Automox API target: {api!r}")
-        else:
-            target_key = self._default_api or "console"
+        merged_headers: dict[str, str] = dict(headers) if headers else {}
+        correlation_id = get_correlation_id()
+        if correlation_id:
+            merged_headers["X-Correlation-ID"] = correlation_id
 
-        if target_key == "policyreport":
-            client = self._policyreport
-        else:
-            client = self._console
-
-        target = str(client.base_url)
-
-        # Log the request for debugging
-        logger.debug(f"Request: {method} {target}{path} params={params}")
+        logger.debug(
+            "Request: %s %s%s correlation_id=%s",
+            method,
+            self._base_url_str,
+            path,
+            correlation_id,
+        )
 
         try:
-            response = await client.request(
+            response = await self._http.request(
                 method,
                 path,
-                params=params,
+                params=params,  # type: ignore[arg-type]
                 json=json_data,
-                headers=headers,
+                headers=merged_headers or None,
             )
         except httpx.RequestError as exc:
             raise AutomoxAPIError(
-                f"network error calling Automox API at {target}", status_code=0
+                f"network error calling Automox API at {self._base_url_str}", status_code=0
             ) from exc
 
         if response.status_code == 429:
+            payload = self._extract_error_payload(response)
             raise AutomoxRateLimitError(
-                "automox rate limit exceeded", status_code=response.status_code
+                "automox rate limit exceeded",
+                status_code=response.status_code,
+                payload=payload,
             )
 
         if response.status_code >= 400:
@@ -281,24 +273,6 @@ class AutomoxClient:
             data: AutomoxResponse = response.json()
             return data
         except json.JSONDecodeError as exc:
-            if target_key == "console" and not _fallback_attempted:
-                logger.warning(
-                    "console API returned invalid JSON, retrying against policyreport endpoint",
-                    extra={
-                        "method": method,
-                        "path": path,
-                        "target": target,
-                        "fallback_target": str(self._policyreport.base_url),
-                    },
-                )
-                return await self._request(
-                    method,
-                    path,
-                    params=params,
-                    json_data=json_data,
-                    api="policyreport",
-                    _fallback_attempted=True,
-                )
             raise AutomoxAPIError(
                 "invalid JSON response from Automox", response.status_code
             ) from exc
@@ -311,12 +285,14 @@ class AutomoxClient:
                 return data
         except json.JSONDecodeError:
             pass
-        return {"message": response.text}
+        # Truncate raw text to avoid leaking verbose upstream error pages.
+        raw = response.text[:500] if response.text else ""
+        return {"message": raw}
 
     def _build_error(self, response: httpx.Response) -> AutomoxAPIError:
         payload = self._extract_error_payload(response)
         message = payload.get("message") or payload.get("title") or "automox API error"
-        error_cls = AutomoxRateLimitError if response.status_code == 429 else AutomoxAPIError
+        error_cls = AutomoxAPIError
         logger.warning(
             "automox request failed",
             extra={

@@ -11,11 +11,7 @@ from automox_mcp.prompts import register_prompts
 def _get_prompts(server: FastMCP) -> dict:
     """Return a dict of {name: prompt} for all registered prompts."""
     lp = server.local_provider
-    return {
-        comp.name: comp
-        for key, comp in lp._components.items()
-        if key.startswith("prompt:")
-    }
+    return {comp.name: comp for key, comp in lp._components.items() if key.startswith("prompt:")}
 
 
 @pytest.fixture

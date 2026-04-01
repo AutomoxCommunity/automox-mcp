@@ -5,6 +5,12 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.11] - 2026-04-01
+
+### Changed
+
+- Applied `ruff format` to fix formatting in `src/automox_mcp/tools/__init__.py` and `tests/test_prompts.py`
+
 ## [1.0.10] - 2026-04-01
 
 ### Changed

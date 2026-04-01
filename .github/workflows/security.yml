@@ -69,9 +69,10 @@ jobs:
           set -euo pipefail
           source .venv/bin/activate
           uv pip install cisco-ai-mcp-scanner
-          mcp-scanner \
+          mcp-scanner stdio \
             --stdio-command uv \
-            --stdio-args run automox-mcp \
+            --stdio-arg run \
+            --stdio-arg automox-mcp \
             --stdio-env AUTOMOX_API_KEY=test-api-key \
             --stdio-env AUTOMOX_ACCOUNT_UUID=test-account \
             --stdio-env AUTOMOX_ORG_ID=0 \

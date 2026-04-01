@@ -23,14 +23,16 @@ from ..utils.tooling import (
     store_idempotency,
 )
 
-_BLOCKED_HOSTS: frozenset[str] = frozenset({
-    "metadata.google.internal",
-    "metadata.google",
-    "metadata.azure.com",
-    "management.azure.com",
-    "instance-data",
-    "metadata.oraclecloud.com",
-})
+_BLOCKED_HOSTS: frozenset[str] = frozenset(
+    {
+        "metadata.google.internal",
+        "metadata.google",
+        "metadata.azure.com",
+        "management.azure.com",
+        "instance-data",
+        "metadata.oraclecloud.com",
+    }
+)
 
 
 def _validate_webhook_url(url: str) -> None:

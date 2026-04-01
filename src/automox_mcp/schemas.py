@@ -447,7 +447,11 @@ class GetEventsParams(ForbidExtraModel):
     server_id: int | None = Field(None, description="Filter by Server/Device ID")
     user_id: int | None = Field(None, description="Filter by User ID")
     event_name: str | None = Field(None, description="Filter by event name", max_length=200)
-    start_date: str | None = Field(None, description="Start date filter (ISO format)", max_length=30)
+    start_date: str | None = Field(
+        None,
+        description="Start date filter (ISO format)",
+        max_length=30,
+    )
     end_date: str | None = Field(None, description="End date filter (ISO format)", max_length=30)
     limit: int | None = Field(None, ge=1, le=500, description="Results per page")
 
@@ -508,7 +512,11 @@ class CreateServerGroupParams(ForbidExtraModel):
     name: str = Field(description="Group name")
     refresh_interval: int = Field(description="Refresh interval in minutes", ge=1, le=525600)
     parent_server_group_id: int = Field(description="Parent group ID (required by API)")
-    ui_color: str | None = Field(None, description="UI color for group", pattern=r"^#[0-9a-fA-F]{6}$")
+    ui_color: str | None = Field(
+        None,
+        description="UI color for group",
+        pattern=r"^#[0-9a-fA-F]{6}$",
+    )
     notes: str | None = Field(None, description="Group notes")
     policies: list[int] | None = Field(None, description="Policy IDs to assign")
 
@@ -518,7 +526,11 @@ class UpdateServerGroupParams(ForbidExtraModel):
     name: str = Field(description="Group name")
     refresh_interval: int = Field(description="Refresh interval in minutes", ge=1, le=525600)
     parent_server_group_id: int = Field(description="Parent group ID (required by API)")
-    ui_color: str | None = Field(None, description="UI color for group", pattern=r"^#[0-9a-fA-F]{6}$")
+    ui_color: str | None = Field(
+        None,
+        description="UI color for group",
+        pattern=r"^#[0-9a-fA-F]{6}$",
+    )
     notes: str | None = Field(None, description="Group notes")
     policies: list[int] | None = Field(None, description="Policy IDs to assign")
 
@@ -581,7 +593,11 @@ class ListDataExtractsParams(OrgIdRequiredMixin, ForbidExtraModel):
 
 
 class GetDataExtractParams(OrgIdRequiredMixin, ForbidExtraModel):
-    extract_id: str = Field(description="Data extract ID", max_length=200, pattern=r"^[a-zA-Z0-9_\-]+$")
+    extract_id: str = Field(
+        description="Data extract ID",
+        max_length=200,
+        pattern=r"^[a-zA-Z0-9_\-]+$",
+    )
 
 
 class ListOrgApiKeysParams(OrgIdRequiredMixin, ForbidExtraModel):
@@ -726,6 +742,7 @@ class AdvancedDeviceSearchParams(ForbidExtraModel):
             if len(raw) > 50_000:
                 raise ValueError("query payload exceeds 50 KB limit")
         return self
+
     page: int | None = Field(None, ge=0, description="Page number")
     limit: int | None = Field(None, ge=1, le=500, description="Results per page")
 

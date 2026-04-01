@@ -308,7 +308,18 @@ def _create_jwt_auth() -> Any | None:
         )
     algorithm = _env_str("AUTOMOX_MCP_OAUTH_ALGORITHM") or "RS256"
     # Validate algorithm compatibility with key type
-    _ASYMMETRIC_ALGORITHMS = {"RS256", "RS384", "RS512", "ES256", "ES384", "ES512", "PS256", "PS384", "PS512", "EdDSA"}
+    _ASYMMETRIC_ALGORITHMS = {
+        "RS256",
+        "RS384",
+        "RS512",
+        "ES256",
+        "ES384",
+        "ES512",
+        "PS256",
+        "PS384",
+        "PS512",
+        "EdDSA",
+    }
     _HMAC_ALGORITHMS = {"HS256", "HS384", "HS512"}
     if algorithm.upper() in _HMAC_ALGORITHMS and public_key:
         raise RuntimeError(

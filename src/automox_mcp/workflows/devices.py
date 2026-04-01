@@ -920,7 +920,10 @@ async def search_devices(
             devices = raw_devices
         elif isinstance(raw_devices, Mapping):
             _data = raw_devices.get("data") or raw_devices.get("results")
-            devices = _data if isinstance(_data, Sequence) and not isinstance(_data, (str, bytes)) else []
+            if isinstance(_data, Sequence) and not isinstance(_data, (str, bytes)):
+                devices = _data
+            else:
+                devices = []
         else:
             devices = []
 
@@ -944,7 +947,9 @@ async def search_devices(
                 tags_lower = (
                     {str(t).lower() for t in tags}
                     if isinstance(tags, Sequence) and not isinstance(tags, (str, bytes))
-                    else {str(tags).lower()} if isinstance(tags, str) else set()
+                    else {str(tags).lower()}
+                    if isinstance(tags, str)
+                    else set()
                 )
                 if tag_term not in tags_lower:
                     continue
@@ -1033,7 +1038,10 @@ async def summarize_device_health(
             page_items = page_response
         elif isinstance(page_response, Mapping):
             _data = page_response.get("data") or page_response.get("results")
-            page_items = _data if isinstance(_data, Sequence) and not isinstance(_data, (str, bytes)) else []
+            if isinstance(_data, Sequence) and not isinstance(_data, (str, bytes)):
+                page_items = _data
+            else:
+                page_items = []
         else:
             page_items = []
         all_devices.extend(page_items)

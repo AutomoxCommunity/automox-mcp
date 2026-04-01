@@ -37,9 +37,7 @@ async def _resolve_device_uuid(
             if raw and _SAFE_UUID_RE.fullmatch(raw):
                 return raw
             elif raw:
-                logger.warning(
-                    "Device %s returned invalid UUID format: %r", device_id, raw[:50]
-                )
+                logger.warning("Device %s returned invalid UUID format: %r", device_id, raw[:50])
     except AutomoxAPIError as exc:
         logger.debug("Failed to resolve UUID for device %s: %s", device_id, exc)
     return None

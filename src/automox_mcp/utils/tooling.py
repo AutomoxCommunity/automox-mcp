@@ -119,9 +119,7 @@ class IdempotencyCache:
         self._cache: dict[tuple[str, str], tuple[dict[str, Any] | str, float]] = {}
         self._lock = asyncio.Lock()
 
-    async def reserve(
-        self, request_id: str, tool_name: str
-    ) -> tuple[bool, dict[str, Any] | None]:
+    async def reserve(self, request_id: str, tool_name: str) -> tuple[bool, dict[str, Any] | None]:
         """Atomically check-and-reserve a request_id slot.
 
         Returns ``(True, cached_response)`` if a completed response exists,

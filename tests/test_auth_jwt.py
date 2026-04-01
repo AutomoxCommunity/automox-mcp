@@ -92,7 +92,9 @@ class TestCreateJwtAuth:
         mock_response = httpx.Response(
             200,
             json={"jwks_uri": "https://auth.example.com/.well-known/jwks.json"},
-            request=httpx.Request("GET", "https://auth.example.com/.well-known/openid-configuration"),
+            request=httpx.Request(
+                "GET", "https://auth.example.com/.well-known/openid-configuration"
+            ),
         )
         with patch("httpx.get", return_value=mock_response):
             provider = _create_jwt_auth()

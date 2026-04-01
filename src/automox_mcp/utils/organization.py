@@ -71,9 +71,7 @@ async def resolve_org_uuid(
                     # Cache account UUID separately — do NOT set client.org_uuid
                     # to prevent poisoning the cache for calls that require a real
                     # org UUID.
-                    logger.debug(
-                        "Using account UUID as fallback (allow_account_uuid=True)"
-                    )
+                    logger.debug("Using account UUID as fallback (allow_account_uuid=True)")
                     return account_text
             raise ValueError(
                 "org_id required to resolve organization UUID - pass org_id explicitly or set "
@@ -113,8 +111,7 @@ async def resolve_org_uuid(
             if account_text:
                 # Don't cache account UUID as org UUID — return without caching
                 logger.debug(
-                    "Using account UUID as fallback after /orgs lookup "
-                    "(allow_account_uuid=True)"
+                    "Using account UUID as fallback after /orgs lookup (allow_account_uuid=True)"
                 )
                 return account_text
 

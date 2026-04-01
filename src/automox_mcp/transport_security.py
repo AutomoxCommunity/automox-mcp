@@ -256,9 +256,7 @@ class AuthRateLimitMiddleware:
         self._last_cleanup = now
 
         # Evict expired _blocked_until entries
-        expired_blocks = [
-            ip for ip, until in self._blocked_until.items() if now >= until
-        ]
+        expired_blocks = [ip for ip, until in self._blocked_until.items() if now >= until]
         for ip in expired_blocks:
             del self._blocked_until[ip]
 
@@ -285,7 +283,8 @@ class AuthRateLimitMiddleware:
                     break
             # If still over cap, evict oldest failure entries (by earliest timestamp)
             if overflow > 0:
-                for ip in sorted(self._failures, key=lambda k: self._failures[k][0] if self._failures[k] else 0)[:overflow]:
+                evict_key = lambda k: self._failures[k][0] if self._failures[k] else 0  # noqa: E731
+                for ip in sorted(self._failures, key=evict_key)[:overflow]:
                     del self._failures[ip]
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:

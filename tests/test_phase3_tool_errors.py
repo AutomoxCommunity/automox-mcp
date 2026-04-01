@@ -205,7 +205,8 @@ async def test_ph_run_detail_v2_success() -> None:
     client._get_response = []
     server = _register(policy_history_tools, client)
     result = await server.tools["policy_run_detail_v2"](
-        policy_uuid=_FAKE_POLICY_UUID, exec_token=_FAKE_EXEC_TOKEN,
+        policy_uuid=_FAKE_POLICY_UUID,
+        exec_token=_FAKE_EXEC_TOKEN,
     )
     assert result["data"]["total_results"] == 0
 

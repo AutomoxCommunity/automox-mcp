@@ -188,9 +188,7 @@ def sanitize_for_llm(text: str, *, field_name: str | None = None) -> str:
 
     # Step 7: Instruction prefix removal (free-text fields only, or unknown fields)
     # Apply to known free-text fields and any field not in the preserve-list
-    apply_prefix_strip = field_name is None or (
-        field_name.lower() not in _PRESERVE_PREFIX_FIELDS
-    )
+    apply_prefix_strip = field_name is None or (field_name.lower() not in _PRESERVE_PREFIX_FIELDS)
     if apply_prefix_strip:
         text = _INSTRUCTION_PREFIX_RE.sub("", text)
 

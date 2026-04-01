@@ -5,6 +5,12 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.8] - 2026-04-01
+
+### Fixed
+
+- **E501 line-too-long lint failures in CI** — Reformatted 8 lines across `auth.py`, `schemas.py`, `transport_security.py`, and `workflows/devices.py` that exceeded the 100-character limit, plus applied `ruff format` to 12 files for consistent style.
+
 ## [1.0.7] - 2026-03-31
 
 ### Fixed

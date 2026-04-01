@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Applied `ruff format` to fix formatting in `src/automox_mcp/tools/__init__.py` and `tests/test_prompts.py`
 
+### Fixed
+
+- **MCP Scanner CI failure** — `mcp-scanner` v4.x requires the `stdio` subcommand and `--stdio-arg` (singular, repeatable) instead of `--stdio-args` (which consumed only one token, causing `automox-mcp` to be misinterpreted as a subcommand)
+- **Zizmor `superfluous-actions` warning** — Replaced `softprops/action-gh-release` action in `release.yml` with a `gh release create` script step, since the `gh` CLI is pre-installed on GitHub runners
+- **4 flaky rate-limit tests failing on fresh CI runners** — Tests now create explicit `AuthRateLimitMiddleware` instances instead of relying on shared module-level state that could carry over between test runs
+
 ## [1.0.10] - 2026-04-01
 
 ### Changed

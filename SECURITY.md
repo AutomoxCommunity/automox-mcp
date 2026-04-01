@@ -22,6 +22,8 @@ The following attack surfaces have been identified and mitigated:
 ### Supply Chain (Rug-Pull Updates)
 
 - Dependencies pinned via `uv.lock`
+- `pip-audit` vulnerability scan runs in CI across all supported Python versions (3.11–3.13)
+- Transitive dependency floors enforced via `[tool.uv] constraint-dependencies` to remediate CVEs in indirect dependencies (e.g., authlib, cryptography, urllib3)
 - Bandit static security analysis runs in pre-commit hooks
 - 90% test coverage enforced in CI
 - GitHub Actions pinned to immutable SHA digests

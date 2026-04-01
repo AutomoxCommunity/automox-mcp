@@ -5,6 +5,30 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.10] - 2026-04-01
+
+### Changed
+
+- **Upgraded fastmcp from 2.13.0.2 to 3.2.0** — Major version upgrade to resolve 4 CVEs (GHSA-rcfx-77hg-w2wv, CVE-2025-69196, CVE-2025-64340, CVE-2026-27124). Updated internal API usage from `_tool_manager._tools` to `local_provider._components` and `get_tools()` to `list_tools()`. The `_apply_tool_prefix` helper now uses `model_copy()` for immutable tool renaming. Added `_get_tool_names()` public helper for test access to registered tool names.
+
+### Security
+
+- **16 dependency CVEs resolved** — All vulnerabilities flagged by the CI `pip-audit` gate have been fixed via `[tool.uv] constraint-dependencies` pins:
+
+  | Package | Old | New | CVEs |
+  |---------|-----|-----|------|
+  | authlib | 1.6.5 | 1.6.9 | CVE-2025-68158 |
+  | cryptography | 46.0.3 | 46.0.6 | CVE-2026-26007, CVE-2026-34073 |
+  | fastmcp | 2.13.0.2 | 3.2.0 | GHSA-rcfx-77hg-w2wv, CVE-2025-69196, CVE-2025-64340, CVE-2026-27124 |
+  | jaraco-context | 6.0.1 | 6.1.2 | CVE-2026-23949 |
+  | mcp | 1.21.0 | 1.26.0 | CVE-2025-66416 |
+  | pygments | 2.19.2 | 2.20.0 | CVE-2026-4539 |
+  | pyjwt | 2.10.1 | 2.12.1 | CVE-2026-32597 |
+  | python-multipart | 0.0.20 | 0.0.22 | CVE-2026-24486 |
+  | requests | 2.32.5 | 2.33.1 | CVE-2026-25645 |
+  | urllib3 | 2.5.0 | 2.6.3 | CVE-2025-66418, CVE-2025-66471, CVE-2026-21441 |
+  | diskcache | 5.6.3 | removed | CVE-2025-69872 (dropped by fastmcp 3.x) |
+
 ## [1.0.9] - 2026-04-01
 
 ### Fixed

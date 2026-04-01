@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **E501 line-too-long lint failures in CI** — Reformatted 8 lines across `auth.py`, `schemas.py`, `transport_security.py`, and `workflows/devices.py` that exceeded the 100-character limit, plus applied `ruff format` to 12 files for consistent style.
+- **mypy failures in CI when checking test files** — CI ran `mypy .` which checked test stubs/fakes against production type signatures. Added `exclude = ["tests/"]` to mypy config so test files with intentional type mismatches (fake clients, stub servers) are not type-checked. Fixed 3 real src issues: `client.py` `org_id` type annotation, `transport_security.py` `Any` return, and `tooling.py` `Mapping` index assignment.
 
 ## [1.0.7] - 2026-03-31
 

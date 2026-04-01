@@ -245,7 +245,7 @@ class AuthRateLimitMiddleware:
     def _get_client_ip(self, scope: Scope) -> str:
         client = scope.get("client")
         if client:
-            return client[0]
+            return str(client[0])
         return "unknown"
 
     def _cleanup_stale_entries(self, now: float) -> None:

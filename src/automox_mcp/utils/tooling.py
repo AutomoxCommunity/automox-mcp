@@ -406,7 +406,7 @@ def _apply_token_budget(
         meta["truncated"] = True
         meta["total_available"] = total
         meta["returned_count"] = len(response_dict["data"])
-    elif isinstance(data, Mapping):
+    elif isinstance(data, dict):
         # Truncate ALL oversized lists in the mapping, not just the first
         for _key, value in data.items():
             if isinstance(value, list) and len(value) > 1:

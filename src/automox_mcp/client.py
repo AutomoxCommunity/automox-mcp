@@ -99,6 +99,7 @@ class AutomoxClient:
             )
         self.account_uuid = raw_account_uuid
 
+        self.org_id: int | None
         if org_id is not None:
             self.org_id = org_id
         else:

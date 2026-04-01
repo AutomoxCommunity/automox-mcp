@@ -78,6 +78,11 @@ asyncio_mode = "auto"
 targets = ["src/"]
 exclude_dirs = ["tests", ".venv"]
 
+[tool.uv]
+constraint-dependencies = [
+  "authlib>=1.6.6",  # CVE-2025-68158: CSRF in cache-backed state storage
+]
+
 [tool.coverage.run]
 source = ["automox_mcp"]
 

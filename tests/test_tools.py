@@ -115,8 +115,8 @@ async def test_create_server_registers_core_tools(monkeypatch):
     import automox_mcp
 
     server = automox_mcp.create_server()
-    tools = await server.get_tools()
-    tool_names = set(tools.keys())
+    tools = await server.list_tools()
+    tool_names = {t.name for t in tools}
     required = {
         "execute_policy_now",
         "execute_device_command",

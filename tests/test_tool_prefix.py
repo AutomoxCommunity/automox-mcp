@@ -27,6 +27,8 @@ class TestApplyToolPrefix:
         """When no prefix is set, tool names remain unchanged."""
         from fastmcp import FastMCP
 
+        from automox_mcp.tools import _get_tool_names
+
         server = FastMCP("test")
 
         @server.tool(name="list_devices")
@@ -34,14 +36,13 @@ class TestApplyToolPrefix:
             return "ok"
 
         # No prefix — names stay the same
-        tm = server._tool_manager
-        assert "list_devices" in tm._tools
+        assert "list_devices" in _get_tool_names(server)
 
     def test_prefix_renames_tools(self):
         """When prefix is set, all tool names get prefixed."""
         from fastmcp import FastMCP
 
-        from automox_mcp.tools import _apply_tool_prefix
+        from automox_mcp.tools import _apply_tool_prefix, _get_tool_names
 
         server = FastMCP("test")
 
@@ -55,17 +56,17 @@ class TestApplyToolPrefix:
 
         _apply_tool_prefix(server, "automox")
 
-        tm = server._tool_manager
-        assert "automox_list_devices" in tm._tools
-        assert "automox_policy_catalog" in tm._tools
-        assert "list_devices" not in tm._tools
-        assert "policy_catalog" not in tm._tools
+        names = _get_tool_names(server)
+        assert "automox_list_devices" in names
+        assert "automox_policy_catalog" in names
+        assert "list_devices" not in names
+        assert "policy_catalog" not in names
 
     def test_prefixed_tool_name_attribute(self):
         """The tool object's .name attribute is also updated."""
         from fastmcp import FastMCP
 
-        from automox_mcp.tools import _apply_tool_prefix
+        from automox_mcp.tools import _apply_tool_prefix, _get_tool_names
 
         server = FastMCP("test")
 
@@ -75,6 +76,5 @@ class TestApplyToolPrefix:
 
         _apply_tool_prefix(server, "ax")
 
-        tm = server._tool_manager
-        tool = tm._tools["ax_test_tool"]
-        assert tool.name == "ax_test_tool"
+        names = _get_tool_names(server)
+        assert "ax_test_tool" in names

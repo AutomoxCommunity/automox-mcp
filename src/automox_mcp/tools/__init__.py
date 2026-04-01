@@ -71,23 +71,32 @@ def register_tools(server: FastMCP, *, client: AutomoxClient) -> None:
         _apply_tool_prefix(server, prefix)
 
 
+def _get_tool_names(server: FastMCP) -> set[str]:
+    """Return the set of registered tool names on *server*."""
+    lp = server.local_provider
+    return {
+        comp.name
+        for key, comp in lp._components.items()
+        if key.startswith("tool:")
+    }
+
+
 def _apply_tool_prefix(server: FastMCP, prefix: str) -> None:
     """Rename all registered tools with a prefix to prevent cross-server collisions.
 
-    Uses FastMCP internal API (``_tool_manager._tools``).  No public renaming
-    API exists as of FastMCP 2.x.  Pin the FastMCP version if this breaks.
+    Uses FastMCP internal API (``local_provider._components``).
     """
-    tm = server._tool_manager
-    original_names = list(tm._tools.keys())
-    for name in original_names:
-        tool = tm._tools.pop(name)
-        tool.name = f"{prefix}_{name}"
-        tm._tools[tool.name] = tool
+    lp = server.local_provider
+    tool_keys = [k for k in lp._components if k.startswith("tool:")]
+    for key in tool_keys:
+        tool = lp._components.pop(key)
+        renamed = tool.model_copy(update={"name": f"{prefix}_{tool.name}"})
+        lp._add_component(renamed)
     logger.info(
         "Applied tool prefix '%s' to %d tools",
         prefix,
-        len(original_names),
+        len(tool_keys),
     )
 
 
-__all__ = ["register_tools"]
+__all__ = ["register_tools", "_get_tool_names"]

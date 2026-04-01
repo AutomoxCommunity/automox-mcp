@@ -8,6 +8,8 @@ from unittest.mock import patch
 from conftest import StubClient
 from fastmcp import FastMCP
 
+import automox_mcp.tools
+
 
 def _make_server_with_module(module_name: str, has_writes: bool = False) -> FastMCP:
     """Create a FastMCP server and register a single tool module."""
@@ -22,14 +24,14 @@ def _make_server_with_module(module_name: str, has_writes: bool = False) -> Fast
 
 def test_worklet_tools_register() -> None:
     server = _make_server_with_module("worklet_tools")
-    tool_names = set(server._tool_manager._tools.keys())
+    tool_names = automox_mcp.tools._get_tool_names(server)
     assert "search_worklet_catalog" in tool_names
     assert "get_worklet_detail" in tool_names
 
 
 def test_data_extract_tools_register_read_only() -> None:
     server = _make_server_with_module("data_extract_tools", has_writes=False)
-    tool_names = set(server._tool_manager._tools.keys())
+    tool_names = automox_mcp.tools._get_tool_names(server)
     assert "list_data_extracts" in tool_names
     assert "get_data_extract" in tool_names
     assert "create_data_extract" not in tool_names
@@ -37,13 +39,13 @@ def test_data_extract_tools_register_read_only() -> None:
 
 def test_data_extract_tools_register_with_writes() -> None:
     server = _make_server_with_module("data_extract_tools", has_writes=True)
-    tool_names = set(server._tool_manager._tools.keys())
+    tool_names = automox_mcp.tools._get_tool_names(server)
     assert "create_data_extract" in tool_names
 
 
 def test_policy_history_tools_register() -> None:
     server = _make_server_with_module("policy_history_tools")
-    tool_names = set(server._tool_manager._tools.keys())
+    tool_names = automox_mcp.tools._get_tool_names(server)
     expected = {
         "policy_runs_v2",
         "policy_run_count",
@@ -57,13 +59,13 @@ def test_policy_history_tools_register() -> None:
 
 def test_audit_v2_tools_register() -> None:
     server = _make_server_with_module("audit_v2_tools")
-    tool_names = set(server._tool_manager._tools.keys())
+    tool_names = automox_mcp.tools._get_tool_names(server)
     assert "audit_events_ocsf" in tool_names
 
 
 def test_device_search_tools_register() -> None:
     server = _make_server_with_module("device_search_tools")
-    tool_names = set(server._tool_manager._tools.keys())
+    tool_names = automox_mcp.tools._get_tool_names(server)
     expected = {
         "list_saved_searches",
         "advanced_device_search",
@@ -77,7 +79,7 @@ def test_device_search_tools_register() -> None:
 
 def test_vuln_sync_tools_register_read_only() -> None:
     server = _make_server_with_module("vuln_sync_tools", has_writes=False)
-    tool_names = set(server._tool_manager._tools.keys())
+    tool_names = automox_mcp.tools._get_tool_names(server)
     assert "list_remediation_action_sets" in tool_names
     assert "get_action_set_detail" in tool_names
     assert "upload_action_set" not in tool_names
@@ -85,14 +87,14 @@ def test_vuln_sync_tools_register_read_only() -> None:
 
 def test_vuln_sync_tools_register_with_writes() -> None:
     server = _make_server_with_module("vuln_sync_tools", has_writes=True)
-    tool_names = set(server._tool_manager._tools.keys())
+    tool_names = automox_mcp.tools._get_tool_names(server)
     assert "upload_action_set" in tool_names
 
 
 def test_account_tools_register_includes_api_keys() -> None:
     """Verify list_org_api_keys is registered even in read-only mode."""
     server = _make_server_with_module("account_tools", has_writes=False)
-    tool_names = set(server._tool_manager._tools.keys())
+    tool_names = automox_mcp.tools._get_tool_names(server)
     assert "list_org_api_keys" in tool_names
 
 
@@ -120,7 +122,7 @@ def test_valid_modules_includes_new_modules() -> None:
 
 def test_policy_windows_tools_register_read_only() -> None:
     server = _make_server_with_module("policy_windows_tools", has_writes=False)
-    tool_names = set(server._tool_manager._tools.keys())
+    tool_names = automox_mcp.tools._get_tool_names(server)
     read_tools = {
         "search_policy_windows",
         "get_policy_window",
@@ -137,7 +139,7 @@ def test_policy_windows_tools_register_read_only() -> None:
 
 def test_policy_windows_tools_register_with_writes() -> None:
     server = _make_server_with_module("policy_windows_tools", has_writes=True)
-    tool_names = set(server._tool_manager._tools.keys())
+    tool_names = automox_mcp.tools._get_tool_names(server)
     assert "create_policy_window" in tool_names
     assert "update_policy_window" in tool_names
     assert "delete_policy_window" in tool_names

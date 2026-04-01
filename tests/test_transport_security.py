@@ -2,16 +2,20 @@
 
 from __future__ import annotations
 
+import time
+
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.requests import Request
-from starlette.responses import PlainTextResponse
+from starlette.responses import PlainTextResponse, Response
 from starlette.routing import Route
 from starlette.testclient import TestClient
 
 from automox_mcp.transport_security import (
+    AuthRateLimitMiddleware,
     DNSRebindingProtectionMiddleware,
     SecurityHeadersMiddleware,
+    _env_flag,
     build_transport_security_middleware,
 )
 
@@ -240,3 +244,210 @@ class TestBuildMiddleware:
         assert dns_mw is not None
         allowed_origins = dns_mw.kwargs["allowed_origins"]
         assert "https://app.example.com" in allowed_origins
+
+
+# ---------------------------------------------------------------------------
+# _env_flag helper
+# ---------------------------------------------------------------------------
+
+
+class TestEnvFlag:
+    def test_truthy_values(self, monkeypatch):
+        for val in ("1", "true", "yes", "on", "TRUE", "Yes"):
+            monkeypatch.setenv("TEST_FLAG", val)
+            assert _env_flag("TEST_FLAG", default=False) is True
+
+    def test_falsy_values(self, monkeypatch):
+        for val in ("0", "false", "no", "off", "FALSE", "No"):
+            monkeypatch.setenv("TEST_FLAG", val)
+            assert _env_flag("TEST_FLAG", default=True) is False
+
+    def test_empty_returns_default(self, monkeypatch):
+        monkeypatch.setenv("TEST_FLAG", "")
+        assert _env_flag("TEST_FLAG", default=True) is True
+        assert _env_flag("TEST_FLAG", default=False) is False
+
+    def test_unrecognized_returns_default(self, monkeypatch):
+        monkeypatch.setenv("TEST_FLAG", "maybe")
+        assert _env_flag("TEST_FLAG", default=True) is True
+        assert _env_flag("TEST_FLAG", default=False) is False
+
+
+# ---------------------------------------------------------------------------
+# DNSRebindingProtectionMiddleware — missing Host header
+# ---------------------------------------------------------------------------
+
+
+class TestMissingHostHeader:
+    def test_missing_host_returns_400(self):
+        client = _make_client(allowed_hosts=["localhost:8000"])
+        resp = client.get("/", headers={"host": ""})
+        assert resp.status_code == 400
+        assert "missing Host" in resp.text
+
+
+# ---------------------------------------------------------------------------
+# DNSRebindingProtectionMiddleware — IPv6 host parsing
+# ---------------------------------------------------------------------------
+
+
+class TestIPv6HostParsing:
+    def test_bracketed_ipv6_host_match(self):
+        client = _make_client(allowed_hosts=["[::1]:8000"])
+        resp = client.get("/", headers={"host": "[::1]:8000"})
+        assert resp.status_code == 200
+
+    def test_bare_ipv6_host_match(self):
+        """Bare IPv6 (no brackets) should match when added to allowed_hosts."""
+        client = _make_client(allowed_hosts=["::1"])
+        resp = client.get("/", headers={"host": "::1"})
+        assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# AuthRateLimitMiddleware
+# ---------------------------------------------------------------------------
+
+
+def _make_rate_limit_client(
+    max_failures: int = 3,
+    window_seconds: float = 60.0,
+    block_seconds: float = 300.0,
+    status_code: int = 401,
+) -> TestClient:
+    """Build a test client with AuthRateLimitMiddleware in front of a configurable app."""
+
+    def _status_app(request: Request) -> Response:
+        code = int(request.query_params.get("status", str(status_code)))
+        return PlainTextResponse("response", status_code=code)
+
+    app = Starlette(
+        routes=[Route("/", _status_app)],
+        middleware=[
+            Middleware(
+                AuthRateLimitMiddleware,
+                max_failures=max_failures,
+                window_seconds=window_seconds,
+                block_seconds=block_seconds,
+            )
+        ],
+    )
+    return TestClient(app, raise_server_exceptions=False)
+
+
+class TestAuthRateLimitMiddleware:
+    def test_successful_requests_not_blocked(self):
+        client = _make_rate_limit_client(max_failures=3, status_code=200)
+        for _ in range(10):
+            resp = client.get("/?status=200")
+            assert resp.status_code == 200
+
+    def test_auth_failures_tracked_and_blocked(self):
+        client = _make_rate_limit_client(max_failures=3, block_seconds=300.0)
+        # First 3 failures should pass through
+        for _ in range(3):
+            resp = client.get("/?status=401")
+            assert resp.status_code == 401
+        # 4th request should be blocked with 429
+        resp = client.get("/?status=401")
+        assert resp.status_code == 429
+        assert "Too many" in resp.text
+
+    def test_403_also_counted_as_failure(self):
+        client = _make_rate_limit_client(max_failures=2, block_seconds=300.0)
+        client.get("/?status=403")
+        client.get("/?status=403")
+        resp = client.get("/?status=403")
+        assert resp.status_code == 429
+
+    def test_block_expires(self, monkeypatch):
+        mw = AuthRateLimitMiddleware.__new__(AuthRateLimitMiddleware)
+        mw.app = None
+        mw.max_failures = 2
+        mw.window_seconds = 60.0
+        mw.block_seconds = 10.0
+        mw._failures = {}
+        mw._blocked_until = {"1.2.3.4": time.monotonic() - 1}  # already expired
+        mw._last_cleanup = 0.0
+
+        # After block expires, _blocked_until entry should get cleaned up
+        now = time.monotonic()
+        mw._cleanup_stale_entries(now)
+        assert "1.2.3.4" not in mw._blocked_until
+
+    def test_cleanup_evicts_stale_failures(self):
+        from collections import defaultdict, deque
+
+        mw = AuthRateLimitMiddleware.__new__(AuthRateLimitMiddleware)
+        mw.app = None
+        mw.max_failures = 5
+        mw.window_seconds = 60.0
+        mw.block_seconds = 300.0
+        mw._failures = defaultdict(deque)
+        mw._blocked_until = {}
+        mw._last_cleanup = 0.0
+
+        now = time.monotonic()
+        # Add failures that are outside the window
+        mw._failures["old-ip"] = deque([now - 120, now - 100])
+        mw._cleanup_stale_entries(now)
+        # Old entries should be evicted
+        assert "old-ip" not in mw._failures
+
+    def test_cleanup_hard_cap(self):
+        from collections import defaultdict, deque
+
+        mw = AuthRateLimitMiddleware.__new__(AuthRateLimitMiddleware)
+        mw.app = None
+        mw.max_failures = 5
+        mw.window_seconds = 60.0
+        mw.block_seconds = 300.0
+        mw._last_cleanup = 0.0
+
+        now = time.monotonic()
+        # Fill beyond the hard cap with blocked entries
+        mw._blocked_until = {f"ip-{i}": now + i for i in range(mw._MAX_TRACKED_IPS + 50)}
+        mw._failures = defaultdict(deque)
+        mw._cleanup_stale_entries(now)
+        total = len(mw._failures) + len(mw._blocked_until)
+        assert total <= mw._MAX_TRACKED_IPS
+
+    def test_cleanup_hard_cap_failure_overflow(self):
+        from collections import defaultdict, deque
+
+        mw = AuthRateLimitMiddleware.__new__(AuthRateLimitMiddleware)
+        mw.app = None
+        mw.max_failures = 5
+        mw.window_seconds = 60.0
+        mw.block_seconds = 300.0
+        mw._last_cleanup = 0.0
+
+        now = time.monotonic()
+        mw._blocked_until = {}
+        # Fill failures beyond the hard cap
+        mw._failures = defaultdict(deque)
+        for i in range(mw._MAX_TRACKED_IPS + 50):
+            mw._failures[f"ip-{i}"] = deque([now - 1])
+        mw._cleanup_stale_entries(now)
+        total = len(mw._failures) + len(mw._blocked_until)
+        assert total <= mw._MAX_TRACKED_IPS
+
+    def test_get_client_ip_with_no_client(self):
+        mw = AuthRateLimitMiddleware.__new__(AuthRateLimitMiddleware)
+        assert mw._get_client_ip({}) == "unknown"
+
+    def test_get_client_ip_with_client(self):
+        mw = AuthRateLimitMiddleware.__new__(AuthRateLimitMiddleware)
+        assert mw._get_client_ip({"client": ("10.0.0.1", 12345)}) == "10.0.0.1"
+
+    def test_mixed_success_and_failure(self):
+        client = _make_rate_limit_client(max_failures=3, block_seconds=300.0)
+        # Successful requests don't count toward the limit
+        client.get("/?status=200")
+        client.get("/?status=401")
+        client.get("/?status=200")
+        client.get("/?status=401")
+        client.get("/?status=401")
+        # 3 failures reached — next request should be blocked
+        resp = client.get("/?status=200")
+        assert resp.status_code == 429

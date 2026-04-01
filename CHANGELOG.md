@@ -5,6 +5,12 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.9] - 2026-04-01
+
+### Fixed
+
+- **CI coverage gate failure (89.35% < 90%)** — Added 23 tests covering `AuthRateLimitMiddleware` (rate limiting, blocking, cleanup, hard-cap eviction), `_env_flag` helper, missing-Host 400 response, IPv6 host parsing, and `events.py` edge cases (paginated dict responses, `count_only`, non-mapping items, `None` response). Coverage raised from 89.35% to 90.75%.
+
 ## [1.0.8] - 2026-04-01
 
 ### Fixed

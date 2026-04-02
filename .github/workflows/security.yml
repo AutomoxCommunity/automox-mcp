@@ -63,21 +63,23 @@ jobs:
         env:
           AUTOMOX_API_KEY: test-api-key
           AUTOMOX_ACCOUNT_UUID: test-account
-          AUTOMOX_ORG_ID: "0"
+          AUTOMOX_ORG_ID: "1"
           AUTOMOX_MCP_SKIP_DOTENV: "1"
         run: |
           set -euo pipefail
           source .venv/bin/activate
           uv pip install cisco-ai-mcp-scanner
           mcp-scanner \
-            --stdio-command uv \
-            --stdio-args run automox-mcp \
-            --stdio-env AUTOMOX_API_KEY=test-api-key \
-            --stdio-env AUTOMOX_ACCOUNT_UUID=test-account \
-            --stdio-env AUTOMOX_ORG_ID=0 \
-            --stdio-env AUTOMOX_MCP_SKIP_DOTENV=1 \
             --analyzers yara \
             --format summary \
+            stdio \
+            --stdio-command uv \
+            --stdio-arg run \
+            --stdio-arg automox-mcp \
+            --stdio-env AUTOMOX_API_KEY=test-api-key \
+            --stdio-env AUTOMOX_ACCOUNT_UUID=test-account \
+            --stdio-env AUTOMOX_ORG_ID=1 \
+            --stdio-env AUTOMOX_MCP_SKIP_DOTENV=1 \
             | tee mcp-scanner.txt
 
       - name: Fail if MCP Scanner reports unsafe tools
@@ -91,16 +93,18 @@ jobs:
           import pathlib, re, sys
 
           summary = pathlib.Path("mcp-scanner.txt").read_text()
-          match = re.search(r"Unsafe tools:\s*(\d+)", summary)
+          match = re.search(r"Unsafe (?:tools|items):\s*(\d+)", summary)
           if match is None:
-              print("Unable to locate 'Unsafe tools' line in MCP scanner output.")
+              print("Unable to locate 'Unsafe tools/items' line in MCP scanner output.")
+              print("Output was:")
+              print(summary)
               sys.exit(1)
           unsafe_count = int(match.group(1))
           if unsafe_count > 0:
               print(summary)
-              print(f"Unsafe tools detected: {unsafe_count}")
+              print(f"Unsafe items detected: {unsafe_count}")
               sys.exit(1)
-          print("MCP Scanner reported no unsafe tools.")
+          print("MCP Scanner reported no unsafe items.")
           PY
 
       - name: Upload MCP Scanner report

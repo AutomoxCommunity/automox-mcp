@@ -241,16 +241,17 @@ uv run python tests/smoke_production.py
 Static analysis with [Cisco's MCP Scanner](https://github.com/cisco-ai-defense/mcp-scanner):
 
 ```bash
-mcp-scanner stdio \
+mcp-scanner \
+  --analyzers yara \
+  --format summary \
+  stdio \
   --stdio-command uv \
   --stdio-arg run \
   --stdio-arg automox-mcp \
   --stdio-env AUTOMOX_API_KEY=test-api-key \
   --stdio-env AUTOMOX_ACCOUNT_UUID=test-account \
   --stdio-env AUTOMOX_ORG_ID=1 \
-  --stdio-env AUTOMOX_MCP_SKIP_DOTENV=1 \
-  --analyzers yara \
-  --format summary
+  --stdio-env AUTOMOX_MCP_SKIP_DOTENV=1
 ```
 
 ## Versioning

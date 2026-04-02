@@ -210,6 +210,23 @@ pip install automox-mcp
 
 Then set the environment variables in your shell and run `automox-mcp`.
 
+## Updating
+
+If you already have the server installed, update to the latest version:
+
+```bash
+# uvx (Quick Start method) — force a cache refresh
+uvx --refresh automox-mcp
+
+# uv tool install
+uv tool upgrade automox-mcp
+
+# pip
+pip install --upgrade automox-mcp
+```
+
+> **Note:** `uvx` automatically refreshes its cache roughly every 7 days, so most users will pick up new releases without action. Run `uvx --refresh` to get the latest immediately.
+
 ## Contributing
 
 ```bash

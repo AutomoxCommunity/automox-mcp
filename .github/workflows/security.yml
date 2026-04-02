@@ -63,7 +63,7 @@ jobs:
         env:
           AUTOMOX_API_KEY: test-api-key
           AUTOMOX_ACCOUNT_UUID: test-account
-          AUTOMOX_ORG_ID: "0"
+          AUTOMOX_ORG_ID: "1"
           AUTOMOX_MCP_SKIP_DOTENV: "1"
         run: |
           set -euo pipefail
@@ -78,7 +78,7 @@ jobs:
             --stdio-arg automox-mcp \
             --stdio-env AUTOMOX_API_KEY=test-api-key \
             --stdio-env AUTOMOX_ACCOUNT_UUID=test-account \
-            --stdio-env AUTOMOX_ORG_ID=0 \
+            --stdio-env AUTOMOX_ORG_ID=1 \
             --stdio-env AUTOMOX_MCP_SKIP_DOTENV=1 \
             | tee mcp-scanner.txt
 

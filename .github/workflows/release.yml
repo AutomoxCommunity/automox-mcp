@@ -48,7 +48,7 @@ jobs:
       - name: Generate SBOM
         run: |
           pip install cyclonedx-bom
-          cyclonedx-py environment --output sbom.cdx.json --output-format json
+          cyclonedx-py environment -o sbom.cdx.json --of json
 
       - name: Sign artifacts with Sigstore
         run: |

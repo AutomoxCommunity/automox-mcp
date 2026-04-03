@@ -69,9 +69,9 @@ def test_extract_list_filters_non_mappings() -> None:
 
 
 def test_summarize_run_skips_none_fields() -> None:
-    run = {"uuid": "abc", "extra_field": "ignored"}
+    run = {"policy_uuid": "abc", "extra_field": "ignored"}
     result = _summarize_run(run)
-    assert result["uuid"] == "abc"
+    assert result["policy_uuid"] == "abc"
     assert "extra_field" not in result
 
 
@@ -116,10 +116,10 @@ async def test_policy_runs_v2_all_filters() -> None:
         limit=25,
     )
     params = client.calls[0][2]
-    assert params["startTime"] == "2026-01-01"
-    assert params["endTime"] == "2026-03-01"
-    assert params["policyName"] == "Test"
-    assert params["policyUuid"] == "pol-001"
+    assert params["start_time"] == "2026-01-01"
+    assert params["end_time"] == "2026-03-01"
+    assert params["policy_name"] == "Test"
+    assert params["policy_uuid"] == "pol-001"
 
 
 @pytest.mark.asyncio
@@ -164,7 +164,8 @@ async def test_run_detail_v2_all_filters() -> None:
     )
     params = client.calls[0][2]
     assert params["sort"] == "asc"
-    assert params["deviceName"] == "host-1"
+    assert params["device_name"] == "host-1"
+    assert "org" not in params  # org comes from JWT, not query params
 
 
 # ---------------------------------------------------------------------------

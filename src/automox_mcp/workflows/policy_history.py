@@ -12,20 +12,30 @@ from ..utils.response import extract_list as _extract_list
 
 
 def _summarize_run(run: Mapping[str, Any]) -> dict[str, Any]:
-    """Extract key fields from a policy run record."""
+    """Extract key fields from a policy run record.
+
+    The policy-report-api returns snake_case JSON via @JsonNaming(SnakeCaseStrategy).
+    Fields: policy_uuid, policy_id, org_uuid, policy_name, policy_type,
+    policy_deleted_at, pending, success, remediation_not_applicable, failed,
+    not_included, run_time, execution_token, run_count, blocked (v2 only).
+    """
     entry: dict[str, Any] = {}
     for key in (
-        "uuid",
         "policy_uuid",
+        "policy_id",
+        "org_uuid",
         "policy_name",
         "policy_type",
-        "status",
-        "result_status",
-        "started_at",
-        "completed_at",
-        "device_count",
-        "success_count",
-        "failure_count",
+        "policy_deleted_at",
+        "pending",
+        "success",
+        "remediation_not_applicable",
+        "failed",
+        "not_included",
+        "run_time",
+        "execution_token",
+        "run_count",
+        "blocked",
     ):
         val = run.get(key)
         if val is not None:
@@ -34,17 +44,21 @@ def _summarize_run(run: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _summarize_policy(policy: Mapping[str, Any]) -> dict[str, Any]:
-    """Extract key fields from a policy history record."""
+    """Extract key fields from a policy info record.
+
+    The policy-report-api PolicyInfoResource returns snake_case JSON:
+    uuid, id, org_uuid, name, type, deleted_at, updated_at, last_run_time.
+    """
     entry: dict[str, Any] = {}
     for key in (
         "uuid",
+        "id",
+        "org_uuid",
         "name",
-        "policy_type",
-        "policy_type_name",
-        "status",
-        "last_run_at",
-        "run_count",
-        "created_at",
+        "type",
+        "deleted_at",
+        "updated_at",
+        "last_run_time",
     ):
         val = policy.get(key)
         if val is not None:
@@ -74,20 +88,21 @@ async def list_policy_runs_v2(
         org_id=org_id,
     )
 
-    # Policy History v2 requires org UUID as a query parameter
+    # Policy History v2 requires org UUID as a query parameter.
+    # The policy-report-api uses snake_case query parameter names.
     params: dict[str, Any] = {"org": resolved_uuid}
     if start_time:
-        params["startTime"] = start_time
+        params["start_time"] = start_time
     if end_time:
-        params["endTime"] = end_time
+        params["end_time"] = end_time
     if policy_name:
-        params["policyName"] = policy_name
+        params["policy_name"] = policy_name
     if policy_uuid:
-        params["policyUuid"] = policy_uuid
+        params["policy_uuid"] = policy_uuid
     if policy_type:
-        params["policyType"] = policy_type
+        params["policy_type"] = policy_type
     if result_status:
-        params["resultStatus"] = result_status
+        params["result_status"] = result_status
     if sort:
         params["sort"] = sort
     if page is not None:
@@ -226,17 +241,30 @@ async def get_policy_runs_for_policy(
 
     params: dict[str, Any] = {"org": resolved_uuid}
     if report_days is not None:
-        params["reportDays"] = report_days
+        params["report_days"] = report_days
     if sort:
         params["sort"] = sort
 
+    # The correct endpoint for runs-with-stats is /policy-runs/{policyUuid}
+    # (not /policies/{policyUuid}/runs which returns only execution tokens).
+    # Response shape: { data: { runs: [...], banner_stats: {...} }, metadata: {...} }
     response = await client.get(
-        f"/policy-history/policies/{policy_uuid}/runs",
+        f"/policy-history/policy-runs/{policy_uuid}",
         params=params,
     )
 
-    runs = _extract_list(response)
-    summaries = [_summarize_run(r) for r in runs]
+    # Extract runs from the nested response structure
+    if isinstance(response, Mapping) and "data" in response:
+        data_block = response["data"]
+        raw_runs = data_block.get("runs", []) if isinstance(data_block, Mapping) else []
+        banner_stats = data_block.get("banner_stats", {}) if isinstance(data_block, Mapping) else {}
+        metadata = response.get("metadata", {})
+    else:
+        raw_runs = _extract_list(response)
+        banner_stats = {}
+        metadata = {}
+
+    summaries = [_summarize_run(r) for r in raw_runs]
 
     return {
         "data": {
@@ -244,8 +272,9 @@ async def get_policy_runs_for_policy(
             "policy_uuid": policy_uuid,
             "total_runs": len(summaries),
             "runs": summaries,
+            "banner_stats": banner_stats,
         },
-        "metadata": {"deprecated_endpoint": False},
+        "metadata": metadata,
     }
 
 
@@ -269,13 +298,15 @@ async def get_policy_run_detail_v2(
         org_id=org_id,
     )
 
-    params: dict[str, Any] = {"org": resolved_uuid}
+    # The device details endpoint extracts org from JWT, not query params.
+    # Filter params use snake_case names per the policy-report-api.
+    params: dict[str, Any] = {}
     if sort:
         params["sort"] = sort
     if result_status:
-        params["resultStatus"] = result_status
+        params["result_status"] = result_status
     if device_name:
-        params["deviceName"] = device_name
+        params["device_name"] = device_name
     if page is not None:
         params["page"] = page
     if limit is not None:

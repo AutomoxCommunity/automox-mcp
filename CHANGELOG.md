@@ -5,6 +5,15 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.12] - 2026-04-03
+
+### Fixed
+
+- **Policy report API query params** — Changed camelCase query parameters (`startTime`, `policyName`, etc.) to snake_case (`start_time`, `policy_name`) to match the policy-report-api's expected format
+- **Policy runs URL path** — Corrected the URL path for fetching policy runs by policy
+- **Device details org param** — Removed erroneous `org` query parameter from the device details endpoint (uses JWT for org context)
+- **Response field extraction** — Fixed response field names to match actual API DTOs
+
 ## [1.0.11] - 2026-04-01
 
 ### Changed

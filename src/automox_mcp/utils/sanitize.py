@@ -15,6 +15,7 @@ import os
 import re
 import unicodedata
 from collections.abc import Mapping
+from html.parser import HTMLParser
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -53,16 +54,57 @@ _UNLABELED_CODE_BLOCK_RE = re.compile(r"`{3,}[^\n]*\n.*?`{3,}", re.DOTALL)
 # Triple-or-more backticks (that aren't part of a code block we already removed)
 _TRIPLE_BACKTICK_RE = re.compile(r"`{3,}")
 
-# HTML tags — strip to prevent injection via HTML in API-sourced data
-_HTML_TAG_RE = re.compile(r"</?[a-zA-Z][a-zA-Z0-9]*(?:\s[^>]*)?>")
+# ---------------------------------------------------------------------------
+# HTML stripping via stdlib parser (replaces regex-based tag filtering)
+# ---------------------------------------------------------------------------
 
-# HTML/JS dangerous patterns (script, event handlers, data URIs in tags)
-_HTML_DANGEROUS_RE = re.compile(
-    r"<script\b.*?</script>|"
-    r"<[^>]+\bon\w+\s*=|"
-    r"""<[^>]+(?:href|src)\s*=\s*["']?\s*(?:javascript|data):""",
-    re.DOTALL | re.IGNORECASE,
-)
+_DANGEROUS_TAGS = frozenset({"script", "style"})
+_DANGEROUS_PROTOCOL_RE = re.compile(r"^\s*(?:javascript|data):", re.IGNORECASE)
+_EVENT_HANDLER_RE = re.compile(r"^on\w+$", re.IGNORECASE)
+
+
+class _HTMLTextExtractor(HTMLParser):
+    """Extract safe text from HTML, dropping tags and dangerous content."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self._pieces: list[str] = []
+        self._skip_depth: int = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() in _DANGEROUS_TAGS:
+            self._skip_depth += 1
+            return
+        for attr_name, attr_value in attrs:
+            if _EVENT_HANDLER_RE.match(attr_name):
+                return
+            if (
+                attr_value
+                and attr_name.lower() in ("href", "src", "action")
+                and _DANGEROUS_PROTOCOL_RE.match(attr_value)
+            ):
+                return
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() in _DANGEROUS_TAGS and self._skip_depth > 0:
+            self._skip_depth -= 1
+
+    def handle_data(self, data: str) -> None:
+        if self._skip_depth == 0:
+            self._pieces.append(data)
+
+    def get_text(self) -> str:
+        return "".join(self._pieces)
+
+
+def _strip_html(text: str) -> str:
+    """Strip HTML tags and dangerous content using a proper parser."""
+    if "<" not in text:
+        return text
+    parser = _HTMLTextExtractor()
+    parser.feed(text)
+    return parser.get_text()
+
 
 # Zero-width and invisible Unicode characters used for homoglyph bypass
 _INVISIBLE_CHARS_RE = re.compile(
@@ -173,11 +215,9 @@ def sanitize_for_llm(text: str, *, field_name: str | None = None) -> str:
     text = _REF_LINK_RE.sub(r"\1", text)
     text = _REF_DEF_RE.sub("", text)
 
-    # Step 3: HTML dangerous patterns (script tags, event handlers, JS/data URIs)
-    text = _HTML_DANGEROUS_RE.sub("", text)
-
-    # Step 4: Strip remaining HTML tags
-    text = _HTML_TAG_RE.sub("", text)
+    # Step 3-4: Strip HTML tags and dangerous content (script, event handlers,
+    # JS/data URIs) using a proper parser instead of regex.
+    text = _strip_html(text)
 
     # Step 5: Fenced code blocks (labelled shell/script, then unlabeled)
     text = _CODE_BLOCK_RE.sub("", text)

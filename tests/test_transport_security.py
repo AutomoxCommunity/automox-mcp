@@ -230,9 +230,8 @@ class TestBuildMiddleware:
         mw = build_transport_security_middleware(host="0.0.0.0", port=8000)
         dns_mw = self._find_dns_mw(mw)
         assert dns_mw is not None
-        allowed_hosts = dns_mw.kwargs["allowed_hosts"]
-        assert "proxy.internal:443" in allowed_hosts
-        assert "cdn.example.com:443" in allowed_hosts
+        allowed_hosts = set(dns_mw.kwargs["allowed_hosts"])
+        assert {"proxy.internal:443", "cdn.example.com:443"} <= allowed_hosts
 
     def test_extra_allowed_origins(self, monkeypatch):
         monkeypatch.delenv("AUTOMOX_MCP_DNS_REBINDING_PROTECTION", raising=False)
@@ -242,7 +241,7 @@ class TestBuildMiddleware:
         mw = build_transport_security_middleware(host="0.0.0.0", port=8000)
         dns_mw = self._find_dns_mw(mw)
         assert dns_mw is not None
-        allowed_origins = dns_mw.kwargs["allowed_origins"]
+        allowed_origins = set(dns_mw.kwargs["allowed_origins"])
         assert "https://app.example.com" in allowed_origins
 
 

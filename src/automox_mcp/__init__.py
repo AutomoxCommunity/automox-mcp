@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import sys
 from collections.abc import Sequence
 
 from fastmcp import FastMCP
@@ -116,7 +117,9 @@ def main(argv: Sequence[str] | None = None) -> None:
     if args.generate_key:
         from .auth import generate_api_key
 
-        print(generate_api_key())
+        # Write directly to stdout — this is the intended output of --generate-key,
+        # not a logging leak of sensitive data.
+        sys.stdout.write(generate_api_key() + "\n")
         return
 
     transport_env = _env_str("AUTOMOX_MCP_TRANSPORT")

@@ -6,13 +6,14 @@ on:
       - "v*"
   workflow_dispatch:
 
-permissions:
-  contents: write  # Required for creating GitHub Releases
-  id-token: write  # Required for trusted publishing and Sigstore signing
+permissions: {}
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Required for creating GitHub Releases
+      id-token: write  # Required for trusted publishing and Sigstore signing
     timeout-minutes: 20
     steps:
       - name: Checkout repository

@@ -5,6 +5,16 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.13] - 2026-04-11
+
+### Security
+
+- **CVE-2026-39892 (cryptography)** — Bumped `cryptography` from 46.0.6 to 46.0.7 to fix a buffer overflow when non-contiguous buffers are passed to APIs like `Hash.update()` on Python >3.11. Added `cryptography>=46.0.7` as a direct dependency constraint.
+
+### Fixed
+
+- **Release workflow excessive permissions** — Moved `contents: write` and `id-token: write` from workflow-level to job-level permissions in `release.yml`, following the principle of least privilege (flagged by zizmor)
+
 ## [1.0.12] - 2026-04-03
 
 ### Fixed

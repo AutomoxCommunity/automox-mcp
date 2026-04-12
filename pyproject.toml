@@ -1,6 +1,6 @@
 [project]
 name = "automox-mcp"
-version = "1.0.12"
+version = "1.0.13"
 description = "An MCP server implementation for Automox"
 readme = "README.md"
 authors = [
@@ -19,6 +19,7 @@ classifiers = [
   "Topic :: System :: Systems Administration"
 ]
 dependencies = [
+  "cryptography>=46.0.7",
   "fastmcp>=3.2.0",
   "httpx>=0.28",
   "pydantic>=2.12",

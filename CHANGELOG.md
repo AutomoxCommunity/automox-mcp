@@ -5,13 +5,18 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.14] - 2026-04-11
+
+### Security
+
+- **HTML sanitization hardened** — Replaced regex-based HTML tag filtering in `sanitize.py` with stdlib `html.parser` to properly handle malformed tags, nested content, and edge cases (resolved CodeQL `py/bad-tag-filter`)
+- **5 CodeQL code-scanning alerts resolved** — Fixed weak-hashing false positive in `auth.py` (`usedforsecurity=False`), clear-text-logging false positive in `__init__.py`, and URL substring-matching false positives in tests
+
 ## [1.0.13] - 2026-04-11
 
 ### Security
 
 - **CVE-2026-39892 (cryptography)** — Bumped `cryptography` from 46.0.6 to 46.0.7 to fix a buffer overflow when non-contiguous buffers are passed to APIs like `Hash.update()` on Python >3.11. Added `cryptography>=46.0.7` as a direct dependency constraint.
-- **HTML sanitization hardened** — Replaced regex-based HTML tag filtering in `sanitize.py` with stdlib `html.parser` to properly handle malformed tags, nested content, and edge cases (resolved CodeQL `py/bad-tag-filter`)
-- **5 CodeQL code-scanning alerts resolved** — Fixed weak-hashing false positive in `auth.py` (`usedforsecurity=False`), clear-text-logging false positive in `__init__.py`, and URL substring-matching false positives in tests
 
 ### Fixed
 

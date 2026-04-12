@@ -81,7 +81,9 @@ def _parse_key_entry(entry: str) -> tuple[str, dict[str, Any]] | None:
     else:
         token = entry
         # Derive a stable, short client-id from the key itself.
-        client_id = f"client-{hashlib.sha256(token.encode()).hexdigest()[:8]}"
+        # Not used for security — just a human-readable identifier for logs.
+        digest = hashlib.sha256(token.encode(), usedforsecurity=False)
+        client_id = f"client-{digest.hexdigest()[:8]}"
 
     if not token:
         return None

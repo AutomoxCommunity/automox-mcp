@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - **Release workflow idempotency** — `gh release create` now checks for an existing release first and uploads assets with `--clobber` if one exists, preventing failures on workflow re-runs
+- **Release workflow PyPI check** — Skip PyPI publish step if the version already exists on PyPI, preventing `400 File already exists` errors on re-runs
 
 ## [1.0.13] - 2026-04-11
 

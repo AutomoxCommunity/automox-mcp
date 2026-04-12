@@ -5,6 +5,18 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.15] - 2026-04-11
+
+### Added
+
+- **Privacy Policy** — Added a Privacy Policy section to README.md covering data collection, usage, third-party sharing, and data retention, as required for the Anthropic MCP Directory submission
+- **MCP Tool Annotations on all 80 tools** — Every tool now declares `readOnlyHint`, `destructiveHint`, `idempotentHint`, and `openWorldHint` per the MCP Protocol Tool Annotations schema. Read-only tools (58) are marked as safe and idempotent; write tools (22) are marked as destructive with per-tool idempotency classification. MCP clients can use these hints for confirmation dialogs and safety guardrails
+
+### Changed
+
+- **Tool reference documentation** — Added "Tool Safety Annotations" section to `docs/tool-reference.md` documenting the annotation schema and per-tool classification
+- **Deployment security guide** — Updated Human-in-the-Loop section to reference MCP Tool Annotations for identifying write tools
+
 ## [1.0.14] - 2026-04-11
 
 ### Security

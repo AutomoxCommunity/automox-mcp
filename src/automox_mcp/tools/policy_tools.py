@@ -37,7 +37,14 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     """Register policy-related tools."""
 
     @server.tool(
-        name="policy_health_overview", description="Summarize recent Automox policy activity."
+        name="policy_health_overview",
+        description="Summarize recent Automox policy activity.",
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def policy_health_overview(
         org_uuid: str | None = None,
@@ -61,7 +68,14 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         )
 
     @server.tool(
-        name="policy_execution_timeline", description="Review recent executions for a policy."
+        name="policy_execution_timeline",
+        description="Review recent executions for a policy.",
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def policy_execution_timeline(
         policy_uuid: str,
@@ -87,6 +101,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     @server.tool(
         name="policy_run_results",
         description="Retrieve per-device results and output for a specific policy execution token.",
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def policy_run_results(
         policy_uuid: str,
@@ -120,7 +140,14 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         )
 
     @server.tool(
-        name="policy_catalog", description="List Automox policies with type and status summaries."
+        name="policy_catalog",
+        description="List Automox policies with type and status summaries.",
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def policy_catalog(
         limit: int | None = 20,
@@ -143,7 +170,14 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         return maybe_format_markdown(result, output_format)
 
     @server.tool(
-        name="policy_detail", description="Retrieve configuration and recent history for a policy."
+        name="policy_detail",
+        description="Retrieve configuration and recent history for a policy.",
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def policy_detail(
         policy_id: int,
@@ -166,6 +200,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "Retrieve per-policy compliance statistics showing compliant vs "
             "non-compliant device counts and compliance rates for the organization."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def policy_compliance_stats() -> dict[str, Any]:
         return await call_tool_workflow(
@@ -178,6 +218,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     @server.tool(
         name="patch_approvals_summary",
         description="Summarize pending patch approvals and their severity.",
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def patch_approvals_summary(
         status: str | None = None,
@@ -202,7 +248,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         @server.tool(
             name="decide_patch_approval",
             description="Approve or reject an Automox patch approval request.",
-            annotations={"destructiveHint": True},
+            annotations={
+                "readOnlyHint": False,
+                "destructiveHint": True,
+                "idempotentHint": False,
+                "openWorldHint": True,
+            },
         )
         async def decide_patch_approval(
             approval_id: int,
@@ -231,7 +282,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         @server.tool(
             name="delete_policy",
             description="Permanently delete an Automox policy by ID.",
-            annotations={"destructiveHint": True},
+            annotations={
+                "readOnlyHint": False,
+                "destructiveHint": True,
+                "idempotentHint": True,
+                "openWorldHint": True,
+            },
         )
         async def delete_policy(
             policy_id: int,
@@ -257,7 +313,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "Clone an existing Automox policy. Creates a copy with an optional "
                 "new name and server group assignments."
             ),
-            annotations={"destructiveHint": True},
+            annotations={
+                "readOnlyHint": False,
+                "destructiveHint": True,
+                "idempotentHint": False,
+                "openWorldHint": True,
+            },
         )
         async def clone_policy(
             policy_id: int,
@@ -286,7 +347,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         @server.tool(
             name="apply_policy_changes",
             description="Create or update Automox policies with automatic format correction.",
-            annotations={"destructiveHint": True},
+            annotations={
+                "readOnlyHint": False,
+                "destructiveHint": True,
+                "idempotentHint": False,
+                "openWorldHint": True,
+            },
         )
         async def apply_policy_changes_tool(
             operations: list[dict[str, Any]],
@@ -317,7 +383,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "Execute an Automox policy immediately for remediation "
                 "(all devices or specific device)."
             ),
-            annotations={"destructiveHint": True},
+            annotations={
+                "readOnlyHint": False,
+                "destructiveHint": True,
+                "idempotentHint": False,
+                "openWorldHint": True,
+            },
         )
         async def execute_policy_now(
             policy_id: int,

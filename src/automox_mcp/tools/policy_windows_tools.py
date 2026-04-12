@@ -136,6 +136,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "Supports filtering by group UUIDs, status (active/inactive), and recurrence "
             "type (recurring/once). Supports pagination via page/size."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def search_policy_windows(
         org_uuid: str | None = None,
@@ -171,6 +177,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     @server.tool(
         name="get_policy_window",
         description="Retrieve details for a specific maintenance/exclusion window by UUID.",
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def get_policy_window(
         window_uuid: str,
@@ -195,6 +207,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "Check whether one or more server groups are currently within an active "
             "exclusion window. Returns a per-group boolean status."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def check_group_exclusion_status(
         group_uuids: list[str],
@@ -220,6 +238,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "A window is active when its status is 'active', it has at least one "
             "group, and the current time falls within an exclusion period."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def check_window_active(
         window_uuid: str,
@@ -245,6 +269,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "Returns start/end times and window types. Optionally provide a "
             "future date limit (ISO 8601 UTC)."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def get_group_scheduled_windows(
         group_uuid: str,
@@ -272,6 +302,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "Returns start/end times and window types. Optionally provide a "
             "future date limit (ISO 8601 UTC)."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def get_device_scheduled_windows(
         device_uuid: str,
@@ -303,7 +339,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "for scheduling. All fields are required. The window prevents "
                 "policy execution on the specified groups during the defined periods."
             ),
-            annotations={"destructiveHint": True},
+            annotations={
+                "readOnlyHint": False,
+                "destructiveHint": True,
+                "idempotentHint": False,
+                "openWorldHint": True,
+            },
         )
         async def create_policy_window(
             window_type: str,
@@ -353,7 +394,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "Update an existing maintenance window. Only dtstart is required; "
                 "all other fields are optional for partial updates."
             ),
-            annotations={"destructiveHint": True},
+            annotations={
+                "readOnlyHint": False,
+                "destructiveHint": True,
+                "idempotentHint": True,
+                "openWorldHint": True,
+            },
         )
         async def update_policy_window(
             window_uuid: str,
@@ -402,7 +448,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         @server.tool(
             name="delete_policy_window",
             description="Delete a maintenance/exclusion window permanently.",
-            annotations={"destructiveHint": True},
+            annotations={
+                "readOnlyHint": False,
+                "destructiveHint": True,
+                "idempotentHint": True,
+                "openWorldHint": True,
+            },
         )
         async def delete_policy_window(
             window_uuid: str,

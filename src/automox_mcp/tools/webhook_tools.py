@@ -198,6 +198,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "List all available Automox webhook event types with descriptions. "
             "Use this to see which events can trigger webhook deliveries."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def list_webhook_event_types() -> dict[str, Any]:
         return await call_tool_workflow(
@@ -212,6 +218,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "List all webhook subscriptions for the Automox organization. "
             "Supports cursor-based pagination."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def list_webhooks(
         org_uuid: str | None = None,
@@ -237,6 +249,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     @server.tool(
         name="get_webhook",
         description="Retrieve details for a specific Automox webhook subscription.",
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def get_webhook(
         webhook_id: str,
@@ -265,7 +283,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "signing secret that is ONLY shown once — save it immediately. "
                 "Max 5 webhooks per organization. URL must be HTTPS."
             ),
-            annotations={"destructiveHint": True},
+            annotations={
+                "readOnlyHint": False,
+                "destructiveHint": True,
+                "idempotentHint": False,
+                "openWorldHint": True,
+            },
         )
         async def create_webhook(
             name: str,
@@ -302,7 +325,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "Update an existing Automox webhook. Only provided fields are changed "
                 "(partial update). Can update name, URL, enabled status, or event types."
             ),
-            annotations={"destructiveHint": True},
+            annotations={
+                "readOnlyHint": False,
+                "destructiveHint": True,
+                "idempotentHint": True,
+                "openWorldHint": True,
+            },
         )
         async def update_webhook(
             webhook_id: str,
@@ -338,7 +366,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         @server.tool(
             name="delete_webhook",
             description="Delete an Automox webhook subscription permanently.",
-            annotations={"destructiveHint": True},
+            annotations={
+                "readOnlyHint": False,
+                "destructiveHint": True,
+                "idempotentHint": True,
+                "openWorldHint": True,
+            },
         )
         async def delete_webhook(
             webhook_id: str,
@@ -369,7 +402,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "Send a test delivery to an Automox webhook endpoint. "
                 "Returns success status, HTTP status code, and response time."
             ),
-            annotations={"destructiveHint": True},
+            annotations={
+                "readOnlyHint": False,
+                "destructiveHint": True,
+                "idempotentHint": False,
+                "openWorldHint": True,
+            },
         )
         async def test_webhook(
             webhook_id: str,
@@ -400,7 +438,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "Rotate the signing secret for an Automox webhook. The old secret "
                 "is immediately invalidated. Save the new secret — it is only shown once."
             ),
-            annotations={"destructiveHint": True},
+            annotations={
+                "readOnlyHint": False,
+                "destructiveHint": True,
+                "idempotentHint": False,
+                "openWorldHint": True,
+            },
         )
         async def rotate_webhook_secret(
             webhook_id: str,

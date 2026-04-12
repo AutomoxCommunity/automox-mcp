@@ -30,6 +30,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "List software packages installed on a specific Automox device. "
             "Returns package names, versions, patch status, and severity."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def list_device_packages(
         device_id: int,
@@ -58,6 +64,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "Search software packages across the Automox organization. "
             "Filter by managed status or packages awaiting installation."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def search_org_packages(
         include_unmanaged: bool | None = None,

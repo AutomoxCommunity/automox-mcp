@@ -40,6 +40,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "specific devices, optionally filtered by management/policy status. For "
             "aggregate statistics and health metrics, use device_health_metrics instead."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def list_devices(
         group_id: int | None = None,
@@ -68,6 +74,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     @server.tool(
         name="device_detail",
         description="Return detailed information and recent activity for a device.",
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def device_detail(
         device_id: int,
@@ -90,6 +102,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     @server.tool(
         name="devices_needing_attention",
         description="Surface Automox devices flagged for immediate action.",
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def devices_needing_attention(
         group_id: int | None = None,
@@ -115,6 +133,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "Search Automox devices by hostname (including custom name), IP, tag, severity of "
             "missing patches, or patch status (only 'missing' is supported)."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def search_devices_tool(
         hostname_contains: str | None = None,
@@ -153,6 +177,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "breakdown, device status breakdown, compliance metrics, and check-in recency "
             "analysis. Use this for monitoring dashboards and getting a fleet-wide health overview."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def device_health_metrics(
         group_id: int | None = None,
@@ -180,6 +210,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "security, services, system, and user information. Optionally filter "
             "by category. Uses the Console API device-details endpoint."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def get_device_inventory_tool(
         device_id: int,
@@ -202,6 +238,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "dynamic per device. Use this to discover what inventory data is "
             "available before requesting specific categories."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def get_device_inventory_categories_tool(
         device_id: int,
@@ -219,7 +261,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         @server.tool(
             name="execute_device_command",
             description="Issue an immediate command to a device (scan, patch, or reboot).",
-            annotations={"destructiveHint": True},
+            annotations={
+                "readOnlyHint": False,
+                "destructiveHint": True,
+                "idempotentHint": False,
+                "openWorldHint": True,
+            },
         )
         async def execute_device_command(
             device_id: int,

@@ -140,6 +140,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "data_extracts, vuln_sync, account, compound, policy_windows. "
             "Call with no domain to list all available domains."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": False,
+        },
     )
     async def discover_capabilities(
         domain: str | None = None,

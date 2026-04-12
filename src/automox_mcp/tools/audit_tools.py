@@ -24,6 +24,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     @server.tool(
         name="audit_trail_user_activity",
         description="Retrieve Automox audit trail events performed by a user on a specific date.",
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def audit_trail_user_activity(
         date: str,

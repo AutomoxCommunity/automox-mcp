@@ -62,7 +62,7 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
 
     parser.add_argument(
         "--transport",
-        choices=("stdio", "http", "sse"),
+        choices=("stdio", "http", "sse", "streamable-http"),
         help="FastMCP transport to use (default: stdio).",
     )
     parser.add_argument(
@@ -125,8 +125,10 @@ def main(argv: Sequence[str] | None = None) -> None:
     transport_env = _env_str("AUTOMOX_MCP_TRANSPORT")
     transport = args.transport or (transport_env or "stdio")
     transport = transport.lower()
-    if transport not in {"stdio", "http", "sse"}:
-        raise SystemExit(f"Unsupported transport '{transport}'. Expected stdio, http, or sse.")
+    if transport not in {"stdio", "http", "sse", "streamable-http"}:
+        raise SystemExit(
+            f"Unsupported transport '{transport}'. Expected stdio, http, sse, or streamable-http."
+        )
 
     host = args.host or _env_str("AUTOMOX_MCP_HOST")
     port = args.port

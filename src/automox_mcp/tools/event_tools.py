@@ -27,6 +27,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "List Automox organization events with optional filters by policy, "
             "device, user, event name, or date range."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def list_events(
         page: int | None = None,

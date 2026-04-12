@@ -59,10 +59,15 @@ jobs:
           pip install sigstore
           python -m sigstore sign dist/*.whl dist/*.tar.gz
 
-      - name: Create GitHub Release
+      - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --generate-notes \
-            dist/*.whl dist/*.tar.gz dist/*.sigstore.json sbom.cdx.json
+          if gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" --clobber \
+              dist/*.whl dist/*.tar.gz dist/*.sigstore.json sbom.cdx.json
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --generate-notes \
+              dist/*.whl dist/*.tar.gz dist/*.sigstore.json sbom.cdx.json
+          fi

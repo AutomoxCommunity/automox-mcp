@@ -46,7 +46,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         @server.tool(
             name="invite_user_to_account",
             description="Invite a user to the Automox account with optional zone assignments.",
-            annotations={"destructiveHint": True},
+            annotations={
+                "readOnlyHint": False,
+                "destructiveHint": True,
+                "idempotentHint": False,
+                "openWorldHint": True,
+            },
         )
         async def invite_user_to_account(
             email: str,
@@ -76,7 +81,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         @server.tool(
             name="remove_user_from_account",
             description="Remove a user from the Automox account by UUID.",
-            annotations={"destructiveHint": True},
+            annotations={
+                "readOnlyHint": False,
+                "destructiveHint": True,
+                "idempotentHint": True,
+                "openWorldHint": True,
+            },
         )
         async def remove_user_from_account(
             user_id: str,
@@ -105,6 +115,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "List API keys for the Automox organization. "
             "Returns key names and IDs only — secrets are never exposed."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def list_org_api_keys(
         output_format: str | None = "json",

@@ -56,6 +56,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "List vulnerability remediation action sets for the organization. "
             "Shows imported vulnerability data and remediation tracking."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def list_remediation_action_sets(
         output_format: str | None = "json",
@@ -71,6 +77,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     @server.tool(
         name="get_action_set_detail",
         description="Get details for a specific vulnerability remediation action set.",
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def get_action_set_detail(
         action_set_id: int,
@@ -90,6 +102,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "Get remediation actions for a vulnerability action set. "
             "Shows what patches or changes need to be applied."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def get_action_set_actions(
         action_set_id: int,
@@ -109,6 +127,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "Get vulnerability issues (CVEs) associated with an action set. "
             "Shows which vulnerabilities are being tracked for remediation."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def get_action_set_issues(
         action_set_id: int,
@@ -128,6 +152,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "Get solutions for a vulnerability action set. "
             "Shows recommended patches or configurations to resolve vulnerabilities."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def get_action_set_solutions(
         action_set_id: int,
@@ -144,6 +174,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     @server.tool(
         name="get_upload_formats",
         description="Get supported CSV upload formats for vulnerability remediation action sets.",
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def get_upload_formats(
         output_format: str | None = "json",
@@ -164,6 +200,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "Upload a CSV-based vulnerability remediation action set. "
                 "Use get_upload_formats to see supported formats first."
             ),
+            annotations={
+                "readOnlyHint": False,
+                "destructiveHint": True,
+                "idempotentHint": False,
+                "openWorldHint": True,
+            },
         )
         async def upload_action_set(
             action_set_data: dict[str, Any],

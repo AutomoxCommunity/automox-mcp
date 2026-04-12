@@ -28,6 +28,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "Combined view of pre-patch report, pending approvals, and patch policy "
             "schedules. Answers 'Are we ready for Patch Tuesday?' in a single call."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def get_patch_tuesday_readiness(
         group_id: int | None = None,
@@ -50,6 +56,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "Combined view of non-compliant devices, fleet health metrics, and "
             "policy statistics. Answers 'What is our compliance posture?' in a single call."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def get_compliance_snapshot(
         group_id: int | None = None,
@@ -73,6 +85,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "max_packages (default 25). Use get_device_inventory or "
             "list_device_packages for full data."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def get_device_full_profile(
         device_id: int,

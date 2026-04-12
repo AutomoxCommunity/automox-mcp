@@ -52,6 +52,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "and result status filtering. Uses the Policy History v2 API for richer "
             "data than the standard policy execution timeline."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def policy_runs_v2(
         start_time: str | None = None,
@@ -87,6 +93,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "Get aggregate policy execution counts. "
             "Optionally filter by number of days to look back."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def policy_run_count(
         days: int | None = None,
@@ -104,6 +116,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "Get policy runs grouped by policy for cross-policy comparison. "
             "Shows which policies have been running and their aggregate results."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def policy_runs_by_policy(
         output_format: str | None = "json",
@@ -117,6 +135,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     @server.tool(
         name="policy_history_detail",
         description=("Get policy history details by UUID, including run history and status."),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def policy_history_detail(
         policy_uuid: str,
@@ -134,6 +158,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "Get execution runs for a specific policy by UUID. "
             "Optionally filter by number of days and sort order."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def policy_runs_for_policy(
         policy_uuid: str,
@@ -157,6 +187,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "Get detailed per-device results for a specific policy run. "
             "Uses UUID-based queries and supports device name filtering."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def policy_run_detail_v2(
         policy_uuid: str,

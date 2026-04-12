@@ -30,6 +30,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "Retrieve the Automox pre-patch readiness report showing devices "
             "with pending patches before the next scheduled patch window."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def prepatch_report(
         group_id: int | None = None,
@@ -58,6 +64,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "Retrieve the Automox non-compliant devices report showing devices "
             "that need attention due to policy failures or missing patches."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def noncompliant_report(
         group_id: int | None = None,

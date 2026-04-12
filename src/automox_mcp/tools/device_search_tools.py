@@ -48,6 +48,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "List saved device searches from the Advanced Device Search API. "
             "Returns saved search names, queries, and metadata."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def list_saved_searches(
         output_format: str | None = "json",
@@ -62,6 +68,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "Enables complex queries like 'find all Windows devices not seen in 30 days' "
             "using field-based filtering. Pass the query as a dict with filter conditions."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def advanced_device_search(
         query: dict[str, Any] | None = None,
@@ -83,6 +95,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "Get typeahead suggestions for device search fields. "
             "Useful for discovering valid values when building advanced device queries."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def device_search_typeahead(
         field: str,
@@ -103,6 +121,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "Get available fields for device queries. "
             "Returns the field names and types supported by the advanced device search API."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def get_device_metadata_fields(
         output_format: str | None = "json",
@@ -113,6 +137,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     @server.tool(
         name="get_device_assignments",
         description=("Get device-to-policy and device-to-group assignments."),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def get_device_assignments(
         output_format: str | None = "json",
@@ -126,6 +156,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "Get device details by UUID using the Server Groups API v2. "
             "Provides device information via UUID-based lookup."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def get_device_by_uuid(
         device_uuid: str,

@@ -41,6 +41,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "List available data extracts for the Automox organization. "
             "Returns extract names, statuses, and download information."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def list_data_extracts(
         output_format: str | None = "json",
@@ -56,6 +62,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     @server.tool(
         name="get_data_extract",
         description=("Get details and download information for a specific data extract."),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def get_data_extract(
         extract_id: str,
@@ -77,6 +89,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "Request a new data extract for bulk reporting. "
                 "Returns the extract ID and initial status."
             ),
+            annotations={
+                "readOnlyHint": False,
+                "destructiveHint": True,
+                "idempotentHint": False,
+                "openWorldHint": True,
+            },
         )
         async def create_data_extract(
             extract_data: dict[str, Any],

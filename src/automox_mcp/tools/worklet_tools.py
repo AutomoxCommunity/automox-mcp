@@ -32,6 +32,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "Returns worklet names, descriptions, categories, and OS compatibility. "
             "Use to discover pre-built evaluation and remediation scripts."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def search_worklet_catalog(
         query: str | None = None,
@@ -52,6 +58,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "Get detailed information for a specific community worklet, "
             "including evaluation code, remediation code, and requirements."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def get_worklet_detail(
         item_id: str,

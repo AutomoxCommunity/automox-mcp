@@ -200,6 +200,23 @@ The server exposes 9 MCP resources that provide reference data and schemas:
 
 ---
 
+## Tool Safety Annotations
+
+Every tool includes [MCP Tool Annotations](https://modelcontextprotocol.io/specification/2025-11-25/server/tools#annotations) that declare its behavior to MCP clients. Clients can use these hints for confirmation dialogs, UI indicators, and safety guardrails.
+
+| Hint | Description | Read-only tools (58) | Write tools (22) |
+|---|---|---|---|
+| `readOnlyHint` | Tool does not modify any state | `true` | `false` |
+| `destructiveHint` | Tool may perform destructive operations | `false` | `true` |
+| `idempotentHint` | Repeated calls with the same args produce the same result | `true` | varies |
+| `openWorldHint` | Tool interacts with external systems | `true` | `true` |
+
+**Idempotency for write tools:** Update and delete operations are marked `idempotentHint: true` (same end state on retry). Create, execute, and rotate operations are marked `idempotentHint: false` (each call produces a new side effect). The `discover_capabilities` meta-tool is the only tool with `openWorldHint: false` since it returns a static catalog without calling the Automox API.
+
+Per the Anthropic MCP Directory Policy, every tool has at least one of `readOnlyHint: true` or `destructiveHint: true`.
+
+---
+
 ## Tool Parameters
 
 Most tools accept optional parameters for filtering and pagination:
@@ -217,7 +234,7 @@ Most tools accept optional parameters for filtering and pagination:
 
 ### Special Parameters
 
-- **Write tools** (all 18): accept an optional `request_id` parameter (UUID string) for idempotency. Supplying the same `request_id` on a repeat call returns the cached response without re-executing the operation (TTL: 300 seconds).
+- **Write tools** (all 22): accept an optional `request_id` parameter (UUID string) for idempotency. Supplying the same `request_id` on a repeat call returns the cached response without re-executing the operation (TTL: 300 seconds). Write tools are also identifiable by their `annotations` metadata (`readOnlyHint: false`, `destructiveHint: true`).
 - **List tools** (13 tools): accept an optional `output_format` parameter. Use `"json"` (default) for the standard structured response or `"markdown"` for a compact table suited to quick scanning.
 
 ### Execution Tools

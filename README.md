@@ -98,7 +98,7 @@ For the full list of tools, parameters, and MCP resources, see the **[Tool Refer
 | `AUTOMOX_MCP_SANITIZE_RESPONSES` | No | `true` | Sanitize API data to mitigate prompt injection |
 | `AUTOMOX_MCP_TOOL_PREFIX` | No | — | Prefix all tool names (e.g., `automox`) to prevent cross-server collisions |
 | `AUTOMOX_MCP_LOG_FORMAT` | No | `text` | Log format: `text` or `json` (structured JSON for SIEM integration) |
-| `AUTOMOX_MCP_TRANSPORT` | No | `stdio` | Transport: `stdio`, `http`, or `sse` |
+| `AUTOMOX_MCP_TRANSPORT` | No | `stdio` | Transport: `stdio`, `http`, `sse`, or `streamable-http` |
 | `AUTOMOX_MCP_HOST` | No | `127.0.0.1` | Bind address for HTTP/SSE |
 | `AUTOMOX_MCP_PORT` | No | `8000` | Bind port for HTTP/SSE |
 | `AUTOMOX_MCP_API_KEYS` | No | — | Comma-separated MCP endpoint API keys for HTTP/SSE Bearer-token auth (e.g., `key1,label:key2`) |
@@ -188,13 +188,26 @@ The Automox MCP server is designed for enterprise deployment with defense-in-dep
 - **Security response headers** — `X-Content-Type-Options`, `X-Frame-Options`, `CSP`, `Cache-Control: no-store`, `Strict-Transport-Security` on all HTTP responses
 - **Authentication rate limiting** — blocks IPs after repeated auth failures to mitigate brute-force attacks
 - **Remote bind protection** — non-loopback HTTP/SSE binding requires explicit `--allow-remote-bind` opt-in
-- **59 security hardening items** (V-001 through V-149, S-001 through S-006) documented in CHANGELOG and SECURITY.md
+- **MCP Tool Annotations** on all 80 tools — `readOnlyHint`, `destructiveHint`, `idempotentHint`, and `openWorldHint` per the MCP Protocol specification, enabling client-side confirmation dialogs and safety guardrails
+- **60 security hardening items** (V-001 through V-181, S-001 through S-006) documented in CHANGELOG and SECURITY.md
 
 For vulnerability reporting and the full threat model, see [SECURITY.md](SECURITY.md).
 For deployment hardening (containers, Kubernetes, MCP gateways, TLS, authentication), see the [Deployment Security Guide](docs/deployment-security.md).
 Security posture is benchmarked against the [Wiz MCP Security Best Practices](https://www.wiz.io/blog/mcp-security-best-practices) cheat sheet.
 
 > **Note**: For network-accessible deployments, enable endpoint authentication (static keys via `AUTOMOX_MCP_API_KEYS` or JWT via `AUTOMOX_MCP_OAUTH_ISSUER`) and/or place the server behind an MCP gateway or authenticating reverse proxy. TLS termination is the deployer's responsibility.
+
+## Privacy Policy
+
+The Automox MCP server acts as a stateless proxy between your AI assistant and the Automox API.
+
+**Data collection:** The server does not collect, store, or transmit any user data beyond what is required to fulfill API requests to the Automox platform. API credentials are read from environment variables at startup and used solely for authenticating requests to the Automox API.
+
+**Data usage:** All data retrieved from the Automox API is returned directly to the AI assistant that initiated the request. The server performs response sanitization (Unicode normalization, HTML stripping) for prompt injection defense, but does not analyze, aggregate, or repurpose API data for any other purpose.
+
+**Third-party sharing:** The server does not share data with any third parties. It communicates exclusively with the Automox API (`console.automox.com`) using the credentials you provide. No telemetry, analytics, or usage data is sent to the server authors or any other service.
+
+**Data retention:** The server retains no persistent data between sessions. In-memory caches (idempotency keys, rate-limit counters) are cleared when the process exits. Structured logs, when enabled, are written to stderr and are the deployer's responsibility to manage and retain.
 
 ## Alternative Installation
 

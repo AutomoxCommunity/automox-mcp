@@ -187,6 +187,7 @@ For sensitive deployments, we recommend using an MCP gateway with inline guardra
 | V-178 | Null-safe policy count in group summaries | `workflows/groups.py` |
 | V-179 | Rate limiter eviction covers `_failures` dict | `transport_security.py` |
 | V-180 | Code block sanitizer strips all fenced blocks regardless of language label | `utils/sanitize.py` |
+| V-181 | MCP Tool Annotations on all 80 tools (readOnlyHint, destructiveHint, idempotentHint, openWorldHint) | `tools/*.py` |
 
 ## Scope and Limitations
 

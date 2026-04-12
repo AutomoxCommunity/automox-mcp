@@ -256,6 +256,7 @@ These are always enabled on HTTP/SSE transports with no opt-out (defense-in-dept
 | Transport | Recommendation |
 |-----------|---------------|
 | `stdio` | No network exposure — suitable for local/developer use |
+| `streamable-http` | Recommended for remote/directory deployments per MCP spec. Enable endpoint auth and place behind TLS-terminating reverse proxy. Requires `--allow-remote-bind` for non-loopback addresses |
 | `sse` / `http` (simple) | Enable `AUTOMOX_MCP_API_KEYS` for built-in auth. DNS rebinding protection is on by default. Requires `--allow-remote-bind` for non-loopback addresses |
 | `sse` / `http` (enterprise) | Use `AUTOMOX_MCP_OAUTH_ISSUER` for JWT/OIDC auth with audience binding. Serves RFC 9728 metadata for MCP client discovery. Place behind TLS-terminating reverse proxy |
 | Multi-user | Deploy separate server instances per API key/role, or use an MCP gateway that maps user identity to server instances |
@@ -264,7 +265,7 @@ These are always enabled on HTTP/SSE transports with no opt-out (defense-in-dept
 
 Client-side controls that complement the server's safety features:
 
-- Enable **confirmation dialogs** in your MCP client for all write tools (the server's 22 write tools are identifiable by the `request_id` parameter)
+- Enable **confirmation dialogs** in your MCP client for all write tools (the server's 22 write tools are identifiable by their MCP Tool Annotations: `readOnlyHint: false`, `destructiveHint: true`)
 - Use `AUTOMOX_MCP_READ_ONLY=true` for monitoring and read-only use cases
 - Use `AUTOMOX_MCP_MODULES` to load only required tool domains (principle of least functionality)
 - Test new or untrusted server versions in a staging environment with `AUTOMOX_MCP_READ_ONLY=true` before production use

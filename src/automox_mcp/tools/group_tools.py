@@ -34,6 +34,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         description=(
             "List all Automox server groups with their device counts and assigned policies."
         ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def list_server_groups(
         page: int | None = None,
@@ -57,6 +63,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     @server.tool(
         name="get_server_group",
         description="Get detailed information about a specific Automox server group.",
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
     )
     async def get_server_group(
         group_id: int,
@@ -77,7 +89,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         @server.tool(
             name="create_server_group",
             description="Create a new Automox server group.",
-            annotations={"destructiveHint": True},
+            annotations={
+                "readOnlyHint": False,
+                "destructiveHint": True,
+                "idempotentHint": False,
+                "openWorldHint": True,
+            },
         )
         async def create_server_group(
             name: str,
@@ -113,7 +130,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         @server.tool(
             name="update_server_group",
             description="Update an existing Automox server group.",
-            annotations={"destructiveHint": True},
+            annotations={
+                "readOnlyHint": False,
+                "destructiveHint": True,
+                "idempotentHint": True,
+                "openWorldHint": True,
+            },
         )
         async def update_server_group(
             group_id: int,
@@ -151,7 +173,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         @server.tool(
             name="delete_server_group",
             description="Delete an Automox server group permanently.",
-            annotations={"destructiveHint": True},
+            annotations={
+                "readOnlyHint": False,
+                "destructiveHint": True,
+                "idempotentHint": True,
+                "openWorldHint": True,
+            },
         )
         async def delete_server_group(
             group_id: int,

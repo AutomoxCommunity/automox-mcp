@@ -5,6 +5,23 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.16] - 2026-04-16
+
+### Security
+
+- **Nested-bracket sanitization bypass fixed** — Updated markdown link/image regexes in `sanitize.py` to handle one level of nested brackets, preventing URL exfiltration via patterns like `[click [here]](https://evil.com)` that previously bypassed the sanitizer entirely
+
+### Added
+
+- **JWT `verify_token()` integration tests** — 9 new tests exercising the actual token verification path (valid tokens, expired tokens, wrong audience/issuer, invalid signatures, missing scopes, garbage input). Previously only JWTVerifier construction was tested
+- **Schema validation tests** (`test_schemas.py`) — 34 new tests covering Pydantic model validators, field constraints, discriminated unions, payload size limits, and command injection prevention via `patch_names` regex
+- **Workflow error-path tests** — 6 new tests across events, groups, reports, and packages workflows verifying `AutomoxAPIError` propagates correctly and is not silently swallowed
+
+### Changed
+
+- **Consolidated duplicate test infrastructure** — Moved `StubServer` and `FakeClient` into `conftest.py`, removing ~170 lines of duplicated code from 4 test files
+- **Removed unnecessary `sys.path` manipulation** — Cleaned up legacy `sys.path.insert()` from `conftest.py`, `test_workflows_policy.py`, and `test_workflows_policy_crud_extended.py`
+
 ## [1.0.15] - 2026-04-11
 
 ### Added

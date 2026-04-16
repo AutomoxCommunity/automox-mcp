@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 import pytest
+from conftest import FakeClient, StubServer
 from fastmcp.exceptions import ToolError
 
 from automox_mcp.client import AutomoxAPIError
@@ -19,47 +18,8 @@ from automox_mcp.tools import (
 )
 
 # ---------------------------------------------------------------------------
-# Shared test infrastructure (matches test_tool_dispatch.py pattern)
+# Shared test infrastructure
 # ---------------------------------------------------------------------------
-
-
-class StubServer:
-    """Lightweight FastMCP lookalike that captures registered tool functions."""
-
-    def __init__(self) -> None:
-        self.tools: dict[str, Any] = {}
-
-    def tool(self, name: str, description: str = "", **kwargs):
-        def decorator(func):
-            self.tools[name] = func
-            return func
-
-        return decorator
-
-
-class FakeClient:
-    """Minimal client stub with configurable responses."""
-
-    def __init__(
-        self,
-        *,
-        org_id: int | None = 42,
-        org_uuid: str | None = "11111111-2222-3333-4444-555555555555",
-        account_uuid: str = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-    ) -> None:
-        self.org_id = org_id
-        self.org_uuid = org_uuid
-        self.account_uuid = account_uuid
-        self._get_response: Any = []
-        self._post_response: Any = {}
-
-    async def get(self, path: str, *, params: Any = None, headers: Any = None) -> Any:
-        return self._get_response
-
-    async def post(
-        self, path: str, *, json_data: Any = None, params: Any = None, headers: Any = None
-    ) -> Any:
-        return self._post_response
 
 
 def _register(module, client: FakeClient, read_only: bool = False) -> StubServer:

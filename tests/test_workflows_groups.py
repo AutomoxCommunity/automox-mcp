@@ -5,7 +5,7 @@ from typing import Any, cast
 import pytest
 from conftest import StubClient
 
-from automox_mcp.client import AutomoxClient
+from automox_mcp.client import AutomoxAPIError, AutomoxClient
 from automox_mcp.workflows.groups import (
     create_server_group,
     delete_server_group,
@@ -324,3 +324,33 @@ async def test_update_server_group_with_optional_fields() -> None:
     assert body["ui_color"] == "#00FF00"
     assert body["notes"] == "updated"
     assert result["data"]["updated"] is True
+
+
+# ---------------------------------------------------------------------------
+# Error path tests — API errors propagate through the workflow
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_list_server_groups_api_error_propagates():
+    """AutomoxAPIError from the client must not be swallowed."""
+    client = StubClient()
+
+    async def _raise(*a: Any, **kw: Any) -> Any:
+        raise AutomoxAPIError("forbidden", status_code=403)
+
+    client.get = _raise  # type: ignore[assignment]
+    with pytest.raises(AutomoxAPIError, match="forbidden"):
+        await list_server_groups(cast(AutomoxClient, client), org_id=1)
+
+
+@pytest.mark.asyncio
+async def test_get_server_group_api_error_propagates():
+    client = StubClient()
+
+    async def _raise(*a: Any, **kw: Any) -> Any:
+        raise AutomoxAPIError("not found", status_code=404)
+
+    client.get = _raise  # type: ignore[assignment]
+    with pytest.raises(AutomoxAPIError, match="not found"):
+        await get_server_group(cast(AutomoxClient, client), org_id=1, group_id=999)

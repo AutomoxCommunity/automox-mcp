@@ -7,7 +7,7 @@ from typing import Any, cast
 import pytest
 from conftest import StubClient
 
-from automox_mcp.client import AutomoxClient
+from automox_mcp.client import AutomoxAPIError, AutomoxClient
 from automox_mcp.workflows.reports import (
     _extract_devices,
     _highest_patch_severity,
@@ -452,3 +452,20 @@ async def test_get_noncompliant_report_uses_len_when_total_absent() -> None:
     )
 
     assert result["data"]["total_devices"] == 2
+
+
+# ===========================================================================
+# Error path tests — API errors propagate through the workflow
+# ===========================================================================
+
+
+@pytest.mark.asyncio
+async def test_prepatch_report_api_error_propagates():
+    client = StubClient()
+
+    async def _raise(*a: Any, **kw: Any) -> Any:
+        raise AutomoxAPIError("timeout", status_code=504)
+
+    client.get = _raise  # type: ignore[assignment]
+    with pytest.raises(AutomoxAPIError, match="timeout"):
+        await get_prepatch_report(cast(AutomoxClient, client), org_id=1)

@@ -1,16 +1,11 @@
 import copy
-import pathlib
-import sys
 from typing import Any, cast
 from uuid import UUID
 
 import pytest
 
-PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PROJECT_ROOT / "src"))
-
-from automox_mcp.client import AutomoxAPIError, AutomoxClient  # noqa: E402
-from automox_mcp.workflows.policy import (  # noqa: E402
+from automox_mcp.client import AutomoxAPIError, AutomoxClient
+from automox_mcp.workflows.policy import (
     _decode_schedule_days_bitmask,
     _normalize_status,
     describe_policy,
@@ -19,7 +14,7 @@ from automox_mcp.workflows.policy import (  # noqa: E402
     summarize_policy_activity,
     summarize_policy_execution_history,
 )
-from automox_mcp.workflows.policy_crud import apply_policy_changes  # noqa: E402
+from automox_mcp.workflows.policy_crud import apply_policy_changes
 
 
 class StubClient:

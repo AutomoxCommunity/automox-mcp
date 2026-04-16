@@ -7,45 +7,107 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: read
 
+env:
+  PYTHON_VERSION: "3.13"
+
 jobs:
-  quality:
+  lint:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.11", "3.12", "3.13"]
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
-      
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+
+      - name: Sync project dependencies
+        run: uv sync --extra dev --frozen
+
+      - name: Ruff lint
+        run: uv run ruff check --output-format=github .
+
+      - name: Ruff format check
+        run: uv run ruff format --check --diff .
+
+  typecheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
+
+      - name: Sync project dependencies
+        run: uv sync --extra dev --frozen
+
+      - name: Type check
+        run: uv run mypy .
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
       - name: Set up uv
         uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
         with:
           python-version: ${{ matrix.python-version }}
+          enable-cache: true
+
+      - name: Sync project dependencies
+        run: uv sync --extra dev --frozen
+
+      - name: Run tests with coverage
+        run: uv run pytest --cov=automox_mcp --cov-fail-under=90 --cov-report=term-missing
+
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
 
       - name: Sync project dependencies
         run: uv sync --extra dev --frozen
 
       - name: Ensure pip available in venv
         run: .venv/bin/python -m ensurepip --upgrade
-
-      - name: Ruff lint
-        run: uv run ruff check .
-
-      - name: Ruff format (dry-run)
-        run: uv run ruff format --check .
-
-      - name: Type check
-        run: uv run mypy .
-
-      - name: Run tests with coverage
-        run: uv run pytest --cov=automox_mcp --cov-fail-under=90 --cov-report=term-missing
 
       - name: Build distribution artifacts
         run: uv run python -m build
@@ -55,8 +117,6 @@ jobs:
 
       - name: Export locked requirements
         run: |
-          # pip-audit needs a standard requirements file; drop hashes/editables so the root package
-          # can still be installed for auditing.
           uv export --format requirements.txt --all-extras --no-editable --no-hashes --locked \
             --output-file requirements-ci.txt
 
@@ -66,3 +126,25 @@ jobs:
           inputs: |
             requirements-ci.txt
           virtual-environment: .venv
+
+  ci-pass:
+    if: always()
+    needs: [lint, typecheck, test, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify all jobs passed
+        run: |
+          results=(
+            "${{ needs.lint.result }}"
+            "${{ needs.typecheck.result }}"
+            "${{ needs.test.result }}"
+            "${{ needs.build.result }}"
+          )
+          for r in "${results[@]}"; do
+            if [[ "$r" != "success" ]]; then
+              echo "::error::One or more CI jobs did not succeed (got: $r)."
+              exit 1
+            fi
+          done
+          echo "All CI jobs passed."

@@ -9,6 +9,10 @@ on:
     - cron: "0 9 * * 1"
   workflow_dispatch:
 
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: read
 
@@ -30,7 +34,8 @@ jobs:
       - name: Scan working tree for secrets
         run: |
           set -euo pipefail
-          docker run --rm -v "$PWD:/pwd" trufflesecurity/trufflehog:latest \
+          docker run --rm -v "$PWD:/pwd" \
+            trufflesecurity/trufflehog:3.94.3@sha256:8837fd74692f6da826b51bc008b6bcf0dd2d70d31d06792673872a235d9b7e39 \
             filesystem --directory=/pwd --results=verified,unknown --json --fail \
             | tee trufflehog.json
 
@@ -55,6 +60,7 @@ jobs:
         uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+          enable-cache: true
 
       - name: Sync project dependencies
         run: uv sync --extra dev --frozen
@@ -67,9 +73,7 @@ jobs:
           AUTOMOX_MCP_SKIP_DOTENV: "1"
         run: |
           set -euo pipefail
-          source .venv/bin/activate
-          uv pip install cisco-ai-mcp-scanner
-          mcp-scanner \
+          uvx --from cisco-ai-mcp-scanner mcp-scanner \
             --analyzers yara \
             --format summary \
             stdio \
@@ -124,15 +128,9 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
-        with:
-          python-version: "3.13"
-
-      - name: Install zizmor
-        run: python -m pip install --upgrade pip zizmor
-
       - name: Scan workflows
-        env:
-          ZIZMOR_NO_ONLINE_AUDITS: "true"
-        run: zizmor --collect=workflows --strict-collection --format=github .
+        uses: zizmorcore/zizmor-action@b1d7e1fb5de872772f31590499237e7cce841e8e # v0.5.3
+        with:
+          online-audits: false
+          annotations: true
+          advanced-security: false

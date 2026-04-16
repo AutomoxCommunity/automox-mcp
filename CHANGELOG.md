@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Security
 
 - **Nested-bracket sanitization bypass fixed** — Updated markdown link/image regexes in `sanitize.py` to handle one level of nested brackets, preventing URL exfiltration via patterns like `[click [here]](https://evil.com)` that previously bypassed the sanitizer entirely
+- **CVE-2025-71176 (pytest)** — Bumped `pytest` from >=8.2 to >=9.0.3 to fix a local privilege escalation via predictable `/tmp/pytest-of-{user}` directory names on UNIX
+- **CVE-2026-40347 (python-multipart)** — Bumped `python-multipart` from >=0.0.22 to >=0.0.26 to fix a denial-of-service vulnerability when parsing crafted multipart/form-data requests with large preamble or epilogue sections
 
 ### Added
 

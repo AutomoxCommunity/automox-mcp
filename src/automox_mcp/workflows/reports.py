@@ -152,10 +152,10 @@ async def get_prepatch_report(
         if single_page:
             break
 
-        total = summary.get("total")
+        # Note: summary["total"] reports pending-patch count, not device count,
+        # so it cannot be used to short-circuit pagination. Rely on the
+        # empty-page check below.
         if not page_devices:
-            break
-        if total is not None and len(device_list) >= total:
             break
 
         params["offset"] = params["offset"] + page_size
@@ -188,10 +188,10 @@ async def get_prepatch_report(
         }
         devices.append(entry)
 
-    total_org_devices = summary.get("total") or 0
+    total_pending_patches = summary.get("total") or 0
     devices_needing_patches = len(devices)
     device_severity_summary = {
-        "total_org_devices": total_org_devices,
+        "total_pending_patches": total_pending_patches,
         "devices_needing_patches": devices_needing_patches,
         "critical": severity_counter.get("critical", 0),
         "high": severity_counter.get("high", 0),
@@ -203,7 +203,7 @@ async def get_prepatch_report(
 
     return {
         "data": {
-            "total_org_devices": total_org_devices,
+            "total_pending_patches": total_pending_patches,
             "total_devices": devices_needing_patches,
             "summary": device_severity_summary,
             "api_summary": summary,

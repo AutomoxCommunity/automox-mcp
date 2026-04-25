@@ -167,16 +167,17 @@ async def test_get_prepatch_report_single_page_explicit_limit() -> None:
 
 @pytest.mark.asyncio
 async def test_get_prepatch_report_auto_pagination() -> None:
-    """When total > page results, auto-pagination issues multiple GETs."""
+    """Auto-pagination issues multiple GETs and terminates on the first empty page."""
     page1_devices = [{"id": i, "name": f"host{i}", "patches": []} for i in range(1, 4)]
     page2_devices = [{"id": 4, "name": "host4", "patches": []}]
 
-    # First page reports total=4 so the loop continues for page 2.
     page1_response = {"prepatch": {"total": 4, "devices": page1_devices}}
     page2_response = {"prepatch": {"total": 4, "devices": page2_devices}}
+    # Pagination stops when a page returns no devices.
+    page3_response = {"prepatch": {"total": 4, "devices": []}}
 
     client = StubClient(
-        get_responses={"/reports/prepatch": [page1_response, page2_response]},
+        get_responses={"/reports/prepatch": [page1_response, page2_response, page3_response]},
     )
 
     result = await get_prepatch_report(
@@ -186,7 +187,7 @@ async def test_get_prepatch_report_auto_pagination() -> None:
 
     assert result["data"]["total_devices"] == 4
     get_calls = [c for c in client.calls if c[0] == "GET"]
-    assert len(get_calls) == 2
+    assert len(get_calls) == 3
 
     # Second request should have an incremented offset
     second_params = get_calls[1][2]
@@ -280,6 +281,67 @@ async def test_get_prepatch_report_stops_when_page_empty() -> None:
     get_calls = [c for c in client.calls if c[0] == "GET"]
     assert len(get_calls) == 2
     assert result["data"]["total_devices"] == 1
+
+
+@pytest.mark.asyncio
+async def test_get_prepatch_report_total_is_pending_patches_not_devices() -> None:
+    """The API's `total` field counts pending patches, not devices.
+
+    Regression test for #28. The response field is `total_pending_patches`
+    (matching the underlying value), not `total_org_devices`.
+    """
+    # 2 devices with a combined 7 pending patches → API reports total=7.
+    devices = [
+        {"id": 1, "name": "host1", "patches": [{"severity": "high"}] * 4},
+        {"id": 2, "name": "host2", "patches": [{"severity": "low"}] * 3},
+    ]
+    response = {"prepatch": {"total": 7, "devices": devices}}
+    client = StubClient(get_responses={"/reports/prepatch": [response]})
+
+    result = await get_prepatch_report(cast(AutomoxClient, client), org_id=42, limit=500)
+
+    data = result["data"]
+    # `total_pending_patches` reflects the API's total verbatim.
+    assert data["total_pending_patches"] == 7
+    assert data["summary"]["total_pending_patches"] == 7
+    # `total_devices` is the count of devices in this report (devices needing patches).
+    assert data["total_devices"] == 2
+    # The mislabeled key from prior versions is gone.
+    assert "total_org_devices" not in data
+    assert "total_org_devices" not in data["summary"]
+
+
+@pytest.mark.asyncio
+async def test_get_prepatch_report_pagination_does_not_short_circuit_on_total() -> None:
+    """Pagination must not terminate based on `summary.total` (which is patch count, not devices).
+
+    Regression test for #28: if `total` (patches) is small relative to actual
+    device count, the loop must continue until an empty page is returned.
+    """
+    # First page returns 2 devices; API reports total=2 (patches), but more devices exist.
+    page1 = {
+        "prepatch": {
+            "total": 2,
+            "devices": [{"id": 1, "name": "h1", "patches": [{"severity": "high"}]}],
+        }
+    }
+    page2 = {
+        "prepatch": {
+            "total": 2,
+            "devices": [{"id": 2, "name": "h2", "patches": [{"severity": "low"}]}],
+        }
+    }
+    page3 = {"prepatch": {"total": 2, "devices": []}}  # empty page → terminate
+    client = StubClient(
+        get_responses={"/reports/prepatch": [page1, page2, page3]},
+    )
+
+    result = await get_prepatch_report(cast(AutomoxClient, client), org_id=42)
+
+    get_calls = [c for c in client.calls if c[0] == "GET"]
+    # Three calls means we kept paginating past `total`, then stopped on empty page.
+    assert len(get_calls) == 3
+    assert result["data"]["total_devices"] == 2
 
 
 # ===========================================================================

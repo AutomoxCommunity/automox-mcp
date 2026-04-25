@@ -35,11 +35,11 @@ def is_sanitization_enabled() -> bool:
 # Regex patterns
 # ---------------------------------------------------------------------------
 
-# Markdown image: ![alt](url) → alt
-_IMAGE_RE = re.compile(r"!\[([^\]]*)\]\([^)]+\)")
+# Markdown image: ![alt](url) → alt  (supports one level of nested brackets)
+_IMAGE_RE = re.compile(r"!\[((?:[^\[\]]|\[[^\]]*\])*)\]\([^)]+\)")
 
-# Markdown link: [text](url) → text
-_LINK_RE = re.compile(r"\[([^\]]*)\]\([^)]+\)")
+# Markdown link: [text](url) → text  (supports one level of nested brackets)
+_LINK_RE = re.compile(r"\[((?:[^\[\]]|\[[^\]]*\])*)\]\([^)]+\)")
 
 # Fenced code blocks with shell/script content (supports 3+ backtick delimiters)
 _CODE_BLOCK_RE = re.compile(

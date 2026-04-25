@@ -3,19 +3,13 @@
 from __future__ import annotations
 
 import copy
-import pathlib
-import sys
 from typing import Any, cast
 
 import pytest
+from fastmcp.exceptions import ToolError
 
-PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PROJECT_ROOT / "src"))
-
-from fastmcp.exceptions import ToolError  # noqa: E402
-
-from automox_mcp.client import AutomoxClient  # noqa: E402
-from automox_mcp.workflows.policy_crud import (  # noqa: E402
+from automox_mcp.client import AutomoxClient
+from automox_mcp.workflows.policy_crud import (
     _coerce_policy_payload_defaults,
     _deep_merge_dicts,
     _normalize_filters,

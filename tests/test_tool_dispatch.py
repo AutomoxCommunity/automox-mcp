@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+from conftest import FakeClient, StubServer
 
 from automox_mcp.tools import (
     audit_tools,
@@ -26,38 +27,6 @@ from automox_mcp.utils import tooling as _utils_tooling
 # ---------------------------------------------------------------------------
 # Shared test infrastructure
 # ---------------------------------------------------------------------------
-
-
-class StubServer:
-    """Lightweight FastMCP lookalike that captures registered tool functions."""
-
-    def __init__(self) -> None:
-        self.tools: dict[str, Any] = {}
-
-    def tool(self, name: str, description: str = "", **kwargs):
-        def decorator(func):
-            self.tools[name] = func
-            return func
-
-        return decorator
-
-
-class FakeClient:
-    """Minimal client stub used across all tool module tests."""
-
-    def __init__(
-        self,
-        *,
-        org_id: int | None = 42,
-        org_uuid: str | None = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-        account_uuid: str | None = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
-    ) -> None:
-        self.org_id = org_id
-        self.org_uuid = org_uuid
-        self.account_uuid = account_uuid
-
-    async def get(self, path: str, *, params=None, headers=None) -> Any:
-        return {}
 
 
 def _success() -> dict[str, Any]:

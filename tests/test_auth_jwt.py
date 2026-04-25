@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import time
 from unittest.mock import patch
 
 import httpx
+import pytest
 
 from automox_mcp.auth import (
     _create_jwt_auth,
@@ -226,3 +228,145 @@ class TestIsAuthConfiguredJwt:
         monkeypatch.delenv("AUTOMOX_MCP_API_KEY_FILE", raising=False)
         monkeypatch.delenv("AUTOMOX_MCP_OAUTH_ISSUER", raising=False)
         assert is_auth_configured() is False
+
+
+# ---------------------------------------------------------------------------
+# JWT verify_token() integration tests
+# ---------------------------------------------------------------------------
+
+
+def _generate_ec_key_pair() -> tuple[str, str]:
+    """Generate an EC P-256 key pair and return (private_pem, public_pem)."""
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+
+    private_key = ec.generate_private_key(ec.SECP256R1())
+    private_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    ).decode()
+    public_pem = (
+        private_key.public_key()
+        .public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode()
+    )
+    return private_pem, public_pem
+
+
+def _make_jwt(
+    private_pem: str,
+    *,
+    issuer: str = "https://auth.example.com",
+    audience: str = "https://mcp.example.com",
+    subject: str = "test-client",
+    scopes: str = "",
+    exp_offset: int = 3600,
+) -> str:
+    """Sign a minimal JWT with the given private key."""
+    import jwt as pyjwt
+
+    now = int(time.time())
+    payload: dict = {
+        "iss": issuer,
+        "aud": audience,
+        "sub": subject,
+        "iat": now,
+        "exp": now + exp_offset,
+    }
+    if scopes:
+        payload["scope"] = scopes
+    return pyjwt.encode(payload, private_pem, algorithm="ES256")
+
+
+class TestJWTVerifyToken:
+    """Integration tests for the actual verify_token() path."""
+
+    @pytest.fixture(autouse=True)
+    def _keys(self):
+        self.private_pem, self.public_pem = _generate_ec_key_pair()
+
+    def _make_verifier(
+        self,
+        *,
+        audience: str = "https://mcp.example.com",
+        issuer: str = "https://auth.example.com",
+        required_scopes: list[str] | None = None,
+    ):
+        from fastmcp.server.auth.providers.jwt import JWTVerifier
+
+        return JWTVerifier(
+            public_key=self.public_pem,
+            issuer=issuer,
+            audience=audience,
+            algorithm="ES256",
+            required_scopes=required_scopes,
+        )
+
+    @pytest.mark.asyncio
+    async def test_valid_token_accepted(self):
+        verifier = self._make_verifier()
+        token = _make_jwt(self.private_pem)
+        result = await verifier.verify_token(token)
+        assert result is not None
+        assert result.client_id == "test-client"
+
+    @pytest.mark.asyncio
+    async def test_expired_token_rejected(self):
+        verifier = self._make_verifier()
+        token = _make_jwt(self.private_pem, exp_offset=-3600)
+        result = await verifier.verify_token(token)
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_wrong_audience_rejected(self):
+        verifier = self._make_verifier(audience="https://other.example.com")
+        token = _make_jwt(self.private_pem, audience="https://mcp.example.com")
+        result = await verifier.verify_token(token)
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_wrong_issuer_rejected(self):
+        verifier = self._make_verifier(issuer="https://legit.example.com")
+        token = _make_jwt(self.private_pem, issuer="https://evil.example.com")
+        result = await verifier.verify_token(token)
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_invalid_signature_rejected(self):
+        verifier = self._make_verifier()
+        # Sign with a different key
+        other_private, _ = _generate_ec_key_pair()
+        token = _make_jwt(other_private)
+        result = await verifier.verify_token(token)
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_missing_required_scopes_rejected(self):
+        verifier = self._make_verifier(required_scopes=["mcp:admin", "mcp:read"])
+        token = _make_jwt(self.private_pem, scopes="mcp:read")
+        result = await verifier.verify_token(token)
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_sufficient_scopes_accepted(self):
+        verifier = self._make_verifier(required_scopes=["mcp:read"])
+        token = _make_jwt(self.private_pem, scopes="mcp:read mcp:write")
+        result = await verifier.verify_token(token)
+        assert result is not None
+        assert "mcp:read" in result.scopes
+
+    @pytest.mark.asyncio
+    async def test_garbage_token_rejected(self):
+        verifier = self._make_verifier()
+        result = await verifier.verify_token("not.a.jwt")
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_empty_token_rejected(self):
+        verifier = self._make_verifier()
+        result = await verifier.verify_token("")
+        assert result is None

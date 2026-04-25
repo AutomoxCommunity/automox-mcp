@@ -74,8 +74,10 @@ class TestMarkdownStripping:
         # Nested brackets aren't valid markdown link syntax, so the outer
         # link won't match — but the inner [here](https://evil.com) will.
         result = sanitize_for_llm(text)
-        # Should not crash; partial stripping is acceptable
+        # Should not crash; partial stripping is acceptable but the URL
+        # must always be neutralized regardless of bracket nesting.
         assert isinstance(result, str)
+        assert "https://evil.com" not in result
 
 
 # ---------------------------------------------------------------------------

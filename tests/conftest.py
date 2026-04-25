@@ -1,13 +1,7 @@
 import copy
-import sys
-from pathlib import Path
 from typing import Any
 
 import pytest
-
-SRC = Path(__file__).resolve().parents[1] / "src"
-if str(SRC) not in sys.path:
-    sys.path.insert(0, str(SRC))
 
 
 @pytest.fixture(autouse=True)
@@ -20,6 +14,63 @@ def _reset_shared_state():
     yield
     _RATE_LIMITER._timestamps.clear()
     _IDEMPOTENCY_CACHE.clear()
+
+
+# ---------------------------------------------------------------------------
+# Shared StubServer for tool registration tests
+# ---------------------------------------------------------------------------
+
+
+class StubServer:
+    """Lightweight FastMCP lookalike that captures registered tool functions.
+
+    Used by tool-registration and tool-dispatch tests to avoid importing
+    the full FastMCP server.
+    """
+
+    def __init__(self) -> None:
+        self.tools: dict[str, Any] = {}
+
+    def tool(self, name: str, description: str = "", **kwargs):
+        def decorator(func):
+            self.tools[name] = func
+            return func
+
+        return decorator
+
+
+# ---------------------------------------------------------------------------
+# Shared FakeClient for tool tests
+# ---------------------------------------------------------------------------
+
+
+class FakeClient:
+    """Minimal client stub with configurable responses.
+
+    Used by tool-dispatch and tool-registration tests where the full
+    StubClient request/response infrastructure is not needed.
+    """
+
+    def __init__(
+        self,
+        *,
+        org_id: int | None = 42,
+        org_uuid: str | None = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        account_uuid: str = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+    ) -> None:
+        self.org_id = org_id
+        self.org_uuid = org_uuid
+        self.account_uuid = account_uuid
+        self._get_response: Any = []
+        self._post_response: Any = {}
+
+    async def get(self, path: str, *, params: Any = None, headers: Any = None) -> Any:
+        return self._get_response
+
+    async def post(
+        self, path: str, *, json_data: Any = None, params: Any = None, headers: Any = None
+    ) -> Any:
+        return self._post_response
 
 
 # ---------------------------------------------------------------------------

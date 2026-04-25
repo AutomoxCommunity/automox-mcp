@@ -5,7 +5,7 @@ from typing import Any, cast
 import pytest
 from conftest import StubClient
 
-from automox_mcp.client import AutomoxClient
+from automox_mcp.client import AutomoxAPIError, AutomoxClient
 from automox_mcp.workflows.packages import (
     list_device_packages,
     search_org_packages,
@@ -206,3 +206,32 @@ async def test_search_org_packages_omits_none_filters() -> None:
     params = client.calls[0][2]
     assert "includeUnmanaged" not in params
     assert "awaiting" not in params
+
+
+# ---------------------------------------------------------------------------
+# Error path tests — API errors propagate through the workflow
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_list_device_packages_api_error_propagates() -> None:
+    client = StubClient()
+
+    async def _raise(*a: Any, **kw: Any) -> Any:
+        raise AutomoxAPIError("internal error", status_code=500)
+
+    client.get = _raise  # type: ignore[assignment]
+    with pytest.raises(AutomoxAPIError, match="internal error"):
+        await list_device_packages(cast(AutomoxClient, client), org_id=1, device_id=42)
+
+
+@pytest.mark.asyncio
+async def test_search_org_packages_api_error_propagates() -> None:
+    client = StubClient()
+
+    async def _raise(*a: Any, **kw: Any) -> Any:
+        raise AutomoxAPIError("rate limited", status_code=429)
+
+    client.get = _raise  # type: ignore[assignment]
+    with pytest.raises(AutomoxAPIError, match="rate limited"):
+        await search_org_packages(cast(AutomoxClient, client), org_id=1)

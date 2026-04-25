@@ -1,39 +1,10 @@
-from collections.abc import Callable
-from typing import Any
 from uuid import UUID
 
 import pytest
+from conftest import FakeClient, StubServer
 from fastmcp.exceptions import ToolError
 
 from automox_mcp.tools import account_tools, device_tools, policy_tools
-
-
-class StubServer:
-    def __init__(self) -> None:
-        self.tools: dict[str, Callable[..., Any]] = {}
-
-    def tool(self, name: str, description: str, **kwargs):
-        def decorator(func):
-            self.tools[name] = func
-            return func
-
-        return decorator
-
-
-class FakeClient:
-    """Minimal client stub for tool registration tests."""
-
-    def __init__(
-        self, *, org_id=42, org_uuid=None, account_uuid="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
-    ):
-        self.org_id = org_id
-        self.org_uuid = org_uuid
-        self.account_uuid = account_uuid
-
-    async def get(self, path, *, params=None, headers=None):
-        if path == "/orgs":
-            return [{"id": self.org_id, "org_uuid": "cccccccc-cccc-cccc-cccc-cccccccccccc"}]
-        return {}
 
 
 def success_result():

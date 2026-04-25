@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from typing import cast
+from typing import Any, cast
 
 import pytest
 from conftest import StubClient
 
-from automox_mcp.client import AutomoxClient
+from automox_mcp.client import AutomoxAPIError, AutomoxClient
 from automox_mcp.workflows.events import list_events
 
 
@@ -187,3 +187,21 @@ async def test_list_events_none_response():
     result = await list_events(cast(AutomoxClient, client), org_id=1)
     assert result["data"]["total_events"] == 0
     assert result["data"]["events"] == []
+
+
+# ---------------------------------------------------------------------------
+# Error path tests — API errors propagate through the workflow
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_list_events_api_error_propagates():
+    """AutomoxAPIError from the client must not be swallowed."""
+    client = StubClient()
+
+    async def _raise(*a: Any, **kw: Any) -> Any:
+        raise AutomoxAPIError("server error", status_code=500)
+
+    client.get = _raise  # type: ignore[assignment]
+    with pytest.raises(AutomoxAPIError, match="server error"):
+        await list_events(cast(AutomoxClient, client), org_id=1)

@@ -1,6 +1,6 @@
 [project]
 name = "automox-mcp"
-version = "1.0.16"
+version = "1.0.17"
 description = "An MCP server implementation for Automox"
 readme = "README.md"
 authors = [
@@ -81,7 +81,7 @@ exclude_dirs = ["tests", ".venv"]
 
 [tool.uv]
 constraint-dependencies = [
-  "authlib>=1.6.6",       # CVE-2025-68158: CSRF in cache-backed state storage
+  "authlib>=1.6.11",      # CVE-2025-68158, GHSA-jj8c-mmj3-mmgv: CSRF in cache-backed state storage
   "cryptography>=46.0.6", # CVE-2026-26007, CVE-2026-34073
   "fastmcp>=3.2.0",       # CVE-2025-69196, CVE-2025-64340, CVE-2026-27124, GHSA-rcfx-77hg-w2wv
   "jaraco-context>=6.1.0",# CVE-2026-23949

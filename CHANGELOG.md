@@ -5,6 +5,13 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.18] - 2026-04-25
+
+### Fixed
+
+- **`get_prepatch_report` field mislabel (#28)** — The `total_org_devices` field in the response was sourced from the `/reports/prepatch` API's `total` key, which actually counts **pending patches**, not devices. Renamed to `total_pending_patches` (both in the top-level `data` and inside `summary`) to match what the value represents. This corrects the prior interpretation noted in v1.0.13 ("`total` field from API means org device count"). Callers needing a true org device count should use `device_health_metrics.total_devices` or `list_devices`.
+- **`get_prepatch_report` pagination heuristic** — Removed an early-exit condition that compared `len(device_list) >= summary["total"]` to terminate pagination. Because `total` is a patch count rather than a device count, the comparison was meaningless. Pagination now relies solely on the empty-page sentinel, which already worked in practice.
+
 ## [1.0.17] - 2026-04-25
 
 ### Security

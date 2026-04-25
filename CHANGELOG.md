@@ -5,6 +5,12 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.17] - 2026-04-25
+
+### Security
+
+- **GHSA-jj8c-mmj3-mmgv (authlib)** — Bumped `authlib` constraint from >=1.6.6 to >=1.6.11 to fix a CSRF vulnerability in OAuth integrations using the cache parameter for state storage. Without `SessionMiddleware` tying the client to auth state, attackers could initiate an OAuth flow and trick a victim into completing it, binding the attacker's account to the victim's session
+
 ## [1.0.16] - 2026-04-16
 
 ### Security

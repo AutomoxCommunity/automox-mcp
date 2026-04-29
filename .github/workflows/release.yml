@@ -135,13 +135,14 @@ jobs:
       # TODO(supply chain): pin @anthropic-ai/mcpb to a specific release
       # once we settle on a version. Currently uses npm latest.
       # ---------------------------------------------------------------
-      - name: Set up Node for MCPB CLI
-        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v6.0.0
-        with:
-          node-version: "20"
-
+      # Use the Node + npm pre-installed on ubuntu-latest. We deliberately
+      # skip actions/setup-node because (a) we only need `npm install -g`
+      # without version pinning, and (b) setup-node's implicit cache
+      # behavior trips zizmor's cache-poisoning audit.
       - name: Install MCPB CLI
-        run: npm install -g @anthropic-ai/mcpb
+        run: |
+          node --version
+          npm install -g @anthropic-ai/mcpb
 
       - name: Set MCPB bundle version from tag
         run: |

@@ -16,3 +16,8 @@ htmlcov/
 build/
 dist/
 automox-mcp-design-guide.md
+
+# MCP Registry tooling — local only, never commit
+mcp-publisher
+mcp-registry-key.pem
+*.pem

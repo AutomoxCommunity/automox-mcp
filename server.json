@@ -1,0 +1,44 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "com.automox/automox-mcp",
+  "title": "Automox MCP Server",
+  "description": "Official MCP server for Automox. Talk to your Automox console using natural language — manage devices, check compliance, run policies, and more.",
+  "repository": {
+    "url": "https://github.com/AutomoxCommunity/automox-mcp",
+    "source": "github"
+  },
+  "version": "1.0.19",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "automox-mcp",
+      "version": "1.0.19",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "AUTOMOX_API_KEY",
+          "description": "Your Automox API key",
+          "isRequired": true,
+          "format": "string",
+          "isSecret": true
+        },
+        {
+          "name": "AUTOMOX_ACCOUNT_UUID",
+          "description": "Account UUID from Automox Settings > Secrets & Keys",
+          "isRequired": true,
+          "format": "string",
+          "isSecret": false
+        },
+        {
+          "name": "AUTOMOX_ORG_ID",
+          "description": "Numeric Automox organization ID. Recommended — required by most tools, optional for tools that don't need org context.",
+          "isRequired": false,
+          "format": "string",
+          "isSecret": false
+        }
+      ]
+    }
+  ]
+}

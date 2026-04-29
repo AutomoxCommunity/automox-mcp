@@ -1,11 +1,13 @@
 # Automox MCP Server
 
+<!-- mcp-name: com.automox/automox-mcp -->
+
 [![CI](https://github.com/AutomoxCommunity/automox-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/AutomoxCommunity/automox-mcp/actions/workflows/ci.yml)
 [![Security Scans](https://github.com/AutomoxCommunity/automox-mcp/actions/workflows/security.yml/badge.svg)](https://github.com/AutomoxCommunity/automox-mcp/actions/workflows/security.yml)
 [![Publish Release](https://github.com/AutomoxCommunity/automox-mcp/actions/workflows/release.yml/badge.svg)](https://github.com/AutomoxCommunity/automox-mcp/actions/workflows/release.yml)
 [![PyPI version](https://badge.fury.io/py/automox-mcp.svg)](https://badge.fury.io/py/automox-mcp)
 
-Talk to your Automox console using natural language. This [MCP server](https://modelcontextprotocol.io/) connects AI assistants like Claude to your Automox environment so you can manage devices, check compliance, run policies, and more — just by asking.
+The official MCP server for Automox. Talk to your Automox console using natural language — this [MCP server](https://modelcontextprotocol.io/) connects AI assistants like Claude to your Automox environment so you can manage devices, check compliance, run policies, and more, just by asking.
 
 ```
 You:   "Are we ready for Patch Tuesday?"
@@ -14,7 +16,7 @@ Claude: Here's your readiness summary — 3 devices need patches,
 ```
 
 > [!IMPORTANT]
-> The project is under active development. Contributions and suggestions are welcome via [GitHub Issues](https://github.com/AutomoxCommunity/automox-mcp/issues).
+> Contributions, bug reports, and feature requests are welcome via [GitHub Issues](https://github.com/AutomoxCommunity/automox-mcp/issues) and the Automox Community.
 
 > [!CAUTION]
 > AI assistants can make mistakes. Data produced by the MCP server may be incorrect or incomplete. If you see this happening consistently, please [open an issue](https://github.com/AutomoxCommunity/automox-mcp/issues).
@@ -294,4 +296,6 @@ MIT License. See [LICENSE](LICENSE).
 
 ## Support
 
-Community-driven project, actively maintained but not officially supported by Automox. For questions, bugs, or feature requests, [open a GitHub Issue](https://github.com/AutomoxCommunity/automox-mcp/issues).
+The official Automox MCP server. Support is community-driven: for questions, bugs, or feature requests, [open a GitHub Issue](https://github.com/AutomoxCommunity/automox-mcp/issues) or post in the Automox Community. This project is not covered by Automox commercial support contracts.
+
+To report a security vulnerability, see [SECURITY.md](SECURITY.md) — please do not open a public issue.

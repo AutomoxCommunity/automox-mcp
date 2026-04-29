@@ -5,6 +5,13 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.19] - 2026-04-28
+
+### Changed
+
+- **Official designation** — `automox-mcp` is now the official Automox MCP server. Support remains community-driven via [GitHub Issues](https://github.com/AutomoxCommunity/automox-mcp/issues) and the Automox Community; the project is not covered by Automox commercial support contracts. README, package description, and Support section updated to reflect the new status.
+- **MCP Registry preparation** — Added `mcp-name: com.automox/automox-mcp` ownership marker to README in advance of publishing to the official [MCP Registry](https://registry.modelcontextprotocol.io/) under the `com.automox/` namespace.
+
 ## [1.0.18] - 2026-04-25
 
 ### Fixed

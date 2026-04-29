@@ -1,4 +1,4 @@
-name: Publish to PyPI
+name: Publish to PyPI and MCP Registry
 
 on:
   push:
@@ -83,3 +83,39 @@ jobs:
               --generate-notes \
               dist/*.whl dist/*.tar.gz dist/*.sigstore.json sbom.cdx.json
           fi
+
+      # ---------------------------------------------------------------
+      # MCP Registry publish (Step 8 of publish-automox-mcp-to-registry.md)
+      #
+      # Skipped when PyPI publish was skipped (version already on PyPI),
+      # because the registry validates the `mcp-name` marker against the
+      # live PyPI listing — backfills should be done manually.
+      #
+      # TODO(supply chain): pin mcp-publisher to a specific release once
+      # the registry GAs. Currently uses `latest` to match the upstream
+      # quickstart. Tracked alongside other supply-chain items.
+      # ---------------------------------------------------------------
+      - name: Install mcp-publisher
+        if: steps.pypi_check.outputs.exists != 'true'
+        run: |
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" \
+            | tar xz mcp-publisher
+          ./mcp-publisher --help > /dev/null
+
+      - name: Set version in server.json from tag
+        if: steps.pypi_check.outputs.exists != 'true'
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          jq --arg v "$VERSION" '.version = $v | .packages[0].version = $v' server.json > server.tmp
+          mv server.tmp server.json
+          echo "server.json version set to $VERSION"
+
+      - name: Authenticate to MCP Registry
+        if: steps.pypi_check.outputs.exists != 'true'
+        env:
+          MCP_REGISTRY_PRIVATE_KEY: ${{ secrets.MCP_REGISTRY_PRIVATE_KEY }}
+        run: ./mcp-publisher login dns --domain automox.com --private-key "$MCP_REGISTRY_PRIVATE_KEY"
+
+      - name: Publish to MCP Registry
+        if: steps.pypi_check.outputs.exists != 'true'
+        run: ./mcp-publisher publish

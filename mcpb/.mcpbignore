@@ -1,0 +1,10 @@
+.mcpbignore
+.git
+.gitignore
+.venv
+__pycache__
+*.pyc
+.DS_Store
+README.md
+*.mcpb
+uv.lock

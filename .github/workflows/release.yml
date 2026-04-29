@@ -1,4 +1,4 @@
-name: Publish to PyPI and MCP Registry
+name: Publish to PyPI, MCP Registry, and MCPB
 
 on:
   push:
@@ -119,3 +119,52 @@ jobs:
       - name: Publish to MCP Registry
         if: steps.pypi_check.outputs.exists != 'true'
         run: ./mcp-publisher publish
+
+      # ---------------------------------------------------------------
+      # MCPB Desktop Extension build & upload
+      #
+      # Builds the .mcpb archive from the `mcpb/` directory and attaches
+      # it to the GitHub Release. End users install via Claude Desktop's
+      # Settings → Extensions UI by dragging the .mcpb file in.
+      #
+      # The bundle is a uvx-shim — the real Python code is pulled from
+      # PyPI at install time. Version is overridden from the tag so a
+      # freshly built bundle always pins the matching automox-mcp PyPI
+      # release.
+      #
+      # TODO(supply chain): pin @anthropic-ai/mcpb to a specific release
+      # once we settle on a version. Currently uses npm latest.
+      # ---------------------------------------------------------------
+      - name: Set up Node for MCPB CLI
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v6.0.0
+        with:
+          node-version: "20"
+
+      - name: Install MCPB CLI
+        run: npm install -g @anthropic-ai/mcpb
+
+      - name: Set MCPB bundle version from tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          jq --arg v "$VERSION" '.version = $v' mcpb/manifest.json > mcpb/manifest.tmp
+          mv mcpb/manifest.tmp mcpb/manifest.json
+          python3 - <<PY
+          import re, pathlib
+          v = "$VERSION"
+          path = pathlib.Path("mcpb/pyproject.toml")
+          text = path.read_text()
+          text = re.sub(r'^version\s*=\s*"[^"]+"', f'version = "{v}"', text, count=1, flags=re.M)
+          text = re.sub(r'"automox-mcp>=[^"]+"', f'"automox-mcp>={v}"', text, count=1)
+          path.write_text(text)
+          PY
+          echo "MCPB bundle version set to $VERSION"
+
+      - name: Build MCPB bundle
+        run: mcpb pack mcpb mcpb/automox-mcp-${GITHUB_REF_NAME#v}.mcpb
+
+      - name: Attach MCPB bundle to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "$GITHUB_REF_NAME" --clobber \
+            mcpb/automox-mcp-${GITHUB_REF_NAME#v}.mcpb

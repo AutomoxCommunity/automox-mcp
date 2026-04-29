@@ -21,3 +21,8 @@ automox-mcp-design-guide.md
 mcp-publisher
 mcp-registry-key.pem
 *.pem
+
+# MCPB Desktop Extension build artifacts — built by CI, not committed
+*.mcpb
+mcpb/.venv/
+mcpb/uv.lock

@@ -1,0 +1,14 @@
+[project]
+name = "automox-mcp-bundle"
+version = "1.0.19"
+description = "MCPB Desktop Extension wrapper for the official Automox MCP server"
+requires-python = ">=3.11"
+dependencies = [
+  "automox-mcp>=1.0.19",
+]
+
+# This pyproject.toml is consumed by `uv run` inside the MCPB bundle.
+# The version here is overridden at build time by the release workflow
+# to match the tag (see .github/workflows/release.yml). Keep the floor
+# of `automox-mcp>=` in lockstep with the bundle version so a freshly
+# installed bundle never resolves to an older PyPI release.

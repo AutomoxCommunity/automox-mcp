@@ -5,6 +5,16 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.20] - 2026-04-29
+
+### Added
+
+- **MCPB Desktop Extension** — `automox-mcp` is now installable as a one-click [MCPB (MCP Bundle)](https://github.com/modelcontextprotocol/mcpb) Desktop Extension. Claude Desktop users can drag the `automox-mcp-1.0.20.mcpb` archive (attached to this GitHub Release) into Settings → Extensions instead of editing JSON config files. The bundle is a uvx shim — `manifest.json` + a one-line Python entry point + a `pyproject.toml` that pins `automox-mcp>=1.0.20` — so source code is not bundled and `uv` pulls the matching PyPI release on first run. The install form prompts for API key (sensitive), Account UUID, Org ID (optional), and a read-only mode toggle.
+
+### Changed
+
+- **Release workflow now publishes to three channels.** Every `v*` tag now publishes to PyPI (Sigstore-signed, with SBOM), to the MCP Registry under the DNS-verified `com.automox/automox-mcp` namespace, and as a `.mcpb` archive attached to the GitHub Release. v1.0.20 is the first release exercising the latter two paths in CI.
+
 ## [1.0.19] - 2026-04-28
 
 ### Changed

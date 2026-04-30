@@ -1,0 +1,87 @@
+{
+  "manifest_version": "0.4",
+  "name": "automox-mcp",
+  "display_name": "Automox",
+  "version": "1.0.19",
+  "description": "Talk to your Automox console in natural language. Manage devices, patches, and policies.",
+  "long_description": "The official Automox MCP server, packaged as a Claude Desktop Extension. Connects Claude to your Automox environment so you can manage devices, check compliance posture, run policies, prepare for Patch Tuesday, browse the worklet catalog, and more — all by asking. Exposes 80 MCP tools across 18 domains (devices, policies, patches, groups, webhooks, worklets, vulnerability sync, audit, reports, and more), 9 MCP resources, and 6 workflow prompts (audit_policy, investigate_device, onboard_group, patch_tuesday, security_posture, triage_failure). Read-only mode and modular tool loading are supported via optional configuration.",
+  "author": {
+    "name": "Automox",
+    "url": "https://www.automox.com"
+  },
+  "homepage": "https://github.com/AutomoxCommunity/automox-mcp",
+  "documentation": "https://github.com/AutomoxCommunity/automox-mcp#readme",
+  "support": "https://github.com/AutomoxCommunity/automox-mcp/issues",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AutomoxCommunity/automox-mcp"
+  },
+  "license": "MIT",
+  "icon": "icon.png",
+  "keywords": [
+    "automox",
+    "endpoint-management",
+    "patching",
+    "compliance",
+    "device-management",
+    "vulnerability-management",
+    "it-operations",
+    "official"
+  ],
+  "server": {
+    "type": "uv",
+    "entry_point": "server/main.py",
+    "mcp_config": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "${__dirname}",
+        "server/main.py"
+      ],
+      "env": {
+        "AUTOMOX_API_KEY": "${user_config.api_key}",
+        "AUTOMOX_ACCOUNT_UUID": "${user_config.account_uuid}",
+        "AUTOMOX_ORG_ID": "${user_config.org_id}",
+        "AUTOMOX_MCP_READ_ONLY": "${user_config.read_only}"
+      }
+    }
+  },
+  "user_config": {
+    "api_key": {
+      "type": "string",
+      "title": "Automox API Key",
+      "description": "Your Automox API key. Create one in Automox Console → Settings → Secrets & Keys → Add API Key.",
+      "sensitive": true,
+      "required": true
+    },
+    "account_uuid": {
+      "type": "string",
+      "title": "Account UUID",
+      "description": "Found in Automox Console → Settings → Secrets & Keys (shown on the page).",
+      "required": true
+    },
+    "org_id": {
+      "type": "string",
+      "title": "Organization ID",
+      "description": "Numeric organization ID from the Automox Console URL when viewing your organization. Required by most tools — recommended unless you only need org-agnostic operations.",
+      "required": false
+    },
+    "read_only": {
+      "type": "boolean",
+      "title": "Read-only mode",
+      "description": "Disable all 22 write operations. 58 read tools remain available. Recommended for auditing and exploration.",
+      "default": false,
+      "required": false
+    }
+  },
+  "tools_generated": true,
+  "prompts_generated": true,
+  "compatibility": {
+    "claude_desktop": ">=0.10.0",
+    "platforms": ["darwin", "linux", "win32"],
+    "runtimes": {
+      "python": ">=3.11"
+    }
+  }
+}

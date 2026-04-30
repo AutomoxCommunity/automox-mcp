@@ -45,12 +45,21 @@ AUTOMOX_ORG_ID=your-org-id
 
 ### 3. Connect to your AI assistant
 
+**Claude Desktop (recommended) — one-click MCPB install:**
+
+1. Download the latest `automox-mcp-<version>.mcpb` from the [GitHub Releases page](https://github.com/AutomoxCommunity/automox-mcp/releases/latest).
+2. Open Claude Desktop → **Settings → Extensions**.
+3. Drag the `.mcpb` file into the Extensions window.
+4. Paste your API key, Account UUID, and (optionally) Org ID into the prompts.
+
+No `.env` file, no terminal — credentials are stored in Claude Desktop's secure config. The bundle pulls the matching `automox-mcp` release from PyPI on first run.
+
 **Claude Code (CLI):**
 ```bash
 claude mcp add automox-mcp uvx -- --env-file /path/to/.env automox-mcp
 ```
 
-**Claude Desktop / Cursor / any MCP client** — add to your MCP config:
+**Cursor / any other MCP client** — add to your MCP config:
 ```json
 {
   "mcpServers": {

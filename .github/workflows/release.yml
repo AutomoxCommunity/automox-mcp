@@ -1,4 +1,4 @@
-name: Publish to PyPI and MCP Registry
+name: Publish to PyPI, MCP Registry, and MCPB
 
 on:
   push:
@@ -119,3 +119,58 @@ jobs:
       - name: Publish to MCP Registry
         if: steps.pypi_check.outputs.exists != 'true'
         run: ./mcp-publisher publish
+
+      # ---------------------------------------------------------------
+      # MCPB Desktop Extension build & upload
+      #
+      # Builds the .mcpb archive from the `mcpb/` directory and attaches
+      # it to the GitHub Release. End users install via Claude Desktop's
+      # Settings → Extensions UI by dragging the .mcpb file in.
+      #
+      # The bundle is a uvx-shim — the real Python code is pulled from
+      # PyPI at install time. Version is overridden from the tag so a
+      # freshly built bundle always pins the matching automox-mcp PyPI
+      # release.
+      #
+      # TODO(supply chain): pin @anthropic-ai/mcpb to a specific release
+      # once we settle on a version. Currently uses npm latest.
+      # ---------------------------------------------------------------
+      # Use the Node + npm pre-installed on ubuntu-latest. We deliberately
+      # skip actions/setup-node because (a) we only need `npm install -g`
+      # without version pinning, and (b) setup-node's implicit cache
+      # behavior trips zizmor's cache-poisoning audit.
+      - name: Install MCPB CLI
+        run: |
+          node --version
+          npm install -g @anthropic-ai/mcpb
+
+      - name: Compute MCPB bundle version
+        run: echo "BUNDLE_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - name: Set MCPB bundle version in manifest and pyproject
+        run: |
+          jq --arg v "$BUNDLE_VERSION" '.version = $v' mcpb/manifest.json > mcpb/manifest.tmp
+          mv mcpb/manifest.tmp mcpb/manifest.json
+          # Quoted heredoc — version is read from the env, never interpolated
+          # by the shell. Prevents any shell metacharacters in the tag name
+          # from being expanded inside the Python script.
+          python3 <<'PY'
+          import os, re, pathlib
+          v = os.environ["BUNDLE_VERSION"]
+          path = pathlib.Path("mcpb/pyproject.toml")
+          text = path.read_text()
+          text = re.sub(r'^version\s*=\s*"[^"]+"', f'version = "{v}"', text, count=1, flags=re.M)
+          text = re.sub(r'"automox-mcp>=[^"]+"', f'"automox-mcp>={v}"', text, count=1)
+          path.write_text(text)
+          PY
+          echo "MCPB bundle version set to $BUNDLE_VERSION"
+
+      - name: Build MCPB bundle
+        run: mcpb pack mcpb "mcpb/automox-mcp-${BUNDLE_VERSION}.mcpb"
+
+      - name: Attach MCPB bundle to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "$GITHUB_REF_NAME" --clobber \
+            "mcpb/automox-mcp-${BUNDLE_VERSION}.mcpb"

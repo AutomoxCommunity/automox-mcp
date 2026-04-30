@@ -1,6 +1,6 @@
 [project]
 name = "automox-mcp"
-version = "1.0.19"
+version = "1.0.20"
 description = "Official MCP server for Automox"
 readme = "README.md"
 authors = [

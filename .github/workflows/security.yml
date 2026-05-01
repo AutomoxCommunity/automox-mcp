@@ -66,11 +66,6 @@ jobs:
         run: uv sync --extra dev --frozen
 
       - name: Run mcp-scanner against stdio server
-        env:
-          AUTOMOX_API_KEY: test-api-key
-          AUTOMOX_ACCOUNT_UUID: test-account
-          AUTOMOX_ORG_ID: "1"
-          AUTOMOX_MCP_SKIP_DOTENV: "1"
         run: |
           set -euo pipefail
           uvx --from cisco-ai-mcp-scanner mcp-scanner \

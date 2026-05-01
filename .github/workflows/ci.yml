@@ -134,17 +134,11 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Verify all jobs passed
+        if: >-
+          needs.lint.result != 'success' ||
+          needs.typecheck.result != 'success' ||
+          needs.test.result != 'success' ||
+          needs.build.result != 'success'
         run: |
-          results=(
-            "${{ needs.lint.result }}"
-            "${{ needs.typecheck.result }}"
-            "${{ needs.test.result }}"
-            "${{ needs.build.result }}"
-          )
-          for r in "${results[@]}"; do
-            if [[ "$r" != "success" ]]; then
-              echo "::error::One or more CI jobs did not succeed (got: $r)."
-              exit 1
-            fi
-          done
-          echo "All CI jobs passed."
+          echo "::error::One or more CI jobs did not succeed."
+          exit 1

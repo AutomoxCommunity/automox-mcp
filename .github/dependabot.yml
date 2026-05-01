@@ -12,10 +12,7 @@ updates:
         patterns:
           - "*"
     cooldown:
-      default-days: 5
-      semver-major-days: 14
-      semver-minor-days: 7
-      semver-patch-days: 3
+      default-days: 7
 
   - package-ecosystem: "pip"
     directory: "/"
@@ -29,7 +26,7 @@ updates:
         patterns:
           - "*"
     cooldown:
-      default-days: 5
+      default-days: 7
       semver-major-days: 14
       semver-minor-days: 7
       semver-patch-days: 3

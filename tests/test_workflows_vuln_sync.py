@@ -7,7 +7,6 @@ from conftest import StubClient
 
 from automox_mcp.client import AutomoxClient
 from automox_mcp.workflows.vuln_sync import (
-    get_action_set_actions,
     get_action_set_detail,
     get_action_set_issues,
     get_action_set_solutions,
@@ -43,11 +42,6 @@ _ACTION_SET_DETAIL = {
     "issue_count": 50,
     "action_count": 30,
 }
-
-_ACTIONS = [
-    {"id": 101, "type": "patch", "package_name": "openssl", "severity": "critical"},
-    {"id": 102, "type": "patch", "package_name": "curl", "severity": "high"},
-]
 
 _ISSUES = [
     {"id": 201, "cve_id": "CVE-2026-0001", "severity": "critical", "title": "OpenSSL vuln"},
@@ -101,23 +95,6 @@ async def test_detail_returns_info() -> None:
     )
     assert result["data"]["id"] == 1
     assert result["data"]["action_count"] == 30
-
-
-# ---------------------------------------------------------------------------
-# get_action_set_actions
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_actions_returns_list() -> None:
-    client = StubClient(get_responses={"/orgs/42/remediations/action-sets/1/actions": [_ACTIONS]})
-    result = await get_action_set_actions(
-        cast(AutomoxClient, client),
-        org_id=42,
-        action_set_id=1,
-    )
-    assert result["data"]["total_actions"] == 2
-    assert result["data"]["action_set_id"] == 1
 
 
 # ---------------------------------------------------------------------------

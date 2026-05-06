@@ -250,4 +250,48 @@ async def test_device_scheduled_windows_no_date_param() -> None:
         org_uuid=_ORG_UUID,
         device_uuid=_DEVICE_UUID,
     )
+    assert client.calls[0][1].endswith("/scheduled-windows")
     assert client.calls[0][2] is None
+
+
+@pytest.mark.asyncio
+async def test_group_scheduled_windows_date_keeps_literal_colons() -> None:
+    """The date param must reach the API with literal colons.
+
+    The Automox `/scheduled-windows` endpoint validates the date as
+    `YYYY-MM-DDTHH:mm:ss` and rejects requests where colons have been
+    percent-encoded as `%3A`.
+    """
+    client = StubClient(
+        get_responses={
+            f"/policy-windows/org/{_ORG_UUID}/group/{_GROUP_UUID}/scheduled-windows": [[]],
+        }
+    )
+    await get_group_scheduled_windows(
+        cast(AutomoxClient, client),
+        org_uuid=_ORG_UUID,
+        group_uuid=_GROUP_UUID,
+        date="2026-12-31T00:00:00",
+    )
+    sent_path = client.calls[0][1]
+    assert sent_path.endswith("?date=2026-12-31T00:00:00")
+    assert "%3A" not in sent_path
+    assert client.calls[0][2] is None
+
+
+@pytest.mark.asyncio
+async def test_device_scheduled_windows_date_strips_trailing_z() -> None:
+    """A trailing `Z` is stripped before encoding (the API expects no zone)."""
+    client = StubClient(
+        get_responses={
+            f"/policy-windows/org/{_ORG_UUID}/device/{_DEVICE_UUID}/scheduled-windows": [[]],
+        }
+    )
+    await get_device_scheduled_windows(
+        cast(AutomoxClient, client),
+        org_uuid=_ORG_UUID,
+        device_uuid=_DEVICE_UUID,
+        date="2026-12-31T00:00:00Z",
+    )
+    sent_path = client.calls[0][1]
+    assert sent_path.endswith("?date=2026-12-31T00:00:00")

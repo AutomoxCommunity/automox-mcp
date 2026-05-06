@@ -23,9 +23,6 @@ from ..utils.tooling import (
     store_idempotency,
 )
 from ..workflows.vuln_sync import (
-    get_action_set_actions as _get_action_set_actions,
-)
-from ..workflows.vuln_sync import (
     get_action_set_detail as _get_action_set_detail,
 )
 from ..workflows.vuln_sync import (
@@ -91,31 +88,6 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         result = await call_tool_workflow(
             client,
             _get_action_set_detail,
-            {"action_set_id": action_set_id},
-            params_model=GetActionSetParams,
-        )
-        return maybe_format_markdown(result, output_format)
-
-    @server.tool(
-        name="get_action_set_actions",
-        description=(
-            "Get remediation actions for a vulnerability action set. "
-            "Shows what patches or changes need to be applied."
-        ),
-        annotations={
-            "readOnlyHint": True,
-            "destructiveHint": False,
-            "idempotentHint": True,
-            "openWorldHint": True,
-        },
-    )
-    async def get_action_set_actions(
-        action_set_id: int,
-        output_format: str | None = "json",
-    ) -> dict[str, Any]:
-        result = await call_tool_workflow(
-            client,
-            _get_action_set_actions,
             {"action_set_id": action_set_id},
             params_model=GetActionSetParams,
         )

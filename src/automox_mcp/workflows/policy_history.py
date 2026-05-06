@@ -298,9 +298,12 @@ async def get_policy_run_detail_v2(
         org_id=org_id,
     )
 
-    # The device details endpoint extracts org from JWT, not query params.
+    # The policy-report-api requires the org UUID as a query param; the JWT
+    # is not used to resolve org context for this endpoint despite a sibling
+    # comment in earlier revisions. Without this param the API rejects the
+    # request with `Invalid or missing org from query parameters org=null`.
     # Filter params use snake_case names per the policy-report-api.
-    params: dict[str, Any] = {}
+    params: dict[str, Any] = {"org": resolved_uuid}
     if sort:
         params["sort"] = sort
     if result_status:

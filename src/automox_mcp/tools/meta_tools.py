@@ -97,7 +97,6 @@ _DOMAIN_CATALOG: dict[str, list[tuple[str, str]]] = {
     "vuln_sync": [
         ("list_remediation_action_sets", "List vulnerability action sets"),
         ("get_action_set_detail", "Action set details"),
-        ("get_action_set_actions", "Remediation actions for an action set"),
         ("get_action_set_issues", "Vulnerability issues for an action set"),
         ("get_action_set_solutions", "Solutions for an action set"),
         ("get_upload_formats", "Supported CSV upload formats"),

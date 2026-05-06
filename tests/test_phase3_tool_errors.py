@@ -305,15 +305,6 @@ async def test_vs_detail_success() -> None:
 
 
 @pytest.mark.asyncio
-async def test_vs_actions_success() -> None:
-    client = FakeClient()
-    client._get_response = [{"id": 101}]
-    server = _register(vuln_sync_tools, client)
-    result = await server.tools["get_action_set_actions"](action_set_id=1)
-    assert result["data"]["total_actions"] == 1
-
-
-@pytest.mark.asyncio
 async def test_vs_issues_success() -> None:
     client = FakeClient()
     client._get_response = [{"cve_id": "CVE-1"}]

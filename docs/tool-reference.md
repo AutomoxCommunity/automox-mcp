@@ -1,6 +1,6 @@
 # Tool Reference
 
-Complete reference for all 80 tools, 6 workflow prompts, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
+Complete reference for all 79 tools, 6 workflow prompts, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
 
 > **Tip:** You don't need to memorize this. Call `discover_capabilities` from your AI assistant to get a live summary of available tools organized by domain.
 
@@ -113,13 +113,12 @@ Richer policy execution reporting via the `/policy-history` API with UUID-based 
 - **`get_data_extract`** - Get details and download information for a specific data extract.
 - **`create_data_extract`** - Request a new data extract for bulk reporting. Returns the extract ID and initial status.
 
-## Vulnerability Sync (7 tools)
+## Vulnerability Sync (6 tools)
 
 Manage vulnerability remediation workflows via the Vuln Sync API. Supports CSV-based import from vulnerability scanners (Qualys, Tenable, etc.).
 
 - **`list_remediation_action_sets`** - List vulnerability remediation action sets for the organization.
 - **`get_action_set_detail`** - Get details for a specific vulnerability remediation action set.
-- **`get_action_set_actions`** - Get remediation actions for an action set. Shows what patches or changes need to be applied.
 - **`get_action_set_issues`** - Get vulnerability issues (CVEs) associated with an action set.
 - **`get_action_set_solutions`** - Get solutions for an action set. Shows recommended patches or configurations.
 - **`get_upload_formats`** - Get supported CSV upload formats for vulnerability remediation action sets.

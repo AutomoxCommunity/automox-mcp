@@ -379,9 +379,12 @@ async def test_get_group_scheduled_windows_with_date() -> None:
         date="2026-04-30T00:00:00Z",
     )
 
-    # Date is passed via params dict (properly URL-encoded by httpx)
-    assert client.calls[0][1].endswith("/scheduled-windows")
-    assert client.calls[0][2] == {"date": "2026-04-30T00:00:00"}
+    # Date is appended directly to the URL with literal colons; the API
+    # rejects `%3A`-encoded colons that httpx's params encoder would emit.
+    sent_path = client.calls[0][1]
+    assert sent_path.endswith("/scheduled-windows?date=2026-04-30T00:00:00")
+    assert "%3A" not in sent_path
+    assert client.calls[0][2] is None
 
 
 # ---------------------------------------------------------------------------
@@ -423,9 +426,12 @@ async def test_get_device_scheduled_windows_with_date() -> None:
         date="2026-04-30T00:00:00Z",
     )
 
-    # Date is passed via params dict (properly URL-encoded by httpx)
-    assert client.calls[0][1].endswith("/scheduled-windows")
-    assert client.calls[0][2] == {"date": "2026-04-30T00:00:00"}
+    # Date is appended directly to the URL with literal colons; the API
+    # rejects `%3A`-encoded colons that httpx's params encoder would emit.
+    sent_path = client.calls[0][1]
+    assert sent_path.endswith("/scheduled-windows?date=2026-04-30T00:00:00")
+    assert "%3A" not in sent_path
+    assert client.calls[0][2] is None
 
 
 # ---------------------------------------------------------------------------

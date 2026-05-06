@@ -93,7 +93,6 @@ from .policy_windows import (
 )
 from .reports import get_noncompliant_report, get_prepatch_report
 from .vuln_sync import (
-    get_action_set_actions,
     get_action_set_detail,
     get_action_set_issues,
     get_action_set_solutions,
@@ -150,7 +149,6 @@ __all__ = [
     "describe_policy_run_result",
     "device_search_typeahead",
     "execute_policy",
-    "get_action_set_actions",
     "get_action_set_detail",
     "get_action_set_issues",
     "get_action_set_solutions",

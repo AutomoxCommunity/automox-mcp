@@ -165,7 +165,9 @@ async def test_run_detail_v2_all_filters() -> None:
     params = client.calls[0][2]
     assert params["sort"] == "asc"
     assert params["device_name"] == "host-1"
-    assert "org" not in params  # org comes from JWT, not query params
+    # The policy-report-api requires the org UUID as a query param;
+    # without it the API rejects the request with `org=null`.
+    assert "org" in params
 
 
 # ---------------------------------------------------------------------------

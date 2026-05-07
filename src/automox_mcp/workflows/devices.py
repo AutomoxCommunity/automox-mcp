@@ -423,18 +423,56 @@ async def list_devices_needing_attention(
     elif isinstance(report, Sequence):
         devices = [item for item in report if isinstance(item, Mapping)]
 
+    # Field-name mapping for /reports/needs-attention. The endpoint returns
+    # camelCase Automox console fields (`id`, `groupId`, `lastRefreshTime`,
+    # `compliant`, `policies`); earlier revisions of this wrapper looked for
+    # snake_case fields that the endpoint does not produce, so every
+    # diagnostic field came back null.
     curated_devices = []
     for item in devices:
+        compliant = item.get("compliant")
+        if compliant is False:
+            policy_status: Any = "non_compliant"
+        elif compliant is True:
+            policy_status = "compliant"
+        else:
+            # Defensive fallback for older snake_case payloads or future
+            # additions to the report shape.
+            policy_status = item.get("policy_status") or item.get("status")
+
+        policies = item.get("policies")
+        failing_policies: list[dict[str, Any]] = []
+        if isinstance(policies, Sequence) and not isinstance(policies, (str, bytes, bytearray)):
+            for pol in policies[:5]:
+                if not isinstance(pol, Mapping):
+                    continue
+                failing_policies.append(
+                    {
+                        "policy_id": pol.get("id"),
+                        "policy_name": pol.get("name"),
+                        "policy_type": pol.get("type"),
+                    }
+                )
+        failing_policies_count = (
+            len(policies)
+            if isinstance(policies, Sequence) and not isinstance(policies, (str, bytes, bytearray))
+            else None
+        )
+
         curated_devices.append(
             {
                 "device_id": item.get("device_id") or item.get("id"),
                 "device_name": _format_device_display_name(item),
-                "policy_status": item.get("policy_status") or item.get("status"),
-                "pending_patches": item.get("pending_updates")
-                if item.get("pending_updates") is not None
-                else item.get("pending"),
-                "last_check_in": item.get("last_check_in") or item.get("last_seen"),
-                "server_group_id": item.get("server_group_id"),
+                "policy_status": policy_status,
+                "failing_policies_count": failing_policies_count,
+                "failing_policies": failing_policies or None,
+                "last_check_in": item.get("lastRefreshTime")
+                or item.get("last_check_in")
+                or item.get("last_seen"),
+                "server_group_id": item.get("groupId") or item.get("server_group_id"),
+                "needs_reboot": item.get("needsReboot"),
+                "os_family": item.get("os_family"),
+                "connected": item.get("connected"),
             }
         )
 

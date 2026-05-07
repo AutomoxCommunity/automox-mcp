@@ -119,6 +119,119 @@ async def test_audit_trail_filters_actor_and_resolves_org_uuid() -> None:
 
 
 @pytest.mark.asyncio
+async def test_audit_trail_filter_no_match_in_page_metadata() -> None:
+    """When an actor filter is applied and the page returns 0 matches but
+    `next_cursor` is set, metadata must explicitly flag the state.
+
+    Without this flag (bug #8 from issue #43), callers see
+    `events_returned=0` and stop, missing actor activity that lives on
+    later pages of the org-wide event stream.
+    """
+    org_uuid = "00000000-0000-0000-0000-000000000888"
+    audit_path = f"/audit-service/v1/orgs/{org_uuid}/events"
+    responses = {
+        (audit_path, "console"): [
+            {
+                "metadata": {"count": 5, "next": "https://example.test/next?cursor=cursor-5"},
+                "data": [
+                    {
+                        "activity": "User Login",
+                        "message": "User logged in",
+                        "time": 1718213009419,
+                        "metadata": {"uid": "cursor-x"},
+                        "actor": {
+                            "user": {
+                                "user": {
+                                    "email_addr": "someone-else@example.com",
+                                    "uid": "99999999-9999-9999-9999-999999999999",
+                                }
+                            }
+                        },
+                    },
+                ],
+            }
+        ],
+    }
+    client = StubClient(responses, org_id=888, org_uuid=org_uuid)
+
+    result = await audit_trail_user_activity(
+        cast(AutomoxClient, client),
+        org_id=888,
+        date=date(2026, 4, 29),
+        actor_email="alice@example.com",
+        limit=5,
+    )
+
+    assert result["data"]["events_returned"] == 0
+    metadata = result["metadata"]
+    assert metadata["next_cursor"] == "cursor-x"
+    flag = metadata["filter_pagination_state"]
+    assert flag["no_matches_in_page"] is True
+    assert flag["more_pages_available"] is True
+    assert flag["events_in_unfiltered_page"] == 5
+    assert "advice" in flag
+
+
+@pytest.mark.asyncio
+async def test_audit_trail_no_filter_pagination_flag_when_match() -> None:
+    """The filter_pagination_state flag must NOT appear when matches were
+    found, even if next_cursor is set."""
+    org_uuid = "00000000-0000-0000-0000-000000000777"
+    audit_path = f"/audit-service/v1/orgs/{org_uuid}/events"
+    responses = {
+        (audit_path, "console"): [
+            {
+                "metadata": {"count": 2, "next": "https://example.test/next?cursor=cursor-2"},
+                "data": [
+                    {
+                        "activity": "User Login",
+                        "message": "User logged in",
+                        "time": 1718213009419,
+                        "metadata": {"uid": "cursor-1"},
+                        "actor": {
+                            "user": {
+                                "user": {
+                                    "email_addr": "alice@example.com",
+                                    "uid": "11111111-1111-1111-1111-111111111111",
+                                }
+                            }
+                        },
+                    },
+                ],
+            }
+        ],
+    }
+    client = StubClient(responses, org_id=777, org_uuid=org_uuid)
+    result = await audit_trail_user_activity(
+        cast(AutomoxClient, client),
+        org_id=777,
+        date=date(2026, 4, 29),
+        actor_email="alice@example.com",
+    )
+    assert result["data"]["events_returned"] == 1
+    assert "filter_pagination_state" not in result["metadata"]
+
+
+@pytest.mark.asyncio
+async def test_audit_trail_no_filter_pagination_flag_when_no_filter() -> None:
+    """No filter applied + 0 events returned + next_cursor set → no flag.
+    The ambiguity only arises when a filter is being applied."""
+    org_uuid = "00000000-0000-0000-0000-000000000666"
+    audit_path = f"/audit-service/v1/orgs/{org_uuid}/events"
+    responses = {
+        (audit_path, "console"): [{"metadata": {"count": 0, "next": None}, "data": []}],
+    }
+    client = StubClient(responses, org_id=666, org_uuid=org_uuid)
+    result = await audit_trail_user_activity(
+        cast(AutomoxClient, client),
+        org_id=666,
+        date=date(2026, 4, 29),
+        actor_email=None,
+    )
+    assert "filter_pagination_state" not in result["metadata"]
+
+
+@pytest.mark.asyncio
 async def test_audit_trail_includes_sanitized_raw_event() -> None:
     org_uuid = "00000000-0000-0000-0000-000000000999"
     long_message = "A" * 900

@@ -396,6 +396,75 @@ async def test_describe_policy_run_result_summarizes_and_normalizes() -> None:
     assert params["page"] == 0
 
 
+@pytest.mark.asyncio
+async def test_describe_policy_run_result_filters_status_client_side() -> None:
+    """The /policy-history endpoint silently ignores `result_status`; the
+    wrapper filters client-side and surfaces that fact in metadata.
+
+    Verified live during v1.0.20 triage: passing `result_status=failed`
+    returned the unfiltered set with mixed `failed`/`not_included` entries.
+    See bug #7 in issue #43.
+    """
+    org_uuid = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+    policy_uuid = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+    exec_token = UUID("cccccccc-cccc-cccc-cccc-cccccccccccc")
+    api_path = f"/policy-history/policies/{policy_uuid}/{exec_token}"
+    response_payload = {
+        "metadata": {"current_page": 0, "total_pages": 1, "total_count": 3, "limit": 25},
+        "data": [
+            {"device_id": 1, "result_status": "FAILED"},
+            {"device_id": 2, "result_status": "not_included"},
+            {"device_id": 3, "result_status": "SUCCESS"},
+        ],
+    }
+
+    client = StubClient(get_responses={api_path: [response_payload]})
+    result = await describe_policy_run_result(
+        cast(AutomoxClient, client),
+        org_uuid=org_uuid,
+        policy_uuid=policy_uuid,
+        exec_token=exec_token,
+        result_status="failed",
+    )
+
+    devices = result["data"]["devices"]
+    assert [d["device_id"] for d in devices] == [1]
+    assert all(d["result_status"] == "failed" for d in devices)
+
+    # The filter must NOT be sent upstream — the API ignores it anyway,
+    # and forwarding it would imply server-side filtering that doesn't
+    # happen.
+    _, _, params, _ = client.calls[0]
+    assert params is not None
+    assert "result_status" not in params
+
+    filter_meta = result["metadata"]["result_status_filter"]
+    assert filter_meta["applied"] == "client_side"
+    assert filter_meta["requested_status"] == "failed"
+    assert filter_meta["pre_filter_count"] == 3
+    assert filter_meta["post_filter_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_describe_policy_run_result_no_filter_metadata_when_unset() -> None:
+    """When no `result_status` is requested, metadata should not include
+    the client-side filter block."""
+    org_uuid = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+    policy_uuid = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+    exec_token = UUID("cccccccc-cccc-cccc-cccc-cccccccccccc")
+    api_path = f"/policy-history/policies/{policy_uuid}/{exec_token}"
+    client = StubClient(
+        get_responses={api_path: [{"data": [{"device_id": 1, "result_status": "SUCCESS"}]}]}
+    )
+    result = await describe_policy_run_result(
+        cast(AutomoxClient, client),
+        org_uuid=org_uuid,
+        policy_uuid=policy_uuid,
+        exec_token=exec_token,
+    )
+    assert "result_status_filter" not in result["metadata"]
+
+
 # ---------------------------------------------------------------------------
 # _normalize_status
 # ---------------------------------------------------------------------------
@@ -532,6 +601,62 @@ async def test_summarize_policy_activity_runs_as_list() -> None:
     # The run has no failed/success → classified as unknown
     assert result["data"]["status_breakdown"].get("unknown", 0) >= 1
     assert result["data"]["total_policy_runs"] == 10
+
+
+@pytest.mark.asyncio
+async def test_summarize_policy_activity_flags_sample_truncation() -> None:
+    """When the org has more runs in the window than /policy-runs can
+    return (server-capped at ~100), surface the truncation explicitly.
+
+    Bug #9 from issue #43: callers were comparing `total_policy_runs`
+    (window-wide count) to `total_runs_considered` (capped sample) and
+    treating the discrepancy as a math error.
+    """
+    org_uuid = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+    runs_list = [
+        {"policy_uuid": "p1", "policy_name": "P1", "failed": 1, "success": 0, "device_count": 1},
+    ]
+    client = FlexibleStubClient(
+        get_responses={
+            "/policy-history/policy-run-count": [{"policy_runs": 720}],
+            "/policy-history/policy-runs": [runs_list],
+        },
+    )
+
+    result = await summarize_policy_activity(
+        cast(AutomoxClient, client),
+        org_uuid=org_uuid,
+        window_days=7,
+    )
+
+    assert result["data"]["total_policy_runs"] == 720
+    assert result["data"]["total_runs_considered"] == 1
+    assert result["data"]["sample_is_truncated"] is True
+    assert result["metadata"]["sample_is_truncated"] is True
+    assert "sample_note" in result["metadata"]
+    assert "720" in result["metadata"]["sample_note"]
+
+
+@pytest.mark.asyncio
+async def test_summarize_policy_activity_no_truncation_flag_when_full_sample() -> None:
+    """When all window runs fit in the sample, the truncation flag is False."""
+    org_uuid = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+    runs_list = [
+        {"policy_uuid": "p1", "policy_name": "P1", "failed": 0, "success": 1, "device_count": 1},
+        {"policy_uuid": "p2", "policy_name": "P2", "failed": 0, "success": 1, "device_count": 1},
+    ]
+    client = FlexibleStubClient(
+        get_responses={
+            "/policy-history/policy-run-count": [{"policy_runs": 2}],
+            "/policy-history/policy-runs": [runs_list],
+        },
+    )
+    result = await summarize_policy_activity(
+        cast(AutomoxClient, client),
+        org_uuid=org_uuid,
+    )
+    assert result["data"]["sample_is_truncated"] is False
+    assert "sample_note" not in result["metadata"]
 
 
 # ---------------------------------------------------------------------------

@@ -5,6 +5,18 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.22] - 2026-05-07
+
+### Fixed
+
+- **`devices_needing_attention` returned all-null diagnostic fields (#43)** — The wrapper looked for snake_case fields (`device_id`, `server_group_id`, `last_check_in`, `policy_status`, `pending_updates`) that the `/reports/needs-attention` endpoint does not return. The endpoint emits camelCase Automox console fields (`id`, `groupId`, `lastRefreshTime`, `compliant`, `policies`), so every device came back with `policy_status=null`, `pending_patches=null`, `last_check_in=null`, `server_group_id=null`. Field mapping corrected. The bogus `pending_patches` field (no per-device patch count exists in this endpoint) was replaced with `failing_policies_count` and a compact `failing_policies` summary derived from the `policies` list. Added `needs_reboot`, `os_family`, `connected` for context. The legacy snake_case fallback path is retained for backwards-compatibility with hypothetical future API shapes.
+
+- **`policy_run_results` ignored `result_status` filter (#43)** — The Automox `/policy-history/policies/{policy_uuid}/{exec_token}` endpoint silently ignores the `result_status` query parameter (verified live: `result_status`, `resultStatus`, and `status` all return the unfiltered set). The wrapper was forwarding it and trusting the upstream filter. Now the filter is applied **client-side** after the page is fetched, and the metadata block surfaces this with `result_status_filter.applied = "client_side"`, pre/post counts, and a note explaining that `pagination` counts reflect the unfiltered upstream response. Pagination across pages still works; the caller just sees fewer results per page when the filter excludes most of them.
+
+- **`audit_trail_user_activity` cursor advance was ambiguous when filter excluded the page (#43)** — When an actor filter was applied and the page returned 0 matches but `next_cursor` was set, callers had no way to distinguish "actor was inactive" from "actor's events live on later pages of the org-wide stream." The org-wide audit endpoint does not filter by actor — the wrapper does it client-side after fetching — so a cursor with 0 returned events meant "keep paginating," not "stop." Callers stopped, silently missing later events. The metadata now surfaces `filter_pagination_state` with `no_matches_in_page`, `more_pages_available`, `events_in_unfiltered_page`, and an explicit `advice` string when this state arises. The data shape is unchanged; the new key is additive.
+
+- **`policy_health_overview` sample size mismatch was not surfaced (#43)** — `total_policy_runs` (from `/policy-history/policy-run-count?days=N`) honors the requested window, but `/policy-history/policy-runs` is server-capped at the most recent ~100 events (≈last 24h) regardless of `limit`, `days`, or `start_time`/`end_time` parameters. So `total_runs_considered < total_policy_runs` is the *normal* state for active orgs, not a math error. The wrapper now sets `data.sample_is_truncated`, mirrors it in `metadata.sample_is_truncated`, and includes a `metadata.sample_note` explaining the cap when truncation is detected. The numerical fields are unchanged.
+
 ## [1.0.21] - 2026-05-06
 
 ### Fixed

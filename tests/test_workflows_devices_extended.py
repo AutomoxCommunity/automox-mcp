@@ -1277,18 +1277,34 @@ async def test_summarize_device_health_large_response_sets_truncation_flag() -> 
 
 
 @pytest.mark.asyncio
-async def test_list_devices_needing_attention_basic() -> None:
+async def test_list_devices_needing_attention_basic_camelcase() -> None:
+    """The /reports/needs-attention endpoint returns camelCase fields.
+
+    `groupId`, `lastRefreshTime`, `compliant`, `policies` need to be
+    mapped to the wrapper's snake_case output. Earlier revisions looked
+    for `server_group_id`/`last_check_in`/`policy_status`/`pending_updates`
+    that the API never returns, so every diagnostic field was null.
+    """
     report = {
-        "data": [
-            {
-                "id": 10,
-                "name": "trouble-host",
-                "policy_status": "failed",
-                "pending_updates": 3,
-                "last_check_in": "2024-05-10T12:00:00Z",
-                "server_group_id": 99,
-            }
-        ]
+        "nonCompliant": {
+            "total": 1,
+            "devices": [
+                {
+                    "id": 10,
+                    "name": "trouble-host",
+                    "compliant": False,
+                    "groupId": 99,
+                    "lastRefreshTime": "2026-05-07T12:00:00+0000",
+                    "needsReboot": True,
+                    "os_family": "Mac",
+                    "connected": True,
+                    "policies": [
+                        {"id": 1, "name": "Patch All", "type": "patch"},
+                        {"id": 2, "name": "Reboot Nightly", "type": "custom"},
+                    ],
+                }
+            ],
+        }
     }
     client = StubClient(get_responses={"/reports/needs-attention": [report]})
     result = await list_devices_needing_attention(cast(AutomoxClient, client), org_id=42)
@@ -1298,9 +1314,39 @@ async def test_list_devices_needing_attention_basic() -> None:
     device = data["devices"][0]
     assert device["device_id"] == 10
     assert device["device_name"] == "trouble-host"
-    assert device["policy_status"] == "failed"
-    assert device["pending_patches"] == 3
+    assert device["policy_status"] == "non_compliant"
     assert device["server_group_id"] == 99
+    assert device["last_check_in"] == "2026-05-07T12:00:00+0000"
+    assert device["needs_reboot"] is True
+    assert device["os_family"] == "Mac"
+    assert device["connected"] is True
+    assert device["failing_policies_count"] == 2
+    assert device["failing_policies"][0]["policy_name"] == "Patch All"
+
+
+@pytest.mark.asyncio
+async def test_list_devices_needing_attention_legacy_snakecase() -> None:
+    """Defensive fallback: tolerate snake_case payloads if the API ever
+    starts emitting them. Pre-fix tests exercised this shape directly."""
+    report = {
+        "data": [
+            {
+                "id": 10,
+                "name": "trouble-host",
+                "policy_status": "failed",
+                "last_check_in": "2024-05-10T12:00:00Z",
+                "server_group_id": 99,
+            }
+        ]
+    }
+    client = StubClient(get_responses={"/reports/needs-attention": [report]})
+    result = await list_devices_needing_attention(cast(AutomoxClient, client), org_id=42)
+
+    device = result["data"]["devices"][0]
+    assert device["device_id"] == 10
+    assert device["policy_status"] == "failed"
+    assert device["server_group_id"] == 99
+    assert device["last_check_in"] == "2024-05-10T12:00:00Z"
 
 
 @pytest.mark.asyncio
@@ -1346,7 +1392,12 @@ async def test_list_devices_needing_attention_metadata() -> None:
 
 @pytest.mark.asyncio
 async def test_list_devices_needing_attention_with_group_id() -> None:
-    report = {"data": [{"id": 5, "name": "host", "server_group_id": 77}]}
+    report = {
+        "nonCompliant": {
+            "total": 1,
+            "devices": [{"id": 5, "name": "host", "compliant": False, "groupId": 77}],
+        }
+    }
     client = StubClient(get_responses={"/reports/needs-attention": [report]})
     result = await list_devices_needing_attention(
         cast(AutomoxClient, client), org_id=42, group_id=77
@@ -1354,6 +1405,7 @@ async def test_list_devices_needing_attention_with_group_id() -> None:
 
     assert result["data"]["group_id"] == 77
     assert result["metadata"]["group_id"] == 77
+    assert result["data"]["devices"][0]["server_group_id"] == 77
 
 
 @pytest.mark.asyncio

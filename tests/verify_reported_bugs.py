@@ -343,7 +343,11 @@ async def case_8_audit_actor_cursor(session: ClientSession) -> str:
         else data.get("events_returned")
     )
     events_seen = metadata.get("events_seen") or data.get("events_seen")
-    if next_cursor and events_returned == 0:
+    # v1.0.22 fix surfaces this state explicitly via
+    # metadata.filter_pagination_state. If that flag is present, the
+    # state is no longer ambiguous — caller has explicit guidance.
+    filter_state = metadata.get("filter_pagination_state")
+    if next_cursor and events_returned == 0 and not filter_state:
         status(
             "VERIFIED",
             (
@@ -353,6 +357,16 @@ async def case_8_audit_actor_cursor(session: ClientSession) -> str:
             RED,
         )
         return "VERIFIED"
+    if filter_state:
+        status(
+            "NOT_REPRODUCED",
+            (
+                f"state explicitly flagged: filter_pagination_state="
+                f"{filter_state.get('no_matches_in_page')}, advice present"
+            ),
+            GREEN,
+        )
+        return "NOT_REPRODUCED"
     status(
         "NOT_REPRODUCED",
         f"cursor={next_cursor!r}, events_returned={events_returned}, events_seen={events_seen}",
@@ -368,11 +382,27 @@ async def case_9_policy_health_sample(session: ClientSession) -> str:
         status("AMBIGUOUS", f"unexpected shape — {raw[:200]}", YELLOW)
         return "AMBIGUOUS"
     data = parsed.get("data") or parsed
+    metadata = parsed.get("metadata") or {}
     total = data.get("total_policy_runs")
     considered = data.get("total_runs_considered")
     max_runs = data.get("max_runs")
+    # v1.0.22 fix surfaces the discrepancy explicitly via
+    # data.sample_is_truncated and metadata.sample_note. The numerical
+    # mismatch is caused by an Automox API server-side cap (~100 events)
+    # that no client param can override; the wrapper now flags it.
+    sample_truncated = data.get("sample_is_truncated") or metadata.get("sample_is_truncated")
     if total is not None and considered is not None and considered < total:
         if max_runs is None or considered < max_runs:
+            if sample_truncated:
+                status(
+                    "NOT_REPRODUCED",
+                    (
+                        f"discrepancy explicitly flagged via sample_is_truncated="
+                        f"{sample_truncated}; sample_note present in metadata"
+                    ),
+                    GREEN,
+                )
+                return "NOT_REPRODUCED"
             status(
                 "VERIFIED",
                 f"considered={considered} < min(total={total}, max_runs={max_runs})",

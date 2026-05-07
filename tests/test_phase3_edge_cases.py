@@ -82,9 +82,22 @@ def test_summarize_policy_skips_none_fields() -> None:
 
 
 def test_summarize_action_set_extracts_key_fields() -> None:
-    item = {"id": 1, "name": "Test", "status": "active", "unknown": "x"}
+    # The Automox API does not emit a top-level `name`; the user-visible
+    # name lives under `source.name`. The summarizer extracts only keys
+    # the API actually returns, plus a flattened `name` derived from
+    # source when present.
+    item = {
+        "id": 1,
+        "status": "active",
+        "source": {"name": "Test", "type": "Qualys"},
+        "unknown": "x",
+    }
     result = _summarize_action_set(item)
-    assert result == {"id": 1, "name": "Test", "status": "active"}
+    assert result["id"] == 1
+    assert result["status"] == "active"
+    assert result["name"] == "Test"
+    assert result["source"]["type"] == "Qualys"
+    assert "unknown" not in result
 
 
 # ---------------------------------------------------------------------------
@@ -139,13 +152,18 @@ async def test_runs_by_policy_empty() -> None:
 
 @pytest.mark.asyncio
 async def test_history_detail_non_mapping() -> None:
+    """When the detail endpoint returns a non-mapping value, the policy
+    summary is empty but the structural keys (recent_runs,
+    total_runs_returned) added in v1.0.23 still surface so the response
+    shape is stable."""
     client = _make_ph_client(get_responses={"/policy-history/policies/pol-x": ["bad"]})
     result = await get_policy_history_detail(
         cast(AutomoxClient, client),
         org_id=42,
         policy_uuid="pol-x",
     )
-    assert result["data"] == {}
+    assert result["data"]["recent_runs"] == []
+    assert result["data"]["total_runs_returned"] == 0
 
 
 @pytest.mark.asyncio

@@ -199,27 +199,88 @@ async def get_policy_history_detail(
     org_id: int,
     policy_uuid: str,
     org_uuid: str | UUID | None = None,
+    recent_runs_limit: int = 25,
 ) -> dict[str, Any]:
-    """Get policy history details by UUID."""
+    """Get policy history details by UUID, plus recent run history.
+
+    Earlier revisions returned only the top-level policy metadata
+    (uuid, name, type, last_run_time, ...) despite the tool description
+    promising "run history and status." This implementation now fetches
+    `/policy-history/policy-runs/{policy_uuid}` concurrently with the
+    detail endpoint and merges a summarized run list and banner_stats
+    into the response. Bug #4b from issue #43.
+    """
+    import asyncio
+
     resolved_uuid = await resolve_org_uuid(
         client,
         explicit_uuid=org_uuid,
         org_id=org_id,
     )
 
-    response = await client.get(
+    detail_task = client.get(
         f"/policy-history/policies/{policy_uuid}",
         params={"org": resolved_uuid},
     )
+    runs_task = client.get(
+        f"/policy-history/policy-runs/{policy_uuid}",
+        params={"org": resolved_uuid},
+    )
 
-    if isinstance(response, Mapping):
-        detail = _summarize_policy(response)
+    detail_response, runs_response = await asyncio.gather(
+        detail_task, runs_task, return_exceptions=True
+    )
+
+    if isinstance(detail_response, BaseException):
+        # The detail endpoint is the primary source — re-raise its error.
+        raise detail_response
+
+    if isinstance(detail_response, Mapping):
+        detail = _summarize_policy(detail_response)
     else:
         detail = {}
 
+    runs: list[dict[str, Any]] = []
+    banner_stats: dict[str, Any] = {}
+    runs_error: str | None = None
+    if isinstance(runs_response, BaseException):
+        # The runs sub-call is best-effort; preserve detail even when it fails.
+        runs_error = f"{type(runs_response).__name__}: {runs_response}"
+    elif isinstance(runs_response, Mapping):
+        data_block = runs_response.get("data")
+        if isinstance(data_block, Mapping):
+            raw_runs = data_block.get("runs") or []
+            banner_stats = (
+                dict(data_block.get("banner_stats") or {})
+                if isinstance(data_block.get("banner_stats"), Mapping)
+                else {}
+            )
+        elif isinstance(data_block, list):
+            raw_runs = data_block
+            banner_stats = {}
+        else:
+            raw_runs = []
+            banner_stats = {}
+        runs = [_summarize_run(r) for r in raw_runs if isinstance(r, Mapping) and r]
+
+    if recent_runs_limit and recent_runs_limit > 0:
+        recent_runs = runs[:recent_runs_limit]
+    else:
+        recent_runs = runs
+
+    data: dict[str, Any] = dict(detail)
+    data["recent_runs"] = recent_runs
+    data["total_runs_returned"] = len(runs)
+    if banner_stats:
+        data["banner_stats"] = banner_stats
+
+    metadata: dict[str, Any] = {"deprecated_endpoint": False}
+    if runs_error:
+        metadata["runs_fetch_error"] = runs_error
+
     return {
-        "data": detail,
-        "metadata": {"deprecated_endpoint": False},
+        "data": data,
+        "metadata": metadata,
     }
 
 

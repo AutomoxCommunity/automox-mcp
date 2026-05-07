@@ -177,6 +177,83 @@ async def test_assignments_returns_data() -> None:
     assert result["data"]["total_assignments"] == 1
 
 
+@pytest.mark.asyncio
+async def test_assignments_normalizes_spring_page_envelope() -> None:
+    """The upstream API returns a Spring `Page<T>` envelope (`content`,
+    `pageable`, `total_elements`, `number_of_elements`...). Earlier
+    revisions leaked the Spring fields into the response by wrapping
+    the entire envelope as a single record. The wrapper now extracts
+    `content` and re-emits pagination data under metadata.pagination.
+
+    Bug #6 from issue #43.
+    """
+    path = f"/server-groups-api/v1/organizations/{_ORG_UUID}/assignments"
+    spring_envelope = {
+        "content": [
+            {"device_uuid": "dev-1", "policy_id": 1, "group_id": 10},
+            {"device_uuid": "dev-2", "policy_id": 2, "group_id": 20},
+        ],
+        "pageable": {
+            "page_number": 0,
+            "page_size": 25,
+            "offset": 0,
+            "sort": {"empty": False, "sorted": True, "unsorted": False},
+            "paged": True,
+            "unpaged": False,
+        },
+        "total_elements": 2,
+        "total_pages": 1,
+        "number_of_elements": 2,
+        "size": 25,
+        "number": 0,
+        "first": True,
+        "last": True,
+        "empty": False,
+        "sort": {"empty": False, "sorted": True, "unsorted": False},
+    }
+    client = _make_client(get_responses={path: [spring_envelope]})
+    result = await get_device_assignments(cast(AutomoxClient, client))
+
+    # Spring fields must NOT leak into data.assignments
+    assert result["data"]["total_assignments"] == 2
+    first = result["data"]["assignments"][0]
+    assert first["device_uuid"] == "dev-1"
+    assert "pageable" not in first
+    assert "total_elements" not in first
+    assert "number_of_elements" not in first
+
+    pagination = result["metadata"]["pagination"]
+    assert pagination["page"] == 0
+    assert pagination["page_size"] == 25
+    assert pagination["total_elements"] == 2
+    assert pagination["total_pages"] == 1
+    assert pagination["page_number"] == 0
+    # Spring's verbose `pageable.paged`/`pageable.unpaged` markers are not surfaced
+    assert "paged" not in pagination
+    assert "unpaged" not in pagination
+
+
+@pytest.mark.asyncio
+async def test_assignments_handles_empty_spring_page() -> None:
+    """An empty Spring page (content=[]) should produce an empty list,
+    not leak the Spring envelope as a single record."""
+    path = f"/server-groups-api/v1/organizations/{_ORG_UUID}/assignments"
+    spring_envelope = {
+        "content": [],
+        "pageable": {"page_number": 0, "page_size": 25},
+        "total_elements": 0,
+        "total_pages": 0,
+        "number_of_elements": 0,
+        "first": True,
+        "last": True,
+        "empty": True,
+    }
+    client = _make_client(get_responses={path: [spring_envelope]})
+    result = await get_device_assignments(cast(AutomoxClient, client))
+    assert result["data"]["total_assignments"] == 0
+    assert result["data"]["assignments"] == []
+
+
 # ---------------------------------------------------------------------------
 # get_device_by_uuid
 # ---------------------------------------------------------------------------

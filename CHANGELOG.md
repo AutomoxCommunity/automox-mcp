@@ -5,6 +5,18 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.23] - 2026-05-07
+
+### Fixed
+
+- **`get_device_assignments` leaked Spring `Page<T>` envelope (#43)** — The `/server-groups-api/v1/organizations/{uuid}/assignments` endpoint returns a Spring page wrapper with `content`, `pageable`, `total_elements`, `number_of_elements`, `sort`, `first`, `last`, etc. The wrapper passed the response through `_extract_list`, which has no special-case for Spring pages and fell through to wrapping the *entire* envelope as a single record — leaking `pageable`/`total_elements`/`number_of_elements` into `data.assignments[0]`. The wrapper now extracts `content` explicitly and re-emits Spring pagination data under `metadata.pagination` in the project's canonical shape (`page`, `page_size`, `total_elements`, `total_pages`, `page_number`, `offset`, `sort`, `first`, `last`).
+
+- **`get_patch_tuesday_readiness` truncation flag was ambiguous (#43)** — When the token-budget enforcer truncated multiple lists inside a dict-shaped `data` payload, `metadata.total_available` was the *sum* across all truncated lists, hiding which array had which count. The verified tenant case showed `metadata.total_available=8`, `metadata.truncated=true`, but `data.patch_policy_schedules` had only 4 entries — the `8` was actually the sum of two separate truncations. The token-budget code now emits a per-key `metadata.truncations` map (`{"patch_policy_schedules": {"total": 8, "returned": 4}, ...}`) so callers see exactly what was shrunk and to what. `total_available` is retained as the cross-array sum for backwards-compat.
+
+- **`get_action_set_detail` returned no enrichment beyond the list summary (#43)** — Both the list and detail endpoints used the same summarizer, which looked for top-level `name`, `issue_count`, `action_count`, `solution_count` fields that the Automox API does not emit at the top level. The user-visible name lives under `source.name`, and per-bucket counts live under `statistics.issues.{type}.count` / `statistics.solutions.{type}.count`. The summarizer now flattens these: it pulls `name` out of `source`, sums per-bucket `issue_count` / `solution_count` from `statistics`, surfaces `matched_device_count` from `statistics.devices.matched_count`, and exposes the raw `statistics` block for callers that need per-bucket detail. Tool output expanded from 5 keys to ~13.
+
+- **`policy_history_detail` had no run history despite the description (#43)** — The tool description promised "run history and status" but the implementation only fetched `/policy-history/policies/{uuid}` (top-level policy metadata). It now also fetches `/policy-history/policy-runs/{uuid}` concurrently via `asyncio.gather` and merges a summarized `recent_runs` list (capped via the new `recent_runs_limit` parameter, default 25), `total_runs_returned`, and `banner_stats` into the response. The runs sub-call is best-effort: if it fails, the detail still returns and `metadata.runs_fetch_error` carries the error message.
+
 ## [1.0.22] - 2026-05-07
 
 ### Fixed

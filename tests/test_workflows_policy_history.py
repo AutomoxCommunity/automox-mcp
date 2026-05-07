@@ -160,8 +160,24 @@ async def test_runs_by_policy_returns_groups() -> None:
 
 
 @pytest.mark.asyncio
-async def test_history_detail_returns_policy() -> None:
-    client = _make_client(get_responses={"/policy-history/policies/pol-001": [_POLICY_HISTORY]})
+async def test_history_detail_returns_policy_with_runs() -> None:
+    """Bug #4b from issue #43: the detail tool used to return only
+    top-level policy metadata despite the description promising "run
+    history and status." It now fetches /policy-runs/{uuid} concurrently
+    and merges runs + banner_stats into the response."""
+    runs_payload = {
+        "data": {
+            "runs": _POLICY_RUNS,
+            "banner_stats": {"policy_success_rate": 0.5, "total_policies_applied": 2},
+        },
+        "metadata": {"total_run_count": 2},
+    }
+    client = _make_client(
+        get_responses={
+            "/policy-history/policies/pol-001": [_POLICY_HISTORY],
+            "/policy-history/policy-runs/pol-001": [runs_payload],
+        }
+    )
     result = await get_policy_history_detail(
         cast(AutomoxClient, client),
         org_id=42,
@@ -170,6 +186,38 @@ async def test_history_detail_returns_policy() -> None:
 
     assert result["data"]["uuid"] == "pol-001"
     assert result["data"]["last_run_time"] == "2026-03-01T01:00:00Z"
+    assert result["data"]["total_runs_returned"] == 2
+    assert len(result["data"]["recent_runs"]) == 2
+    assert result["data"]["recent_runs"][0]["policy_uuid"] == "pol-001"
+    assert result["data"]["banner_stats"]["policy_success_rate"] == 0.5
+
+
+@pytest.mark.asyncio
+async def test_history_detail_runs_fetch_failure_does_not_block_detail() -> None:
+    """When the runs sub-call fails, the detail still returns; the
+    error surfaces in metadata.runs_fetch_error."""
+    from automox_mcp.client import AutomoxAPIError
+
+    class FailingRunsClient(StubClient):
+        async def get(self, path: str, *, params=None, headers=None):  # type: ignore[override]
+            if path.startswith("/policy-history/policy-runs/"):
+                raise AutomoxAPIError("runs endpoint down", status_code=500)
+            return await super().get(path, params=params, headers=headers)
+
+    client = FailingRunsClient(
+        get_responses={"/policy-history/policies/pol-001": [_POLICY_HISTORY]}
+    )
+    client.org_uuid = _ORG_UUID
+    result = await get_policy_history_detail(
+        cast(AutomoxClient, client),
+        org_id=42,
+        policy_uuid="pol-001",
+    )
+    assert result["data"]["uuid"] == "pol-001"
+    assert result["data"]["recent_runs"] == []
+    assert result["data"]["total_runs_returned"] == 0
+    assert "runs_fetch_error" in result["metadata"]
+    assert "runs endpoint down" in result["metadata"]["runs_fetch_error"]
 
 
 # ---------------------------------------------------------------------------

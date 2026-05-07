@@ -244,9 +244,16 @@ async def case_6_device_assignments_spring_leak(session: ClientSession) -> str:
     The tool actually takes no device argument — it returns org-wide
     assignments. The original harness incorrectly passed device_id and
     tripped a schema validation error.
+
+    v1.0.23 fix moves Spring pagination fields into a normalized
+    metadata.pagination block; the data.assignments items must NOT
+    contain them. The harness checks `data` (not `metadata`) for
+    Spring markers — `metadata.pagination.total_elements` is the
+    canonical, normalized location and is allowed.
     """
     _, parsed, raw = await call_tool(session, "get_device_assignments", {})
-    # Spring fields can appear with snake_case or camelCase
+    # Spring fields are only a problem when they leak into the data
+    # payload. The normalized metadata.pagination location is allowed.
     spring_markers = (
         "pageable",
         "totalElements",
@@ -256,11 +263,19 @@ async def case_6_device_assignments_spring_leak(session: ClientSession) -> str:
         "sort.empty",
         "pageable.empty",
     )
-    hits = [m for m in spring_markers if m in raw]
+
+    # Check `data` only, not the full raw text (which now legitimately
+    # contains some of these markers under metadata.pagination).
+    data_text = json.dumps(parsed.get("data") if isinstance(parsed, dict) else parsed)
+    hits = [m for m in spring_markers if m in data_text]
     if hits:
-        status("VERIFIED", f"Spring wrapper fields present: {hits[:5]}", RED)
+        status("VERIFIED", f"Spring wrapper fields present in data: {hits[:5]}", RED)
         return "VERIFIED"
-    status("NOT_REPRODUCED", f"no Spring wrapper detected — raw[:200]={raw[:200]}", GREEN)
+    status(
+        "NOT_REPRODUCED",
+        f"no Spring wrapper in data — data_text[:200]={data_text[:200]}",
+        GREEN,
+    )
     return "NOT_REPRODUCED"
 
 
@@ -433,7 +448,27 @@ async def case_14_truncation_lie(session: ClientSession) -> str:
     truncated = metadata.get("truncated")
     schedules = data.get("patch_policy_schedules")
     actual = len(schedules) if isinstance(schedules, list) else None
+    # v1.0.23 fix surfaces a per-key truncations map. If
+    # truncations[KEY].total == truncations[KEY].returned matches the
+    # actual array length, the user has unambiguous per-key counts and
+    # the bare `total_available` cross-array sum is no longer the only
+    # signal.
+    truncations = metadata.get("truncations") or {}
+    schedule_trunc = (
+        truncations.get("patch_policy_schedules") if isinstance(truncations, dict) else None
+    )
     if total is not None and actual is not None and actual < total and truncated:
+        if (
+            isinstance(schedule_trunc, dict)
+            and schedule_trunc.get("total") == total
+            and schedule_trunc.get("returned") == actual
+        ):
+            status(
+                "NOT_REPRODUCED",
+                (f"per-key truncations map present: patch_policy_schedules={schedule_trunc}"),
+                GREEN,
+            )
+            return "NOT_REPRODUCED"
         status(
             "VERIFIED",
             (

@@ -152,21 +152,72 @@ async def get_device_assignments(
     *,
     org_id: int | None = None,
 ) -> dict[str, Any]:
-    """Get device-to-policy/group assignments."""
+    """Get device-to-policy/group assignments.
+
+    The upstream `/server-groups-api/v1/organizations/{uuid}/assignments`
+    endpoint returns a Spring `Page<T>` envelope with `content`,
+    `pageable`, `total_elements`, `number_of_elements`, etc. Earlier
+    revisions of this wrapper passed the envelope through `_extract_list`
+    which has no special-case for Spring pages — it fell through to
+    wrapping the entire envelope as a single record, leaking
+    `pageable`/`total_elements`/`number_of_elements` into responses.
+    Now we explicitly extract `content` and re-emit the Spring
+    pagination fields under `metadata.pagination` in the project's
+    canonical shape.
+    """
     org_uuid = await _resolve_org(client, org_id)
 
     response = await client.get(
         f"/server-groups-api/v1/organizations/{org_uuid}/assignments",
     )
 
-    assignments = _extract_list(response)
+    assignments: list[Mapping[str, Any]]
+    pagination: dict[str, Any] | None = None
+    if isinstance(response, Mapping) and "content" in response:
+        content = response.get("content")
+        assignments = (
+            [item for item in content if isinstance(item, Mapping)]
+            if isinstance(content, Sequence) and not isinstance(content, (str, bytes))
+            else []
+        )
+        raw_pageable = response.get("pageable")
+        pageable: Mapping[str, Any] = raw_pageable if isinstance(raw_pageable, Mapping) else {}
+        sort_block = response.get("sort") if isinstance(response.get("sort"), Mapping) else None
+
+        # Use _first_present to preserve falsy values (e.g. page=0).
+        def _first_present(*candidates: Any) -> Any:
+            for value in candidates:
+                if value is not None:
+                    return value
+            return None
+
+        pagination = {
+            "page": response.get("number"),
+            "page_size": response.get("size"),
+            "total_elements": _first_present(
+                response.get("total_elements"), response.get("totalElements")
+            ),
+            "total_pages": _first_present(response.get("total_pages"), response.get("totalPages")),
+            "first": response.get("first"),
+            "last": response.get("last"),
+            "page_number": _first_present(pageable.get("page_number"), pageable.get("pageNumber")),
+            "offset": pageable.get("offset"),
+            "sort": sort_block,
+        }
+        pagination = {k: v for k, v in pagination.items() if v is not None}
+    else:
+        assignments = _extract_list(response)
+
+    metadata: dict[str, Any] = {"deprecated_endpoint": False}
+    if pagination:
+        metadata["pagination"] = pagination
 
     return {
         "data": {
             "total_assignments": len(assignments),
             "assignments": assignments,
         },
-        "metadata": {"deprecated_endpoint": False},
+        "metadata": metadata,
     }
 
 

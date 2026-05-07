@@ -398,7 +398,13 @@ def _apply_token_budget(
         "Consider using pagination or filters to reduce size."
     )
 
-    # Truncate list data if the data payload contains a list
+    # Truncate list data if the data payload contains a list.
+    # When `data` is a dict with several lists, earlier revisions summed
+    # `total_available` across every truncated list, which masked which
+    # array had been shrunk to what (e.g., `truncated=true,
+    # total_available=8` while `data.patch_policy_schedules` held only 4
+    # entries — bug #14 from issue #43). The per-key `truncations` map
+    # makes the breakdown unambiguous.
     data = response_dict.get("data")
     if isinstance(data, list) and len(data) > 1:
         total = len(data)
@@ -406,15 +412,26 @@ def _apply_token_budget(
         meta["truncated"] = True
         meta["total_available"] = total
         meta["returned_count"] = len(response_dict["data"])
+        meta["truncations"] = {"data": {"total": total, "returned": len(response_dict["data"])}}
     elif isinstance(data, dict):
-        # Truncate ALL oversized lists in the mapping, not just the first
+        # Truncate ALL oversized lists in the mapping, not just the first.
+        truncations: dict[str, dict[str, int]] = {}
         for _key, value in data.items():
             if isinstance(value, list) and len(value) > 1:
                 total = len(value)
                 data[_key] = value[: max(total // 2, 1)]
-                meta["truncated"] = True
-                meta.setdefault("total_available", 0)
-                meta["total_available"] += total
+                truncations[_key] = {
+                    "total": total,
+                    "returned": len(data[_key]),
+                }
+        if truncations:
+            meta["truncated"] = True
+            meta["truncations"] = truncations
+            # `total_available` is the sum of pre-truncation sizes across
+            # every truncated list. Retained for backwards-compat with
+            # earlier consumers; new code should read `truncations` for
+            # per-key counts.
+            meta["total_available"] = sum(t["total"] for t in truncations.values())
 
     return response_dict
 

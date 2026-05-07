@@ -6,11 +6,16 @@ on:
       - "v*"
   workflow_dispatch:
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions: {}
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    environment: release
     permissions:
       contents: write  # Required for creating GitHub Releases
       id-token: write  # Required for trusted publishing and Sigstore signing
@@ -21,10 +26,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      - name: Set up uv
+        uses: astral-sh/setup-uv@cec208311dfd045dd5311c1add060b2062131d57 # v8.0.0
         with:
           python-version: "3.13"
+          enable-cache: false  # Don't trust CI caches in a release pipeline
 
       - name: Validate tag matches project version
         run: |
@@ -44,32 +50,28 @@ jobs:
         id: pypi_check
         run: |
           VERSION=$(python -c "import tomllib, pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
-          if pip index versions automox-mcp 2>/dev/null | grep -q "$VERSION"; then
+          if curl -sf "https://pypi.org/pypi/automox-mcp/${VERSION}/json" > /dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
             echo "::notice::Version $VERSION already exists on PyPI — skipping publish."
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Install build backend
-        run: python -m pip install --upgrade pip build
+      - name: Sync project dependencies
+        run: uv sync --frozen
 
       - name: Build distribution
-        run: python -m build
+        run: uv build
 
       - name: Generate SBOM
-        run: |
-          pip install cyclonedx-bom
-          cyclonedx-py environment -o sbom.cdx.json --of json
+        run: uv run --with cyclonedx-bom cyclonedx-py environment -o sbom.cdx.json --of json
 
       - name: Publish to PyPI
         if: steps.pypi_check.outputs.exists != 'true'
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
 
       - name: Sign artifacts with Sigstore
-        run: |
-          pip install sigstore
-          python -m sigstore sign dist/*.whl dist/*.tar.gz
+        run: uvx sigstore sign dist/*.whl dist/*.tar.gz
 
       - name: Create or update GitHub Release
         env:

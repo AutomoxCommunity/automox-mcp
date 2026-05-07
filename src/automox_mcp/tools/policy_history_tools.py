@@ -144,9 +144,13 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     )
     async def policy_history_detail(
         policy_uuid: str,
+        recent_runs_limit: int | None = 25,
         output_format: str | None = "json",
     ) -> dict[str, Any]:
-        kwargs: dict[str, Any] = {"policy_uuid": policy_uuid}
+        kwargs: dict[str, Any] = {
+            "policy_uuid": policy_uuid,
+            "recent_runs_limit": recent_runs_limit,
+        }
         result = await call_tool_workflow(
             client, _get_policy_history_detail, kwargs, params_model=PolicyHistoryDetailParams
         )

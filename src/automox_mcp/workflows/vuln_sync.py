@@ -10,22 +10,84 @@ from ..utils.response import extract_list as _extract_list
 
 
 def _summarize_action_set(item: Mapping[str, Any]) -> dict[str, Any]:
-    """Extract key fields from an action set record."""
+    """Extract key fields from an action set record.
+
+    The Automox `/orgs/{org}/remediations/action-sets` API returns
+    `id`, `configuration_id`, `organization_id`, `status`, `source`
+    (object with `name`/`type`), `statistics` (nested counts under
+    `issues`/`devices`/`solutions`), `created_at`, `updated_at`,
+    `error`, plus user attribution fields. Earlier revisions looked
+    for top-level `name`, `issue_count`, `action_count`,
+    `solution_count` — none of which the API emits — so both list and
+    detail endpoints returned only the 5 keys the API does have at top
+    level (id/status/source/created_at/updated_at), creating bug #4a
+    "no detail enrichment". Note: there is no top-level "action count"
+    in the API; the closest analogue is `solution_count` (sum of per-
+    solution-type counts) or `vulnerability_count` (sum of
+    `vulnerability_count` across solutions).
+    """
     entry: dict[str, Any] = {}
     for key in (
         "id",
-        "name",
+        "configuration_id",
+        "organization_id",
         "status",
         "source",
         "created_at",
         "updated_at",
-        "issue_count",
-        "action_count",
-        "solution_count",
+        "error",
     ):
         val = item.get(key)
         if val is not None:
             entry[key] = val
+
+    # Pull a flat `name` out of the `source` object when possible so
+    # callers don't need to navigate the nested shape.
+    source = item.get("source")
+    if isinstance(source, Mapping):
+        source_name = source.get("name")
+        if source_name and "name" not in entry:
+            entry["name"] = source_name
+
+    # Flatten the per-bucket counts in `statistics` into top-level
+    # totals so the summary surfaces them at a glance.
+    stats = item.get("statistics")
+    if isinstance(stats, Mapping):
+        issues = stats.get("issues")
+        if isinstance(issues, Mapping):
+            issue_count = 0
+            for bucket in issues.values():
+                if isinstance(bucket, Mapping):
+                    bucket_count = bucket.get("count")
+                    if isinstance(bucket_count, int):
+                        issue_count += bucket_count
+            entry["issue_count"] = issue_count
+
+        solutions = stats.get("solutions")
+        if isinstance(solutions, Mapping):
+            solution_count = 0
+            vulnerability_count = 0
+            for bucket in solutions.values():
+                if isinstance(bucket, Mapping):
+                    bucket_count = bucket.get("count")
+                    if isinstance(bucket_count, int):
+                        solution_count += bucket_count
+                    bucket_vulns = bucket.get("vulnerability_count")
+                    if isinstance(bucket_vulns, int):
+                        vulnerability_count += bucket_vulns
+            entry["solution_count"] = solution_count
+            entry["vulnerability_count"] = vulnerability_count
+
+        devices = stats.get("devices")
+        if isinstance(devices, Mapping):
+            matched = devices.get("matched_count")
+            if isinstance(matched, int):
+                entry["matched_device_count"] = matched
+
+        # Also expose the full statistics block for callers that want
+        # the raw nested shape (per-issue-type, per-solution-type counts).
+        entry["statistics"] = dict(stats)
+
     return entry
 
 

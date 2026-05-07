@@ -307,6 +307,50 @@ def test_apply_token_budget_non_list_data_not_truncated():
     assert "truncated" not in meta
 
 
+def test_apply_token_budget_multi_list_emits_per_key_truncations():
+    """When `data` is a dict with multiple oversized lists, the per-key
+    truncations map must surface which list was shrunk to what.
+
+    Bug #14 from issue #43: callers saw `truncated=true,
+    total_available=8` while the array they cared about held only 4
+    entries — the metadata summed across all truncated lists, hiding
+    which array had which count.
+    """
+    list_a = [{"id": i} for i in range(8)]
+    list_b = [{"id": i, "extra": "x" * 50} for i in range(6)]
+    resp = {
+        "data": {"patch_policy_schedules": list_a, "devices": list_b},
+        "metadata": {},
+    }
+    result = _apply_token_budget(resp, budget=50)
+    meta = result["metadata"]
+    assert meta["truncated"] is True
+
+    truncations = meta["truncations"]
+    assert truncations["patch_policy_schedules"]["total"] == 8
+    assert truncations["patch_policy_schedules"]["returned"] == len(
+        result["data"]["patch_policy_schedules"]
+    )
+    assert truncations["devices"]["total"] == 6
+    assert truncations["devices"]["returned"] == len(result["data"]["devices"])
+    # total_available retained for back-compat; documents the sum
+    assert meta["total_available"] == 8 + 6
+
+
+def test_apply_token_budget_single_list_data_emits_truncations_too():
+    """For the list-data path, the truncations map should also be
+    populated under the synthetic `data` key so callers have a uniform
+    interface."""
+    big_list = [{"name": f"d-{i}"} for i in range(200)]
+    resp = {"data": big_list, "metadata": {}}
+    result = _apply_token_budget(resp, budget=50)
+    meta = result["metadata"]
+    assert meta["truncated"] is True
+    assert meta["total_available"] == 200
+    assert meta["truncations"]["data"]["total"] == 200
+    assert meta["truncations"]["data"]["returned"] == len(result["data"])
+
+
 def test_as_tool_response_applies_token_budget():
     """Token budget is applied inside as_tool_response."""
     big_list = [{"id": i, "name": f"item-{i}", "extra": "x" * 50} for i in range(500)]

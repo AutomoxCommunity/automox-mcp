@@ -15,32 +15,54 @@ from automox_mcp.workflows.vuln_sync import (
     upload_action_set,
 )
 
+# Fixture shape mirrors the actual /orgs/{org}/remediations/action-sets
+# response: a `source` object with `name`/`type`, plus a nested
+# `statistics` block holding per-bucket counts. The summarizer flattens
+# this into a top-level `name`, `issue_count`, `solution_count`, etc.
 _ACTION_SETS = [
     {
         "id": 1,
-        "name": "Qualys Import Q1",
+        "configuration_id": "11111111-1111-1111-1111-111111111111",
+        "organization_id": 42,
         "status": "completed",
-        "source": "qualys",
+        "source": {"name": "Qualys Import Q1", "type": "Qualys"},
+        "statistics": {
+            "issues": {"unknown-host": {"count": 50}},
+            "solutions": {
+                "patch-now": {"count": 12, "device_count": 5, "vulnerability_count": 30},
+                "patch-with-worklet": {"count": 8, "device_count": 3, "vulnerability_count": 20},
+            },
+            "devices": {"matched_count": 5},
+        },
         "created_at": "2026-01-15T00:00:00Z",
-        "issue_count": 50,
-        "action_count": 30,
-        "solution_count": 20,
+        "updated_at": "2026-01-16T00:00:00Z",
+        "error": None,
     },
     {
         "id": 2,
-        "name": "Tenable Import",
+        "configuration_id": "22222222-2222-2222-2222-222222222222",
+        "organization_id": 42,
         "status": "pending",
-        "source": "tenable",
+        "source": {"name": "Tenable Import", "type": "Tenable"},
     },
 ]
 
 _ACTION_SET_DETAIL = {
     "id": 1,
-    "name": "Qualys Import Q1",
+    "configuration_id": "11111111-1111-1111-1111-111111111111",
+    "organization_id": 42,
     "status": "completed",
-    "source": "qualys",
-    "issue_count": 50,
-    "action_count": 30,
+    "source": {"name": "Qualys Import Q1", "type": "Qualys"},
+    "statistics": {
+        "issues": {"unknown-host": {"count": 50}},
+        "solutions": {
+            "patch-now": {"count": 30, "device_count": 5, "vulnerability_count": 30},
+        },
+        "devices": {"matched_count": 5},
+    },
+    "created_at": "2026-01-15T00:00:00Z",
+    "updated_at": "2026-01-16T00:00:00Z",
+    "error": None,
 }
 
 _ISSUES = [
@@ -87,14 +109,28 @@ async def test_list_action_sets_empty() -> None:
 
 @pytest.mark.asyncio
 async def test_detail_returns_info() -> None:
+    """Bug #4a from issue #43: the detail endpoint used to return only
+    the same minimal 5 keys as the list summary because the summarizer
+    looked for top-level fields the API doesn't emit. After the fix the
+    detail surfaces the nested `statistics` counts (issue_count,
+    solution_count, matched_device_count) and pulls `name` out of the
+    `source` object."""
     client = StubClient(get_responses={"/orgs/42/remediations/action-sets/1": [_ACTION_SET_DETAIL]})
     result = await get_action_set_detail(
         cast(AutomoxClient, client),
         org_id=42,
         action_set_id=1,
     )
-    assert result["data"]["id"] == 1
-    assert result["data"]["action_count"] == 30
+    detail = result["data"]
+    assert detail["id"] == 1
+    assert detail["configuration_id"] == "11111111-1111-1111-1111-111111111111"
+    assert detail["name"] == "Qualys Import Q1"
+    assert detail["issue_count"] == 50
+    assert detail["solution_count"] == 30
+    assert detail["matched_device_count"] == 5
+    # Raw statistics block exposed for callers that need per-bucket detail
+    assert "issues" in detail["statistics"]
+    assert "solutions" in detail["statistics"]
 
 
 # ---------------------------------------------------------------------------

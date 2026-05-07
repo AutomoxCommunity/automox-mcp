@@ -68,7 +68,15 @@ jobs:
 
       - name: Publish to PyPI
         if: steps.pypi_check.outputs.exists != 'true'
+        # `skip-existing` is a defense against race conditions when two
+        # workflow runs are scheduled for the same tag (we have observed
+        # GitHub deliver the same `push: tags:` event twice on a multi-
+        # tag push). The earlier `pypi_check` gate handles the common
+        # case; this turns the loser of any race into a no-op success
+        # instead of a noisy `400 File already exists` failure.
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
+        with:
+          skip-existing: true
 
       - name: Sign artifacts with Sigstore
         run: uvx sigstore sign dist/*.whl dist/*.tar.gz

@@ -40,7 +40,7 @@ import sys
 from contextlib import asynccontextmanager
 from typing import Any
 
-from mcp import ClientSession, StdioServerParameters, types
+from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 # ---------------------------------------------------------------------------
@@ -101,7 +101,9 @@ async def open_session():
             yield session
 
 
-async def call_tool(session: ClientSession, name: str, args: dict[str, Any]) -> tuple[bool, Any, str]:
+async def call_tool(
+    session: ClientSession, name: str, args: dict[str, Any]
+) -> tuple[bool, Any, str]:
     """Call a tool. Returns (is_error, parsed_payload_or_text, raw_text).
 
     The MCP server typically returns a TextContent block whose text is a JSON
@@ -216,9 +218,7 @@ async def case_4a_action_set_detail_noop(session: ClientSession) -> str:
 
 async def case_4b_policy_history_detail_noop(session: ClientSession) -> str:
     """Reported: policy_history_detail returns no run history."""
-    _, parsed, raw = await call_tool(
-        session, "policy_history_detail", {"policy_uuid": POLICY_UUID}
-    )
+    _, parsed, raw = await call_tool(session, "policy_history_detail", {"policy_uuid": POLICY_UUID})
     if not isinstance(parsed, dict):
         status("AMBIGUOUS", f"unexpected shape — {raw[:200]}", YELLOW)
         return "AMBIGUOUS"
@@ -249,9 +249,12 @@ async def case_6_device_assignments_spring_leak(session: ClientSession) -> str:
     # Spring fields can appear with snake_case or camelCase
     spring_markers = (
         "pageable",
-        "totalElements", "total_elements",
-        "numberOfElements", "number_of_elements",
-        "sort.empty", "pageable.empty",
+        "totalElements",
+        "total_elements",
+        "numberOfElements",
+        "number_of_elements",
+        "sort.empty",
+        "pageable.empty",
     )
     hits = [m for m in spring_markers if m in raw]
     if hits:
@@ -282,10 +285,17 @@ async def case_7_policy_run_results_filter(session: ClientSession) -> str:
             runs = data[key]
             break
     if not isinstance(runs, list):
-        status("AMBIGUOUS", f"no run list found — keys={list(data.keys()) if isinstance(data, dict) else type(data).__name__}", YELLOW)
+        keys = list(data.keys()) if isinstance(data, dict) else type(data).__name__
+        status("AMBIGUOUS", f"no run list found — keys={keys}", YELLOW)
         return "AMBIGUOUS"
-    statuses = [r.get("result_status") or r.get("status") for r in runs if isinstance(r, dict)]
-    non_failed = [s for s in statuses if s and s != "failed"]
+    statuses: list[str] = [
+        s
+        for r in runs
+        if isinstance(r, dict)
+        for s in [r.get("result_status") or r.get("status")]
+        if s
+    ]
+    non_failed = [s for s in statuses if s != "failed"]
     summary = data.get("result_summary") or data.get("pagination", {}).get("result_summary")
     if non_failed:
         status(
@@ -336,7 +346,10 @@ async def case_8_audit_actor_cursor(session: ClientSession) -> str:
     if next_cursor and events_returned == 0:
         status(
             "VERIFIED",
-            f"cursor advanced ({next_cursor[:20]}...) despite events_returned=0 (events_seen={events_seen})",
+            (
+                f"cursor advanced ({next_cursor[:20]}...) despite events_returned=0 "
+                f"(events_seen={events_seen})"
+            ),
             RED,
         )
         return "VERIFIED"
@@ -393,7 +406,10 @@ async def case_14_truncation_lie(session: ClientSession) -> str:
     if total is not None and actual is not None and actual < total and truncated:
         status(
             "VERIFIED",
-            f"metadata.total_available={total}, array length={actual}, metadata.truncated={truncated}",
+            (
+                f"metadata.total_available={total}, array length={actual}, "
+                f"metadata.truncated={truncated}"
+            ),
             RED,
         )
         return "VERIFIED"
@@ -484,12 +500,14 @@ async def main() -> int:
     print(f"{BOLD}Summary{RESET}")
     print(f"{BOLD}{'=' * 60}{RESET}")
     counts: dict[str, int] = {}
+    color_map = {"VERIFIED": RED, "NOT_REPRODUCED": GREEN, "AMBIGUOUS": YELLOW, "ERROR": RED}
     for num, name, result in results:
         counts[result] = counts.get(result, 0) + 1
-        color = {"VERIFIED": RED, "NOT_REPRODUCED": GREEN, "AMBIGUOUS": YELLOW, "ERROR": RED}.get(result, "")
+        color = color_map.get(result, "")
         print(f"  #{num} {name}: {color}{result}{RESET}")
 
-    print(f"\n  Totals: " + ", ".join(f"{k}={v}" for k, v in sorted(counts.items())))
+    totals = ", ".join(f"{k}={v}" for k, v in sorted(counts.items()))
+    print(f"\n  Totals: {totals}")
 
     return 0
 

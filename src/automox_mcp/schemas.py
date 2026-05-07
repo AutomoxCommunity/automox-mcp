@@ -694,6 +694,15 @@ class PolicyRunsByPolicyParams(OrgIdRequiredMixin, ForbidExtraModel):
 
 class PolicyHistoryDetailParams(OrgIdRequiredMixin, ForbidExtraModel):
     policy_uuid: UUID = Field(description="Policy UUID")
+    recent_runs_limit: int | None = Field(
+        25,
+        ge=0,
+        le=200,
+        description=(
+            "Maximum number of recent run summaries to include under "
+            "`data.recent_runs`. Set 0 to omit; default 25."
+        ),
+    )
 
 
 class PolicyRunsForPolicyParams(OrgIdRequiredMixin, ForbidExtraModel):

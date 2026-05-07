@@ -21,7 +21,10 @@ def _summarize_action_set(item: Mapping[str, Any]) -> dict[str, Any]:
     `solution_count` — none of which the API emits — so both list and
     detail endpoints returned only the 5 keys the API does have at top
     level (id/status/source/created_at/updated_at), creating bug #4a
-    "no detail enrichment".
+    "no detail enrichment". Note: there is no top-level "action count"
+    in the API; the closest analogue is `solution_count` (sum of per-
+    solution-type counts) or `vulnerability_count` (sum of
+    `vulnerability_count` across solutions).
     """
     entry: dict[str, Any] = {}
     for key in (
@@ -63,14 +66,17 @@ def _summarize_action_set(item: Mapping[str, Any]) -> dict[str, Any]:
         solutions = stats.get("solutions")
         if isinstance(solutions, Mapping):
             solution_count = 0
-            action_count = 0
+            vulnerability_count = 0
             for bucket in solutions.values():
                 if isinstance(bucket, Mapping):
                     bucket_count = bucket.get("count")
                     if isinstance(bucket_count, int):
                         solution_count += bucket_count
+                    bucket_vulns = bucket.get("vulnerability_count")
+                    if isinstance(bucket_vulns, int):
+                        vulnerability_count += bucket_vulns
             entry["solution_count"] = solution_count
-            entry["action_count"] = action_count
+            entry["vulnerability_count"] = vulnerability_count
 
         devices = stats.get("devices")
         if isinstance(devices, Mapping):

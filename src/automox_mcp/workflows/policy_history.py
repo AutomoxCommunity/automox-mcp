@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Mapping
 from typing import Any
 from uuid import UUID
@@ -210,8 +211,6 @@ async def get_policy_history_detail(
     detail endpoint and merges a summarized run list and banner_stats
     into the response. Bug #4b from issue #43.
     """
-    import asyncio
-
     resolved_uuid = await resolve_org_uuid(
         client,
         explicit_uuid=org_uuid,

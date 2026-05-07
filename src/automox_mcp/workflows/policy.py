@@ -120,25 +120,47 @@ async def summarize_policy_activity(
         reverse=True,
     )[:top_failures]
 
-    # PolicyRunCount returns {"policy_runs": N} directly
+    # PolicyRunCount returns {"policy_runs": N} directly. This counts ALL
+    # runs in the last `window_days` days. The /policy-runs endpoint we
+    # used above is server-capped at roughly the most-recent 100 events
+    # (or last ~24 hours), regardless of `limit`, `days`, or
+    # `start_time`/`end_time` parameters. So `total_policy_runs` and
+    # `total_runs_considered` measure different things and may legitimately
+    # disagree when the org runs more than ~100 policy runs per day.
     total_policy_runs = None
     if isinstance(run_counts, Mapping):
         total_policy_runs = run_counts.get("policy_runs")
 
+    runs_considered = len(runs)
+    sample_is_truncated = isinstance(total_policy_runs, int) and total_policy_runs > runs_considered
+
     overview = {
         "window_days": window_days,
         "total_policy_runs": total_policy_runs,
-        "total_runs_considered": len(runs),
+        "total_runs_considered": runs_considered,
+        "sample_is_truncated": sample_is_truncated,
         "status_breakdown": dict(status_counter),
         "top_failing_policies": top_failures_list,
     }
 
-    metadata = {
+    metadata: dict[str, Any] = {
         "deprecated_endpoint": False,
         "org_uuid": str(org_uuid),
         "window_days": window_days,
-        "total_runs_considered": len(runs),
+        "total_runs_considered": runs_considered,
+        "sample_is_truncated": sample_is_truncated,
     }
+    if sample_is_truncated:
+        metadata["sample_note"] = (
+            f"Org had {total_policy_runs} policy runs over the {window_days}-day "
+            f"window, but the /policy-history/policy-runs endpoint is server-capped "
+            f"at the most recent {runs_considered} events (≈last 24 hours) "
+            f"regardless of limit/days/start_time params. The status_breakdown "
+            f"and top_failing_policies in this response reflect that recent "
+            f"sample only — they are NOT a window-wide aggregate. Use "
+            f"policy_runs_for_policy with a specific policy_uuid to get full "
+            f"per-policy history within the window."
+        )
 
     return {
         "data": overview,
@@ -626,8 +648,11 @@ async def describe_policy_run_result(
     params: dict[str, Any] = {"org": str(org_uuid)}
     if sort:
         params["sort"] = sort
-    if result_status:
-        params["result_status"] = result_status
+    # NOTE: result_status is intentionally NOT forwarded to the API. The
+    # /policy-history/policies/{uuid}/{token} endpoint silently ignores
+    # this filter regardless of name (`result_status`, `resultStatus`,
+    # `status` all return the unfiltered set), so we apply the filter
+    # client-side below to honor the documented contract.
     if device_name:
         params["device_name"] = device_name
     if page is not None:
@@ -652,6 +677,9 @@ async def describe_policy_run_result(
     elif isinstance(payload, Sequence):
         devices_raw = payload  # type: ignore[assignment]
 
+    requested_status = _normalize_status(result_status) if result_status else None
+    pre_filter_total = sum(1 for entry in devices_raw if isinstance(entry, Mapping))
+
     status_counter: Counter[str] = Counter()
     device_results: list[dict[str, Any]] = []
 
@@ -659,6 +687,8 @@ async def describe_policy_run_result(
         if not isinstance(entry, Mapping):
             continue
         status = _normalize_status(entry.get("result_status"))
+        if requested_status is not None and status != requested_status:
+            continue
         status_counter[status] += 1
         device_results.append(
             {
@@ -681,7 +711,7 @@ async def describe_policy_run_result(
             }
         )
 
-    data = {
+    data: dict[str, Any] = {
         "policy_uuid": str(policy_uuid),
         "exec_token": str(exec_token),
         "result_summary": {
@@ -692,7 +722,7 @@ async def describe_policy_run_result(
         "pagination": pagination_meta,
     }
 
-    metadata = {
+    metadata: dict[str, Any] = {
         "deprecated_endpoint": False,
         "org_uuid": str(org_uuid),
         "policy_uuid": str(policy_uuid),
@@ -703,6 +733,20 @@ async def describe_policy_run_result(
         "limit": pagination_meta.get("limit") if pagination_meta else limit,
         "total_count": pagination_meta.get("total_count") if pagination_meta else None,
     }
+
+    if requested_status is not None:
+        metadata["result_status_filter"] = {
+            "applied": "client_side",
+            "requested_status": requested_status,
+            "pre_filter_count": pre_filter_total,
+            "post_filter_count": len(device_results),
+            "note": (
+                "Upstream policy-history API ignores the result_status query "
+                "parameter and returns mixed statuses; this wrapper filters "
+                "the page client-side. Pagination counts in `pagination` "
+                "reflect the unfiltered upstream response."
+            ),
+        }
 
     return {
         "data": data,

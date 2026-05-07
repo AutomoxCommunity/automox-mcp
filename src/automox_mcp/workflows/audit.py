@@ -786,7 +786,9 @@ async def audit_trail_user_activity(
     if resolved_actor:
         data["resolved_actor"] = resolved_actor
 
-    metadata = {
+    filter_applied = bool(normalized_email_filter or normalized_uuid_filter or actor_name_text)
+
+    metadata: dict[str, Any] = {
         "org_id": org_id,
         "org_uuid": resolved_org_uuid,
         "date": query_date,
@@ -798,6 +800,30 @@ async def audit_trail_user_activity(
         "events_returned": len(filtered_events),
         "applied_filters": applied_filters,
     }
+    # When an actor filter is applied, the upstream audit API returns
+    # org-wide events and we filter them client-side. If this page had
+    # zero matches but more pages exist (next_cursor set), the caller
+    # MUST keep paginating to find any actor activity later in the day.
+    # Earlier revisions left this ambiguous: callers seeing
+    # `events_returned=0` would assume "no activity" and stop, silently
+    # missing events on later pages. Surface the state explicitly so it
+    # cannot be confused with "no activity for this actor".
+    if filter_applied and len(filtered_events) == 0 and next_cursor:
+        metadata["filter_pagination_state"] = {
+            "no_matches_in_page": True,
+            "more_pages_available": True,
+            "events_in_unfiltered_page": (
+                api_result_count if isinstance(api_result_count, int) else len(events)
+            ),
+            "advice": (
+                "The actor filter is applied client-side because the audit "
+                "endpoint does not filter by actor. This page returned no "
+                "matching events but more pages exist; pass `cursor=next_cursor` "
+                "and re-query until both `events_returned=0` AND "
+                "`next_cursor=null`. A non-null `next_cursor` with "
+                "`events_returned=0` does NOT mean the actor was inactive."
+            ),
+        }
     if api_next_link:
         metadata["api_next_link"] = api_next_link
     if lookup_metadata:

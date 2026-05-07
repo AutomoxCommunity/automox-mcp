@@ -81,37 +81,6 @@ async def get_action_set_detail(
     }
 
 
-async def get_action_set_actions(
-    client: AutomoxClient,
-    *,
-    org_id: int,
-    action_set_id: int,
-    page: int | None = None,
-    limit: int | None = None,
-) -> dict[str, Any]:
-    """Get remediation actions for an action set."""
-    params: dict[str, Any] = {}
-    if page is not None:
-        params["page"] = page
-    if limit is not None:
-        params["limit"] = limit
-    response = await client.get(
-        f"/orgs/{org_id}/remediations/action-sets/{action_set_id}/actions",
-        params=params or None,
-    )
-
-    actions = _extract_list(response)
-
-    return {
-        "data": {
-            "action_set_id": action_set_id,
-            "total_actions": len(actions),
-            "actions": actions,
-        },
-        "metadata": {"deprecated_endpoint": False},
-    }
-
-
 async def get_action_set_issues(
     client: AutomoxClient,
     *,

@@ -5,6 +5,17 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.21] - 2026-05-06
+
+### Fixed
+
+- **`policy_run_detail_v2` failed with `org=null` (#43)** — The wrapper around `/policy-history/policies/{policy_uuid}/{exec_token}` did not forward the org UUID as a query parameter, despite a stale comment claiming the endpoint extracted org context from the JWT. The Automox policy-report API rejected every call with `400 Invalid or missing org from query parameters org=null`. The org UUID is now resolved and threaded through alongside the existing filter params (`sort`, `result_status`, `device_name`, `page`, `limit`).
+- **Scheduled-windows date param rejected as malformed (#43)** — `get_group_scheduled_windows` and `get_device_scheduled_windows` passed the `date` value through `httpx`'s default params encoder, which percent-encoded the literal colons in `YYYY-MM-DDTHH:mm:ss` to `%3A`. The Automox `/policy-windows/.../scheduled-windows` endpoint validates the raw string and rejected the encoded form with `400 Invalid date-time format`. The query is now appended to the URL with `urllib.parse.quote(..., safe=":")` so colons survive transport intact.
+
+### Removed
+
+- **`get_action_set_actions` tool removed (#43)** — The wrapper hit `GET /orgs/{org_id}/remediations/action-sets/{action_set_id}/actions`, but that endpoint is `POST`-only (it creates actions; `OPTIONS` confirms `Allow: POST`). There is no read endpoint for actions in the Automox public API. Every call returned `405 Method Not Allowed`. Use `get_action_set_issues` and `get_action_set_solutions` for the related read data. Tool count drops from 80 to 79 (read-only tool count drops from 58 to 57).
+
 ## [1.0.20] - 2026-04-29
 
 ### Added

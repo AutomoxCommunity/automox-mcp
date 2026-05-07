@@ -4,8 +4,24 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from typing import Any
+from urllib.parse import quote
 
 from ..client import AutomoxClient
+
+
+def _scheduled_windows_path(base_path: str, date: str | None) -> str:
+    """Append a date query param without percent-encoding the colons.
+
+    The Automox `/policy-windows/.../scheduled-windows` endpoint validates
+    the `date` query parameter as `YYYY-MM-DDTHH:mm:ss` and rejects the
+    request when colons are encoded as `%3A` (which httpx's default
+    params-encoder produces). We construct the query string manually and
+    keep `:` in the safe set so the literal value survives transport.
+    """
+    if date is None:
+        return base_path
+    encoded = quote(date.rstrip("Z"), safe=":")
+    return f"{base_path}?date={encoded}"
 
 
 def _summarize_window(window: Mapping[str, Any]) -> dict[str, Any]:
@@ -320,12 +336,10 @@ async def get_group_scheduled_windows(
     date: str | None = None,
 ) -> dict[str, Any]:
     """Get upcoming scheduled maintenance periods for a server group."""
-    path = f"/policy-windows/org/{org_uuid}/group/{group_uuid}/scheduled-windows"
-    params: dict[str, Any] = {}
-    if date is not None:
-        params["date"] = date.rstrip("Z")
+    base = f"/policy-windows/org/{org_uuid}/group/{group_uuid}/scheduled-windows"
+    path = _scheduled_windows_path(base, date)
 
-    result = await client.get(path, params=params or None)
+    result = await client.get(path)
 
     periods: list[dict[str, Any]] = []
     if isinstance(result, list):
@@ -368,12 +382,10 @@ async def get_device_scheduled_windows(
     date: str | None = None,
 ) -> dict[str, Any]:
     """Get upcoming scheduled maintenance periods for a specific device."""
-    path = f"/policy-windows/org/{org_uuid}/device/{device_uuid}/scheduled-windows"
-    params: dict[str, Any] = {}
-    if date is not None:
-        params["date"] = date.rstrip("Z")
+    base = f"/policy-windows/org/{org_uuid}/device/{device_uuid}/scheduled-windows"
+    path = _scheduled_windows_path(base, date)
 
-    result = await client.get(path, params=params or None)
+    result = await client.get(path)
 
     periods: list[dict[str, Any]] = []
     if isinstance(result, list):

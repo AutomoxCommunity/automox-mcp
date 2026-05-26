@@ -5,6 +5,14 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.25] - 2026-05-26
+
+### Added
+
+- **Canonical `metadata.pagination` block across all paginated tools (#52)** — Every tool that returns multiple records now exposes pagination state under one canonical key with a stable field vocabulary: `page`, `page_size`, `total_elements`, `total_pages`, `has_more`, and `next_cursor` (the latter when cursor-based). Offset-paginated tools (`policy_catalog`, `policy_runs_v2` filtered path, `search_policy_windows`, `get_device_assignments`, `policy_run_results`) emit the page-style core; cursor-paginated tools (`audit_trail_user_activity`, `audit_events_ocsf`, `list_webhooks`) emit the cursor-style core. A generic pagination loop can now read `metadata.pagination.has_more` and either increment `page` or pass `metadata.pagination.next_cursor` to the next call without per-tool special-cases. Pre-#52 locations (e.g. `metadata.current_page`, `metadata.total_count`, `metadata.limit`, `data.total_elements`, `data.total_pages`, `data.next_cursor`, `metadata.next_cursor`, `metadata.last_event_cursor`) are retained as legacy aliases for backwards-compat — prefer the canonical block in new code.
+- **`build_pagination_metadata` helper in `automox_mcp.utils.response`** — Central helper used by every paginated workflow to construct the canonical block. Derives `total_pages` from `total_elements` and `page_size` when both are known, and derives `has_more` from page/page_size/total_elements when not passed explicitly. Tool-specific extras (Spring `first`/`last`/`offset`/`sort`, legacy `current_page`/`limit`/`total_count`/`returned_count` aliases) can be merged in via the `extra` keyword.
+- **Cross-tool contract test (`tests/test_pagination_contract.py`)** — Every migrated workflow is now exercised against the canonical-fields contract so future tools cannot regress to per-tool shapes without breaking CI.
+
 ## [1.0.24] - 2026-05-26
 
 ### Fixed

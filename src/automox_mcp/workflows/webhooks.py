@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from ..client import AutomoxClient
+from ..utils.response import build_pagination_metadata
 
 
 def _summarize_webhook(webhook: Mapping[str, Any]) -> dict[str, Any]:
@@ -74,12 +75,19 @@ async def list_webhooks(
         "webhooks": webhooks,
     }
     if next_cursor:
+        # Legacy alias retained for backwards-compat. Canonical location is
+        # metadata.pagination.next_cursor (issue #52).
         data["next_cursor"] = next_cursor
 
     return {
         "data": data,
         "metadata": {
             "deprecated_endpoint": False,
+            "pagination": build_pagination_metadata(
+                page_size=limit,
+                has_more=bool(next_cursor),
+                next_cursor=next_cursor,
+            ),
         },
     }
 

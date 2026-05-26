@@ -149,9 +149,7 @@ async def list_policy_runs_v2(
         policy_uuid_str = str(policy_uuid) if policy_uuid else None
         policy_type_lower = policy_type.lower() if policy_type else None
         policy_name_lower = policy_name.lower() if policy_name else None
-        status_key = (
-            _RESULT_STATUS_KEYS.get(result_status.lower()) if result_status else None
-        )
+        status_key = _RESULT_STATUS_KEYS.get(result_status.lower()) if result_status else None
 
         def _match(run: Mapping[str, Any]) -> bool:
             if policy_uuid_str and str(run.get("policy_uuid") or "") != policy_uuid_str:

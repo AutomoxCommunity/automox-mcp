@@ -46,9 +46,7 @@ def test_does_not_derive_has_more_when_inputs_missing() -> None:
 
 
 def test_explicit_has_more_overrides_derivation() -> None:
-    block = build_pagination_metadata(
-        page=0, page_size=10, total_elements=42, has_more=False
-    )
+    block = build_pagination_metadata(page=0, page_size=10, total_elements=42, has_more=False)
     assert block["has_more"] is False
 
 

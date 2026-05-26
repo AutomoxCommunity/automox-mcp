@@ -687,7 +687,11 @@ async def main() -> int:
         (14, "patch_tuesday truncation lie (total_available != array)", case_14_truncation_lie),
         (57, "policy_catalog pagination past page 2 (#57.1)", case_57_1_policy_catalog_pagination),
         (57, "policy_runs_v2 filter ignored (#57.2)", case_57_2_policy_runs_v2_filter),
-        (57, "policy_stats hides policies via truncation (#57.3)", case_57_3_policy_stats_hides_policies),
+        (
+            57,
+            "policy_stats hides policies via truncation (#57.3)",
+            case_57_3_policy_stats_hides_policies,
+        ),
     ]
 
     results: list[tuple[int, str, str]] = []

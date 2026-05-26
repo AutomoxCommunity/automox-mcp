@@ -9,6 +9,7 @@ from uuid import UUID
 
 from ..client import AutomoxClient
 from ..utils import resolve_org_uuid
+from ..utils.response import build_pagination_metadata
 from ..utils.response import extract_list as _extract_list
 
 
@@ -205,12 +206,14 @@ async def list_policy_runs_v2(
         metadata["filters_applied"] = filters_applied
         metadata["upstream_pool_size"] = fetched_total
         metadata["filtered_count"] = filtered_total
-        metadata["pagination"] = {
-            "page": effective_page,
-            "limit": effective_limit,
-            "total_count": filtered_total,
-            "has_more": has_more,
-        }
+        metadata["pagination"] = build_pagination_metadata(
+            page=effective_page,
+            page_size=effective_limit,
+            total_elements=filtered_total,
+            has_more=has_more,
+            # Legacy aliases retained for backwards-compat (#52).
+            extra={"limit": effective_limit, "total_count": filtered_total},
+        )
         if fetched_total >= _FILTER_POOL_LIMIT:
             metadata["upstream_pool_capped"] = True
             metadata["pool_cap_note"] = (

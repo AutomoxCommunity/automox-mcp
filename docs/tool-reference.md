@@ -57,7 +57,7 @@ Uses the Server Groups API v2 for structured device queries, saved searches, and
 - **`policy_health_overview`** - Summarize recent Automox policy activity. Omit `org_uuid` to let the server resolve it from `AUTOMOX_ORG_ID` / `AUTOMOX_ORG_UUID`.
 - **`policy_execution_timeline`** - Review recent executions for a policy.
 - **`policy_run_results`** - Fetch per-device results (stdout, stderr, exit codes) for a specific execution token returned by `policy_execution_timeline`.
-- **`policy_catalog`** - List Automox policies with type and status summaries. Supports `page` (0-indexed) and `limit` pagination; inspect `metadata.pagination.has_more`, read `metadata.notes`, and follow the optional `metadata.suggested_next_call` hint to keep fetching additional slices when needed.
+- **`policy_catalog`** - List Automox policies with type and status summaries. Supports `page` (0-indexed) and `limit` pagination — each user page maps 1:1 to the upstream `/policies` page so cursors are stable. Inspect `metadata.pagination.has_more`, read `metadata.notes`, and follow the optional `metadata.suggested_next_call` hint to continue paginating. Per-policy compliance stats are **opt-in** via `include_stats=true` (default off): the stats payload is large and was previously truncating the `policies` array. Use `policy_compliance_stats` for a focused breakdown.
 - **`policy_detail`** - Retrieve configuration and recent history for a policy.
 - **`policy_compliance_stats`** - Retrieve per-policy compliance statistics showing compliant vs. non-compliant device counts and compliance rates.
 - **`apply_policy_changes`** - Preview or submit structured policy create/update operations. Automatically normalizes helper fields (`filter_name`, `filter_names`) and friendly schedule blocks into Automox's expected payloads, ensuring required fields (e.g., `schedule_days`, `schedule_time`) are present before submission.
@@ -71,7 +71,7 @@ Uses the Server Groups API v2 for structured device queries, saved searches, and
 
 Richer policy execution reporting via the `/policy-history` API with UUID-based queries, time-range filtering, and aggregate views.
 
-- **`policy_runs_v2`** - List policy runs with time-range filtering, policy name/type filters, and result status filtering.
+- **`policy_runs_v2`** - List policy runs with time-range filtering, policy name/type filters, and result status filtering. Filters (`policy_name`, `policy_uuid`, `policy_type`, `start_time`, `end_time`, `result_status`) are applied **client-side** because the upstream policy-report-api silently ignores them; `policy_name` matches as a case-insensitive substring, and `result_status` is treated as "include runs where the named counter is non-zero" (success/failed/pending/not_included/remediation_not_applicable/blocked). When a filter is active, `metadata.filter_strategy="client_side"`, `metadata.filters_applied`, and `metadata.pagination` (with `total_count` / `has_more`) describe the local pagination state.
 - **`policy_run_count`** - Get aggregate policy execution counts. Optionally filter by number of days to look back.
 - **`policy_runs_by_policy`** - Get policy runs grouped by policy for cross-policy comparison.
 - **`policy_history_detail`** - Get policy history details by UUID, including run history and status.

@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import re
+import time
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -242,6 +243,7 @@ class AutomoxClient:
             correlation_id,
         )
 
+        start = time.monotonic()
         try:
             response = await self._http.request(
                 method,
@@ -251,9 +253,51 @@ class AutomoxClient:
                 headers=merged_headers or None,
             )
         except httpx.RequestError as exc:
+            latency_ms = (time.monotonic() - start) * 1000.0
+            logger.warning(
+                "upstream request failed: %s %s exc=%s:%s latency_ms=%.1f correlation_id=%s",
+                method,
+                path,
+                type(exc).__name__,
+                exc,
+                latency_ms,
+                correlation_id,
+            )
             raise AutomoxAPIError(
                 f"network error calling Automox API at {self._base_url_str}", status_code=0
             ) from exc
+
+        latency_ms = (time.monotonic() - start) * 1000.0
+        retry_after = response.headers.get("Retry-After")
+        log_extra = {
+            "method": method,
+            "path": path,
+            "status": response.status_code,
+            "latency_ms": round(latency_ms, 1),
+            "correlation_id": correlation_id,
+            "retry_after": retry_after,
+        }
+        if response.status_code >= 500 or response.status_code == 429:
+            logger.warning(
+                "upstream %s %s status=%d latency_ms=%.1f retry_after=%s correlation_id=%s",
+                method,
+                path,
+                response.status_code,
+                latency_ms,
+                retry_after,
+                correlation_id,
+                extra=log_extra,
+            )
+        else:
+            logger.info(
+                "upstream %s %s status=%d latency_ms=%.1f correlation_id=%s",
+                method,
+                path,
+                response.status_code,
+                latency_ms,
+                correlation_id,
+                extra=log_extra,
+            )
 
         if response.status_code == 429:
             payload = self._extract_error_payload(response)

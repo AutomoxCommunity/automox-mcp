@@ -486,6 +486,143 @@ async def case_14_truncation_lie(session: ClientSession) -> str:
     return "NOT_REPRODUCED"
 
 
+async def case_57_1_policy_catalog_pagination(session: ClientSession) -> str:
+    """Reported (#57.1): policy_catalog page>=3 at limit=10 returned 0 with has_more=true.
+
+    Root cause: the workflow over-fetched `limit*3` from /policies while
+    passing the user's `page` directly, so user_page=3 became upstream
+    offset=90 instead of 30.
+
+    Verification strategy: ask for the same total population across pages
+    1..3 and confirm each page returns distinct, non-empty results when
+    the tenant has >30 policies. If page 3 returns 0 policies while
+    has_more is true, the cursor is stalled (VERIFIED). Use
+    include_stats=true once on page 0 to capture total_available.
+    """
+    _, p0, _ = await call_tool(
+        session, "policy_catalog", {"limit": 10, "page": 0, "include_stats": True}
+    )
+    if not isinstance(p0, dict):
+        status("AMBIGUOUS", "page 0 not a dict", YELLOW)
+        return "AMBIGUOUS"
+    p0_data = p0.get("data") or {}
+    total_available = p0_data.get("total_policies_available")
+    if not isinstance(total_available, int) or total_available <= 30:
+        status(
+            "AMBIGUOUS",
+            f"tenant has too few policies to test (total_available={total_available!r})",
+            YELLOW,
+        )
+        return "AMBIGUOUS"
+
+    _, p3, raw3 = await call_tool(session, "policy_catalog", {"limit": 10, "page": 3})
+    if not isinstance(p3, dict):
+        status("AMBIGUOUS", f"page=3 not a dict — {raw3[:200]}", YELLOW)
+        return "AMBIGUOUS"
+    p3_data = p3.get("data") or {}
+    p3_meta = p3.get("metadata") or {}
+    p3_returned = p3_data.get("policies_returned") or 0
+    p3_has_more = (p3_meta.get("pagination") or {}).get("has_more")
+
+    # Bug shape: page=3 at limit=10 returns 0 policies but claims has_more=true.
+    if p3_returned == 0 and p3_has_more:
+        status(
+            "VERIFIED",
+            (
+                f"page=3 limit=10 returned 0 policies but has_more=true "
+                f"(total_available={total_available})"
+            ),
+            RED,
+        )
+        return "VERIFIED"
+    status(
+        "NOT_REPRODUCED",
+        (
+            f"page=3 returned={p3_returned} has_more={p3_has_more} "
+            f"total_available={total_available}"
+        ),
+        GREEN,
+    )
+    return "NOT_REPRODUCED"
+
+
+async def case_57_2_policy_runs_v2_filter(session: ClientSession) -> str:
+    """Reported (#57.2): policy_runs_v2 silently ignores policy_name and policy_type.
+
+    Both filters accepted by the schema but the upstream call returns
+    unfiltered runs (different policy_type than requested, etc.).
+    """
+    # Use a `policy_type=custom` filter — if filter works, every returned run
+    # should have policy_type=custom. If returned runs include other types
+    # (e.g. "patch"), the filter was ignored.
+    _, parsed, raw = await call_tool(
+        session,
+        "policy_runs_v2",
+        {"policy_type": "custom", "limit": 20},
+    )
+    if not isinstance(parsed, dict):
+        status("AMBIGUOUS", f"unexpected shape — {raw[:200]}", YELLOW)
+        return "AMBIGUOUS"
+    data = parsed.get("data") or {}
+    runs = data.get("runs") or []
+    if not isinstance(runs, list) or not runs:
+        status("AMBIGUOUS", f"no runs returned — cannot test filter (runs={runs!r})", YELLOW)
+        return "AMBIGUOUS"
+    types_seen = {r.get("policy_type") for r in runs if isinstance(r, dict)}
+    non_custom = types_seen - {"custom"}
+    if non_custom:
+        status(
+            "VERIFIED",
+            (
+                f"policy_type=custom filter ignored — returned runs include types: "
+                f"{sorted(t for t in non_custom if t)} (n={len(runs)})"
+            ),
+            RED,
+        )
+        return "VERIFIED"
+    status(
+        "NOT_REPRODUCED",
+        f"all {len(runs)} runs have policy_type=custom — filter honored",
+        GREEN,
+    )
+    return "NOT_REPRODUCED"
+
+
+async def case_57_3_policy_stats_hides_policies(session: ClientSession) -> str:
+    """Reported (#57.3): policy_stats array consumes the token budget and
+    truncates the `policies` array, hiding policies that exist in the org.
+    """
+    _, parsed, raw = await call_tool(session, "policy_catalog", {"limit": 10, "page": 0})
+    if not isinstance(parsed, dict):
+        status("AMBIGUOUS", f"unexpected shape — {raw[:200]}", YELLOW)
+        return "AMBIGUOUS"
+    metadata = parsed.get("metadata") or {}
+    truncations = metadata.get("truncations") or {}
+    policies_trunc = truncations.get("policies") if isinstance(truncations, dict) else None
+    stats_trunc = truncations.get("policy_stats") if isinstance(truncations, dict) else None
+    # Bug shape: policies array gets truncated below the requested limit
+    # because policy_stats consumes most of the budget.
+    if isinstance(policies_trunc, dict):
+        p_total = policies_trunc.get("total")
+        p_returned = policies_trunc.get("returned")
+        if isinstance(p_total, int) and isinstance(p_returned, int) and p_returned < p_total:
+            status(
+                "VERIFIED",
+                (
+                    f"policies truncated: total={p_total} returned={p_returned}; "
+                    f"policy_stats truncation={stats_trunc}"
+                ),
+                RED,
+            )
+            return "VERIFIED"
+    status(
+        "NOT_REPRODUCED",
+        f"policies not truncated below request (truncations={truncations})",
+        GREEN,
+    )
+    return "NOT_REPRODUCED"
+
+
 async def case_5_devices_needing_attention(session: ClientSession) -> str:
     """Reported: returns null for policy_status, pending_patches, last_check_in,
     server_group_id."""
@@ -548,6 +685,9 @@ async def main() -> int:
         (8, "audit actor cursor advance on miss", case_8_audit_actor_cursor),
         (9, "policy_health_overview sample mismatch", case_9_policy_health_sample),
         (14, "patch_tuesday truncation lie (total_available != array)", case_14_truncation_lie),
+        (57, "policy_catalog pagination past page 2 (#57.1)", case_57_1_policy_catalog_pagination),
+        (57, "policy_runs_v2 filter ignored (#57.2)", case_57_2_policy_runs_v2_filter),
+        (57, "policy_stats hides policies via truncation (#57.3)", case_57_3_policy_stats_hides_policies),
     ]
 
     results: list[tuple[int, str, str]] = []

@@ -67,6 +67,28 @@ def _summarize_policy(policy: Mapping[str, Any]) -> dict[str, Any]:
     return entry
 
 
+# Max upstream window to fetch when a client-side filter is active. The
+# policy-report-api list endpoint silently ignores filter query params,
+# so we fetch a large window and filter locally. Matches the schema cap
+# on `limit` (PolicyRunsV2Params.limit le=5000).
+_FILTER_POOL_LIMIT = 5000
+
+# Map result_status aliases to the counter key on a run record. Each run
+# aggregates per-device outcomes; we treat the filter as "include runs
+# where this counter is non-zero" since the aggregated record has no
+# single-status field.
+_RESULT_STATUS_KEYS = {
+    "success": "success",
+    "successful": "success",
+    "failed": "failed",
+    "failure": "failed",
+    "pending": "pending",
+    "not_included": "not_included",
+    "remediation_not_applicable": "remediation_not_applicable",
+    "blocked": "blocked",
+}
+
+
 async def list_policy_runs_v2(
     client: AutomoxClient,
     *,
@@ -82,34 +104,35 @@ async def list_policy_runs_v2(
     page: int | None = None,
     limit: int | None = None,
 ) -> dict[str, Any]:
-    """List policy runs with optional filtering and time-range queries."""
+    """List policy runs with optional filtering and time-range queries.
+
+    The upstream policy-report-api list endpoint silently ignores filter
+    query parameters (verified live against `/policy-history/policy-runs`:
+    `policy_name`, `policy_type`, `policy_uuid`, `start_time`, `end_time`,
+    `result_status` all return identical unfiltered results regardless of
+    parameter casing). When any filter is set we fetch a large window
+    upstream and apply filters + pagination client-side.
+    """
     resolved_uuid = await resolve_org_uuid(
         client,
         explicit_uuid=org_uuid,
         org_id=org_id,
     )
 
-    # Policy History v2 requires org UUID as a query parameter.
-    # The policy-report-api uses snake_case query parameter names.
+    has_client_filter = bool(
+        policy_name or policy_uuid or policy_type or start_time or end_time or result_status
+    )
+
     params: dict[str, Any] = {"org": resolved_uuid}
-    if start_time:
-        params["start_time"] = start_time
-    if end_time:
-        params["end_time"] = end_time
-    if policy_name:
-        params["policy_name"] = policy_name
-    if policy_uuid:
-        params["policy_uuid"] = policy_uuid
-    if policy_type:
-        params["policy_type"] = policy_type
-    if result_status:
-        params["result_status"] = result_status
     if sort:
         params["sort"] = sort
-    if page is not None:
-        params["page"] = page
-    if limit is not None:
-        params["limit"] = limit
+    if has_client_filter:
+        params["limit"] = _FILTER_POOL_LIMIT
+    else:
+        if page is not None:
+            params["page"] = page
+        if limit is not None:
+            params["limit"] = limit
 
     response = await client.get(
         "/policy-history/policy-runs",
@@ -117,7 +140,87 @@ async def list_policy_runs_v2(
     )
 
     runs = _extract_list(response)
-    summaries = [_summarize_run(r) for r in runs]
+    fetched_total = len(runs)
+
+    metadata: dict[str, Any] = {"deprecated_endpoint": False}
+
+    if has_client_filter:
+        policy_uuid_str = str(policy_uuid) if policy_uuid else None
+        policy_type_lower = policy_type.lower() if policy_type else None
+        policy_name_lower = policy_name.lower() if policy_name else None
+        status_key = (
+            _RESULT_STATUS_KEYS.get(result_status.lower()) if result_status else None
+        )
+
+        def _match(run: Mapping[str, Any]) -> bool:
+            if policy_uuid_str and str(run.get("policy_uuid") or "") != policy_uuid_str:
+                return False
+            if policy_type_lower and (
+                str(run.get("policy_type") or "").lower() != policy_type_lower
+            ):
+                return False
+            if policy_name_lower and (
+                policy_name_lower not in str(run.get("policy_name") or "").lower()
+            ):
+                return False
+            run_time = str(run.get("run_time") or "")
+            if start_time and run_time < start_time:
+                return False
+            if end_time and run_time > end_time:
+                return False
+            if status_key is not None:
+                counter = run.get(status_key)
+                if not isinstance(counter, (int, float)) or counter <= 0:
+                    return False
+            return True
+
+        filtered_runs = [r for r in runs if isinstance(r, Mapping) and _match(r)]
+        filtered_total = len(filtered_runs)
+
+        effective_limit = limit if limit is not None else 50
+        effective_page = page if page is not None else 0
+        start_idx = effective_page * effective_limit
+        page_slice = filtered_runs[start_idx : start_idx + effective_limit]
+        has_more = (start_idx + effective_limit) < filtered_total
+
+        filters_applied = {
+            k: v
+            for k, v in {
+                "policy_name": policy_name,
+                "policy_uuid": policy_uuid_str,
+                "policy_type": policy_type,
+                "start_time": start_time,
+                "end_time": end_time,
+                "result_status": result_status,
+            }.items()
+            if v is not None
+        }
+
+        metadata["filter_strategy"] = "client_side"
+        metadata["filter_strategy_note"] = (
+            "The Automox policy-report-api list endpoint silently ignores filter "
+            "query parameters. Filters and pagination are applied client-side "
+            "after fetching the maximum upstream window."
+        )
+        metadata["filters_applied"] = filters_applied
+        metadata["upstream_pool_size"] = fetched_total
+        metadata["filtered_count"] = filtered_total
+        metadata["pagination"] = {
+            "page": effective_page,
+            "limit": effective_limit,
+            "total_count": filtered_total,
+            "has_more": has_more,
+        }
+        if fetched_total >= _FILTER_POOL_LIMIT:
+            metadata["upstream_pool_capped"] = True
+            metadata["pool_cap_note"] = (
+                f"Upstream returned {_FILTER_POOL_LIMIT} runs (max). If your tenant "
+                "has more, older runs may be excluded from the filter pool."
+            )
+
+        summaries = [_summarize_run(r) for r in page_slice]
+    else:
+        summaries = [_summarize_run(r) for r in runs]
 
     return {
         "data": {
@@ -125,7 +228,7 @@ async def list_policy_runs_v2(
             "total_runs": len(summaries),
             "runs": summaries,
         },
-        "metadata": {"deprecated_endpoint": False},
+        "metadata": metadata,
     }
 
 

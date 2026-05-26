@@ -855,6 +855,74 @@ async def test_summarize_policies_is_active_from_status_raw() -> None:
 
 
 @pytest.mark.asyncio
+async def test_summarize_policies_pagination_is_passthrough() -> None:
+    """Issue #57.1: page/limit must map 1:1 to upstream /policies params.
+
+    The previous implementation over-fetched `limit*3` from /policies, which
+    broke the offset for any user_page>0 once the upstream cap was exceeded.
+    """
+    stub = StubClient(get_responses={"/policies": [[]]})
+    stub.org_id = 42  # type: ignore[attr-defined]
+
+    await summarize_policies(
+        cast(AutomoxClient, stub),
+        org_id=42,
+        limit=10,
+        page=3,
+    )
+
+    # Exactly one call to /policies, with the user's page/limit straight through.
+    policy_calls = [c for c in stub.calls if c[1] == "/policies"]
+    assert len(policy_calls) == 1
+    params = policy_calls[0][2]
+    assert params["limit"] == 10
+    assert params["page"] == 3
+
+
+@pytest.mark.asyncio
+async def test_summarize_policies_skips_stats_by_default() -> None:
+    """Issue #57.3: policy_stats array was filling the token budget and
+    truncating the `policies` array. Stats are now opt-in."""
+    policy = {"id": 1, "name": "P", "policy_type_name": "patch", "status": "active"}
+    stub = StubClient(get_responses={"/policies": [[policy]]})
+    stub.org_id = 42  # type: ignore[attr-defined]
+
+    result = await summarize_policies(
+        cast(AutomoxClient, stub),
+        org_id=42,
+        limit=20,
+    )
+
+    # /policystats must NOT be fetched by default.
+    assert not any(c[1] == "/policystats" for c in stub.calls)
+    assert "policy_stats" not in result["data"]
+    assert result["metadata"]["include_stats"] is False
+
+
+@pytest.mark.asyncio
+async def test_summarize_policies_includes_stats_when_requested() -> None:
+    policy = {"id": 1, "name": "P", "policy_type_name": "patch", "status": "active"}
+    stats = [{"policy_id": 1, "compliant_count": 5, "noncompliant_count": 2}]
+    stub = StubClient(
+        get_responses={
+            "/policies": [[policy]],
+            "/policystats": [stats],
+        }
+    )
+    stub.org_id = 42  # type: ignore[attr-defined]
+
+    result = await summarize_policies(
+        cast(AutomoxClient, stub),
+        org_id=42,
+        limit=20,
+        include_stats=True,
+    )
+
+    assert result["data"]["policy_stats"] == stats
+    assert result["data"]["total_policies_available"] == 1
+
+
+@pytest.mark.asyncio
 async def test_summarize_policies_custom_type_normalized_to_worklet() -> None:
     policy = {
         "id": 4,

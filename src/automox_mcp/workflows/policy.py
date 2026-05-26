@@ -17,9 +17,6 @@ from ..utils.response import require_org_id
 
 logger = logging.getLogger(__name__)
 
-# Safety cap on auto-pagination to prevent runaway loops.
-_MAX_PAGINATION_PAGES = 50
-
 
 def _take(sequence: Sequence[Any], limit: int) -> Sequence[Any]:
     """Take first N items from a sequence."""
@@ -276,117 +273,109 @@ async def summarize_policies(
     limit: int = 20,
     page: int | None = 0,
     include_inactive: bool = False,
+    include_stats: bool = False,
 ) -> dict[str, Any]:
-    """Provide a curated view of Automox policies."""
+    """Provide a curated view of Automox policies.
+
+    Pagination is pass-through to /policies (the user's `page` and `limit`
+    map 1:1 to the upstream params). A page may contain fewer than `limit`
+    active policies when some entries on that page are inactive and
+    `include_inactive=False`, but the cursor remains correct because each
+    user-page is exactly one upstream page.
+
+    `policy_stats` is opt-in (default off). The /policystats payload can
+    consume the bulk of the response token budget and previously caused
+    truncation of the `policies` array — set `include_stats=True` to
+    re-enable when the per-policy compliance breakdown is needed.
+    """
 
     resolved_org_id = require_org_id(client, org_id)
 
-    # When client-side filtering is active, over-fetch to avoid excessive API calls
-    fetch_limit = min(limit * 3, 500) if not include_inactive else limit
-    params = {"o": resolved_org_id}
-    if fetch_limit is not None:
-        params["limit"] = fetch_limit
+    params: dict[str, Any] = {"o": resolved_org_id}
+    if limit is not None:
+        params["limit"] = limit
     if page is not None:
         params["page"] = page
 
-    policies: list[Mapping[str, Any]] = []
-    current_page = page or 0
-    accumulated = 0
+    policies_response = await client.get("/policies", params=params)
+    page_results: list[Mapping[str, Any]] = []
+    if isinstance(policies_response, Sequence):
+        page_results = [item for item in policies_response if isinstance(item, Mapping)]
+
     type_counts: Counter[str] = Counter()
     status_counts: Counter[str] = Counter()
     filtered: list[Mapping[str, Any]] = []
     preview: list[Mapping[str, Any]] = []
 
-    for _page_num in range(_MAX_PAGINATION_PAGES):
-        policies_response = await client.get("/policies", params=params)
-        page_results: list[Mapping[str, Any]] = []
-        if isinstance(policies_response, Sequence):
-            page_results = [item for item in policies_response if isinstance(item, Mapping)]
-
-        policies.extend(page_results)
-        accumulated += len(page_results)
-
-        for policy_item in page_results:
-            if not isinstance(policy_item, Mapping):
-                continue
-            status_raw = str(policy_item.get("status") or "").lower()
-            active_flag = policy_item.get("active")
-            if active_flag is None:
-                active_flag = policy_item.get("enabled")
-            if active_flag is None:
-                active_flag = policy_item.get("is_active")
-            if active_flag is not None:
-                is_active = active_flag not in (False, 0, "false", "inactive")
-            else:
-                is_active = status_raw not in ("inactive", "disabled")
-            if not include_inactive and not is_active:
-                continue
-
-            policy_type = (
-                policy_item.get("policy_type_name")
-                or policy_item.get("policy_type")
-                or policy_item.get("type")
-                or "unknown"
-            ).lower()
-            if policy_type == "custom":
-                policy_type = "worklet"
-            type_counts[policy_type] += 1
-            status = _normalize_status(
-                policy_item.get("status") or ("active" if is_active else "inactive")
-            )
-            status_counts[status] += 1
-
-            filtered.append(policy_item)
-
-            if limit is None or len(preview) < limit:
-                preview.append(
-                    {
-                        "policy_id": policy_item.get("id"),
-                        "policy_uuid": policy_item.get("guid") or policy_item.get("uuid"),
-                        "name": policy_item.get("name"),
-                        "type": policy_type,
-                        "status": policy_item.get("status"),
-                        "targets": policy_item.get("target"),
-                        "server_groups": policy_item.get("server_groups"),
-                        "schedule_days": policy_item.get("schedule_days"),
-                        "schedule_time": policy_item.get("schedule_time"),
-                        "next_run": policy_item.get("next_run"),
-                    }
-                )
-
-        has_reached_preview_cap = limit is not None and len(preview) >= limit
-        next_page_index = current_page + 1
-        params["page"] = next_page_index
-        current_page = next_page_index
-
-        if has_reached_preview_cap or not page_results:
-            break
-
-    stats_params = {"o": resolved_org_id}
-    stats_data = await client.get("/policystats", params=stats_params)
-    total_available: int | None = None
-    if isinstance(stats_data, Sequence):
-        # Count unique policies represented in the stats payload as a proxy for total policies
-        policy_ids = {
-            item.get("policy_id")
-            for item in stats_data
-            if isinstance(item, Mapping) and item.get("policy_id") is not None
-        }
-        if policy_ids:
-            total_available = len(policy_ids)
+    for policy_item in page_results:
+        status_raw = str(policy_item.get("status") or "").lower()
+        active_flag = policy_item.get("active")
+        if active_flag is None:
+            active_flag = policy_item.get("enabled")
+        if active_flag is None:
+            active_flag = policy_item.get("is_active")
+        if active_flag is not None:
+            is_active = active_flag not in (False, 0, "false", "inactive")
         else:
-            total_available = len([item for item in stats_data if isinstance(item, Mapping)])
+            is_active = status_raw not in ("inactive", "disabled")
+        if not include_inactive and not is_active:
+            continue
 
-    returned_count_raw = len(policies)
-    returned_count = len(preview)
+        policy_type = (
+            policy_item.get("policy_type_name")
+            or policy_item.get("policy_type")
+            or policy_item.get("type")
+            or "unknown"
+        ).lower()
+        if policy_type == "custom":
+            policy_type = "worklet"
+        type_counts[policy_type] += 1
+        normalized = _normalize_status(
+            policy_item.get("status") or ("active" if is_active else "inactive")
+        )
+        status_counts[normalized] += 1
+
+        filtered.append(policy_item)
+        preview.append(
+            {
+                "policy_id": policy_item.get("id"),
+                "policy_uuid": policy_item.get("guid") or policy_item.get("uuid"),
+                "name": policy_item.get("name"),
+                "type": policy_type,
+                "status": policy_item.get("status"),
+                "targets": policy_item.get("target"),
+                "server_groups": policy_item.get("server_groups"),
+                "schedule_days": policy_item.get("schedule_days"),
+                "schedule_time": policy_item.get("schedule_time"),
+                "next_run": policy_item.get("next_run"),
+            }
+        )
+
+    stats_data: Any = None
+    total_available: int | None = None
+    if include_stats:
+        stats_data = await client.get("/policystats", params={"o": resolved_org_id})
+        if isinstance(stats_data, Sequence):
+            policy_ids = {
+                item.get("policy_id")
+                for item in stats_data
+                if isinstance(item, Mapping) and item.get("policy_id") is not None
+            }
+            if policy_ids:
+                total_available = len(policy_ids)
+            else:
+                total_available = len([item for item in stats_data if isinstance(item, Mapping)])
+
+    returned_count_raw = len(page_results)
     normalized_page = page if page is None else max(page, 0)
+
     if total_available is not None and limit is not None and normalized_page is not None:
         has_more = (normalized_page + 1) * limit < total_available
-    elif normalized_page is None:
-        # Auto-pagination already fetched everything; no more data
-        has_more = total_available is not None and returned_count_raw < total_available
     else:
+        # Without a stats-derived total, defer to the page itself: a full page
+        # implies there may be more; a short page is the last page.
         has_more = bool(limit is not None and returned_count_raw >= limit)
+
     next_page: int | None = None
     if has_more and normalized_page is not None:
         next_page = normalized_page + 1
@@ -398,7 +387,7 @@ async def summarize_policies(
         "page": normalized_page,
         "current_page": normalized_page,
         "limit": limit,
-        "returned_count": returned_count,
+        "returned_count": len(preview),
         "returned_count_raw": returned_count_raw,
         "has_more": bool(has_more),
         "next_page": next_page,
@@ -416,17 +405,19 @@ async def summarize_policies(
                 "page": normalized_page + 1,
                 "limit": limit,
                 "include_inactive": include_inactive,
+                "include_stats": include_stats,
             },
         }
 
-    data = {
+    data: dict[str, Any] = {
         "total_policies_considered": len(filtered),
         "policies_returned": len(preview),
         "policy_type_breakdown": dict(type_counts),
         "status_breakdown": dict(status_counts),
         "policies": preview,
-        "policy_stats": stats_data,
     }
+    if include_stats:
+        data["policy_stats"] = stats_data
     if total_available is not None:
         data["total_policies_available"] = total_available
 
@@ -436,6 +427,7 @@ async def summarize_policies(
         "requested_limit": limit,
         "requested_page": normalized_page,
         "include_inactive": include_inactive,
+        "include_stats": include_stats,
         "current_page": normalized_page,
         "limit": limit,
         "pagination": pagination,
@@ -445,14 +437,22 @@ async def summarize_policies(
     if suggested_next_call:
         metadata["suggested_next_call"] = suggested_next_call
     if has_more:
-        note = (
-            f"{returned_count} of {total_available} policies returned; follow "
-            f"metadata.suggested_next_call or increment page to continue pagination."
-            if total_available is not None
-            else "Partial results returned; follow metadata.suggested_next_call or "
-            "increment page to continue pagination."
-        )
+        if total_available is not None:
+            note = (
+                f"{len(preview)} of {total_available} policies returned; follow "
+                f"metadata.suggested_next_call or increment page to continue pagination."
+            )
+        else:
+            note = (
+                "Page is full; more results may be available. Call again with "
+                "`page=<next_page>` to continue."
+            )
         metadata["notes"] = [note]
+    if not include_stats:
+        metadata.setdefault("notes", []).append(
+            "policy_stats omitted (include_stats=false). Call policy_compliance_stats "
+            "for per-policy compliance breakdowns, or re-call with include_stats=true."
+        )
 
     return {
         "data": data,

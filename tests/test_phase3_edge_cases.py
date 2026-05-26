@@ -113,9 +113,11 @@ def _make_ph_client(**kwargs: Any) -> StubClient:
 
 @pytest.mark.asyncio
 async def test_policy_runs_v2_all_filters() -> None:
-    """Test all filter parameters are passed."""
+    """All filters are recorded as client-side filters; the upstream call only
+    sees `org`, `sort`, and a pool `limit` because the policy-report-api list
+    endpoint silently ignores filter query params (issue #57.2)."""
     client = _make_ph_client(get_responses={"/policy-history/policy-runs": [[]]})
-    await list_policy_runs_v2(
+    result = await list_policy_runs_v2(
         cast(AutomoxClient, client),
         org_id=42,
         start_time="2026-01-01",
@@ -129,10 +131,23 @@ async def test_policy_runs_v2_all_filters() -> None:
         limit=25,
     )
     params = client.calls[0][2]
-    assert params["start_time"] == "2026-01-01"
-    assert params["end_time"] == "2026-03-01"
-    assert params["policy_name"] == "Test"
-    assert params["policy_uuid"] == "pol-001"
+    assert "start_time" not in params
+    assert "end_time" not in params
+    assert "policy_name" not in params
+    assert "policy_uuid" not in params
+    assert "policy_type" not in params
+    assert "result_status" not in params
+    assert params["sort"] == "desc"
+    assert params["limit"] == 5000  # pool size for client-side filtering
+    assert result["metadata"]["filter_strategy"] == "client_side"
+    assert result["metadata"]["filters_applied"] == {
+        "start_time": "2026-01-01",
+        "end_time": "2026-03-01",
+        "policy_name": "Test",
+        "policy_uuid": "pol-001",
+        "policy_type": "patch",
+        "result_status": "failure",
+    }
 
 
 @pytest.mark.asyncio

@@ -78,9 +78,7 @@ async def test_policy_catalog_emits_canonical_pagination() -> None:
     stub = StubClient(get_responses={"/policies": [[]]})
     stub.org_id = 42  # type: ignore[attr-defined]
     result = await summarize_policies(cast(AutomoxClient, stub), org_id=42, limit=10, page=0)
-    _assert_canonical_pagination(
-        result["metadata"], expect={"page", "page_size", "has_more"}
-    )
+    _assert_canonical_pagination(result["metadata"], expect={"page", "page_size", "has_more"})
 
 
 @pytest.mark.asyncio

@@ -537,10 +537,7 @@ async def case_57_1_policy_catalog_pagination(session: ClientSession) -> str:
         return "VERIFIED"
     status(
         "NOT_REPRODUCED",
-        (
-            f"page=3 returned={p3_returned} has_more={p3_has_more} "
-            f"total_available={total_available}"
-        ),
+        (f"page=3 returned={p3_returned} has_more={p3_has_more} total_available={total_available}"),
         GREEN,
     )
     return "NOT_REPRODUCED"

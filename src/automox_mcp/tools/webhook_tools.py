@@ -38,8 +38,7 @@ _BLOCKED_HOSTS: frozenset[str] = frozenset(
 
 
 _PRIVATE_ADDR_REJECTION = (
-    "Webhook URL must not target private, loopback, link-local, "
-    "multicast, or unspecified addresses"
+    "Webhook URL must not target private, loopback, link-local, multicast, or unspecified addresses"
 )
 
 

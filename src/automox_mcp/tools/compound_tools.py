@@ -66,8 +66,9 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     )
     async def get_compliance_snapshot(
         group_id: int | None = None,
+        detail_limit: int = 10,
     ) -> dict[str, Any]:
-        params: dict[str, Any] = {}
+        params: dict[str, Any] = {"detail_limit": detail_limit}
         if group_id is not None:
             params["group_id"] = group_id
         return await call_tool_workflow(
@@ -96,8 +97,14 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     async def get_device_full_profile(
         device_id: int,
         max_packages: int = 25,
+        detail_limit: int | None = None,
     ) -> dict[str, Any]:
-        params: dict[str, Any] = {"device_id": device_id, "max_packages": max_packages}
+        params: dict[str, Any] = {
+            "device_id": device_id,
+            "max_packages": max_packages,
+        }
+        if detail_limit is not None:
+            params["detail_limit"] = detail_limit
         return await call_tool_workflow(
             client,
             workflows.compound.get_device_full_profile,

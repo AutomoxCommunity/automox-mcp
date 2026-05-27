@@ -135,6 +135,48 @@ def build_pagination_metadata(
     return block
 
 
+def build_section_summary(
+    *,
+    total: int,
+    returned: int,
+    follow_up_tool: str,
+    follow_up_args_hint: Mapping[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    """Build a single ``metadata.section_summaries.<key>`` entry.
+
+    Returns ``None`` when ``total <= returned`` so the caller can skip
+    emitting a no-op summary. When emitted the entry has ``total``,
+    ``returned``, ``has_more`` (always ``True`` in this branch),
+    ``follow_up_tool`` (the detail tool to call for the full set), and
+    ``follow_up_args_hint`` (initial args to seed that call). This is
+    the compound-tool contract from issue #53.
+    """
+    if total <= returned:
+        return None
+    return {
+        "total": total,
+        "returned": returned,
+        "has_more": True,
+        "follow_up_tool": follow_up_tool,
+        "follow_up_args_hint": dict(follow_up_args_hint or {}),
+    }
+
+
+def build_section_summary_notes(
+    section_summaries: Mapping[str, Mapping[str, Any]],
+    *,
+    detail_limit: int,
+) -> list[str]:
+    """Build the LLM-facing ``metadata.notes`` entries for truncated sections."""
+    return [
+        (
+            f"{key} capped at {detail_limit} of {info['total']} — call "
+            f"`{info['follow_up_tool']}` for the full set."
+        )
+        for key, info in section_summaries.items()
+    ]
+
+
 def require_org_id(
     client: Any,
     org_id: int | None = None,

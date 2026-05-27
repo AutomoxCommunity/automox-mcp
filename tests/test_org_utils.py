@@ -30,7 +30,9 @@ async def test_resolve_org_uuid_prefers_explicit():
     client = cast(AutomoxClient, stub)
     value = await resolve_org_uuid(client, explicit_uuid="12345678-1234-1234-1234-1234567890ab")
     assert value == "12345678-1234-1234-1234-1234567890ab"
-    assert client.org_uuid == "12345678-1234-1234-1234-1234567890ab"
+    # Caller-supplied UUIDs must NOT be cached on the shared client — see resolve_org_uuid
+    # for the cross-tenant poisoning concern.
+    assert client.org_uuid is None
 
 
 @pytest.mark.asyncio
@@ -147,6 +149,34 @@ def test_coerce_int_with_invalid_value():
     assert _coerce_int("not-an-int") is None
     assert _coerce_int(None) is None
     assert _coerce_int("") is None
+
+
+@pytest.mark.asyncio
+async def test_resolve_org_uuid_does_not_return_cached_uuid_for_different_org():
+    """Cross-tenant guard: a cached org_uuid must not satisfy a request for a different org."""
+    cached_uuid = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    other_uuid = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+    stub = StubClient(
+        org_id=10,
+        org_uuid=cached_uuid,
+        responses={
+            "/orgs": [
+                {"id": 10, "org_uuid": cached_uuid},
+                {"id": 20, "org_uuid": other_uuid},
+            ]
+        },
+    )
+    client = cast(AutomoxClient, stub)
+
+    # Same org as the client — should return cached value.
+    value_same = await resolve_org_uuid(client, org_id=10)
+    assert value_same == cached_uuid
+
+    # Different org — must NOT return the cached value; must look up fresh.
+    value_other = await resolve_org_uuid(client, org_id=20)
+    assert value_other == other_uuid
+    # Cache for the client's configured org must remain intact.
+    assert client.org_uuid == cached_uuid
 
 
 @pytest.mark.asyncio

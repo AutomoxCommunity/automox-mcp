@@ -15,12 +15,22 @@ def _settle(
     results: tuple[Any, ...],
     labels: tuple[str, ...],
 ) -> tuple[list[Any], list[str]]:
-    """Separate gather(return_exceptions=True) results into values and errors."""
+    """Separate gather(return_exceptions=True) results into values and errors.
+
+    Cancellation must propagate cooperatively — if any child task was cancelled,
+    re-raise so the compound tool aborts cleanly instead of returning a partial
+    response with a stringified ``CancelledError`` masquerading as a normal error.
+    """
     values: list[Any] = []
     errors: list[str] = []
     for result, label in zip(results, labels, strict=True):
-        if isinstance(result, BaseException):
-            errors.append(f"{label}: {result}")
+        if isinstance(result, asyncio.CancelledError):
+            raise result
+        if isinstance(result, BaseException) and not isinstance(result, Exception):
+            # KeyboardInterrupt, SystemExit, etc. — propagate, do not swallow.
+            raise result
+        if isinstance(result, Exception):
+            errors.append(f"{label}: {type(result).__name__}: {result}")
             values.append({})
         else:
             values.append(result)

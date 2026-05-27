@@ -5,6 +5,13 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.26] - 2026-05-26
+
+### Added
+
+- **`get_patch_tuesday_readiness` — proof-of-shape for the compound-tool contract (#53)** — The compound tool used to embed full inner lists (`prepatch_report.devices`, `patch_approvals.approvals`, `patch_policy_schedules`) verbatim, which routinely exceeded the 4000-token response budget on tenants of any meaningful size and triggered arbitrary truncation. The tool now accepts a `detail_limit` parameter (default `10`) that caps every inner list. Counts and aggregates (`total_devices_needing_patches`, `pending_count`, `readiness_summary`) are always returned in full; truncated sections surface a per-section entry under `metadata.section_summaries.<key>` with `total`, `returned`, `has_more`, and a `follow_up_tool` / `follow_up_args_hint` pointing at the underlying detail tool (`get_prepatch_report`, `patch_approvals_summary`, `policy_catalog`). `metadata.notes` carries an LLM-friendly hint per truncated section. `detail_limit=0` returns a pure summary with empty previews. This establishes the contract; `get_compliance_snapshot` and `get_device_full_profile` will follow in subsequent releases.
+- **Compound tools section in `docs/tool-reference.md`** — Documents the `detail_limit` parameter, the `metadata.section_summaries` shape, and the follow-up-tool dispatch pattern.
+
 ## [1.0.25] - 2026-05-26
 
 ### Added

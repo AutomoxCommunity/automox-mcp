@@ -37,8 +37,9 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     )
     async def get_patch_tuesday_readiness(
         group_id: int | None = None,
+        detail_limit: int = 10,
     ) -> dict[str, Any]:
-        params: dict[str, Any] = {}
+        params: dict[str, Any] = {"detail_limit": detail_limit}
         if group_id is not None:
             params["group_id"] = group_id
         return await call_tool_workflow(

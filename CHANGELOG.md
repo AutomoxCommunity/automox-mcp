@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Upstream HTTP observability** — The `AutomoxClient._request` path now emits one structured log line per upstream call with `method`, `path`, `status`, `latency_ms`, `correlation_id`, and (on 429/5xx) `retry_after`. Network failures (`httpx.RequestError`) log the exception type and elapsed time. The previous DEBUG line is retained. No retry policy is introduced; this is groundwork for diagnosing the intermittent multi-minute hangs reported in #57 issue 4.
 
+### Security
+
+- **Bump `starlette` floor to 1.0.1 (PYSEC-2026-161)** — Starlette reconstructed the requested URL from the HTTP `Host` header without validating its value, allowing path injection into the host portion. Routing still uses the actual request path, so the inconsistency can lead to authentication bypass when auth depends on the reconstructed URL. Constrained via `tool.uv.constraint-dependencies` (alongside the existing `urllib3` floor). Affects the HTTP/SSE transport path; stdio transport is unaffected.
+
 ## [1.0.23] - 2026-05-07
 
 ### Fixed

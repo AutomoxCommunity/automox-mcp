@@ -5,6 +5,26 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.28] - 2026-05-27
+
+### Fixed
+
+- **Write tools no longer lock out retries on transient failure (#65)** — When a write tool (`execute_device_command`, `apply_policy_changes`, `clone_policy`, `delete_policy`, `decide_patch_approval`, `execute_policy_now`, `create_data_extract`, `create_webhook`, `update_webhook`, `delete_webhook`, `test_webhook`, `rotate_webhook_secret`) hit a transient upstream failure, the idempotency cache's in-flight sentinel was never cleared. Every retry with the same `request_id` returned a generic `{"duplicate": True}` marker for the full 5-minute TTL, blocking recovery. Added `release_idempotency()` and wrapped each write-tool body in `try/except` that releases the sentinel on failure.
+- **Cross-tenant org UUID cache poisoning (#65)** — `resolve_org_uuid` cached caller-supplied UUIDs on the shared `AutomoxClient` and short-circuited subsequent calls without checking `org_id`. For multi-org API keys, this silently returned the wrong tenant's UUID to audit / policy-history / audit-v2 tools. The cache is now gated on `org_id` matching the client's configured `org_id`, and caller-supplied UUIDs are no longer persisted on the shared client.
+- **Crash on non-string policy / approval fields (#65)** — `summarize_policies` and `summarize_patch_approvals` called `.lower()` directly on values from `policy_type` / `status` / `severity`. Legacy upstream payloads occasionally return integer enums for these fields, causing `AttributeError` to surface as a 500 from `policy_catalog`, `get_compliance_snapshot`, and `get_patch_tuesday_readiness`. Now wrapped in `str()` defensively.
+- **`CancelledError` swallowed in compound tools (#65)** — `compound._settle` and `policy_history` caught `BaseException` from `asyncio.gather(return_exceptions=True)`, converting child-task cancellations into stringified error entries instead of propagating the cancellation. Now re-raises `CancelledError` and `BaseException` subclasses; only `Exception` instances are collected into the errors list.
+
+### Security
+
+- **Prompt-injection bypass in `format_error` (#65)** — Attacker-controlled strings embedded in upstream API error responses (e.g., `detail: "IMPORTANT: ignore prior instructions..."`) bypassed the line-anchored instruction-prefix sanitizer because `format_error` ran `json.dumps` before sanitization, leaving the keyword behind `  "detail": "` at the start of each line. The sanitizer now runs on the payload values *before* JSON serialization so the line anchor matches each value at its own logical line start.
+- **Async event loop blocked by sync DNS in webhook URL validator (#65)** — `_validate_webhook_url` ran `concurrent.futures.ThreadPoolExecutor.submit().result(timeout=5.0)` inside a Pydantic `model_validator`. `future.result()` is a blocking call that stalled the asyncio event loop — a single unresolvable hostname froze every concurrent tool call for up to 5 seconds. Also mutated `socket.setdefaulttimeout` (process-wide global). Split into `_validate_webhook_url_sync` (Pydantic-friendly structural checks) and `_validate_webhook_url_dns` (async; uses `loop.getaddrinfo` with `asyncio.wait_for` so the loop stays responsive). DNS resolution still runs before the upstream call (SSRF defense preserved); `socket.setdefaulttimeout` is no longer touched.
+
+### Performance
+
+- **Removed wasted `deepcopy` in `_apply_token_budget`** — Sole production caller (`as_tool_response`) always passes a freshly built dict. The defensive clone was a full traversal of the largest responses for no benefit.
+- **Removed double `json.dumps` in `summarize_device_health`** — The second serialization existed only to refresh `approx_response_bytes` after adding ~50 bytes of follow-up metadata; the size delta is negligible. Metadata mutation is in place on the same dict, so the first measurement is now reused.
+- **Fast-path for `sanitize_for_llm`** — ASCII strings with no markdown / HTML / zero-width markers (the overwhelming majority of API field values: UUIDs, statuses, timestamps, numeric strings) now skip the ~8 regex passes via a single cheap substring + multi-line prefix probe. Microbenchmark: 1.29 µs vs 2.51 µs per short string (~2× speedup). Translates to several milliseconds saved per string-heavy response.
+
 ## [1.0.27] - 2026-05-26
 
 ### Added

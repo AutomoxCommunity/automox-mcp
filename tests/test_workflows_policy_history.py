@@ -188,7 +188,14 @@ async def test_list_runs_client_pagination_slices_filtered_results() -> None:
     returned = [r["policy_uuid"] for r in result["data"]["runs"]]
     assert returned == [f"p{i}" for i in range(10, 20)]
     pagination = result["metadata"]["pagination"]
-    assert pagination == {"page": 1, "limit": 10, "total_count": 25, "has_more": True}
+    # Canonical fields (#52) plus legacy aliases retained for backwards-compat.
+    assert pagination["page"] == 1
+    assert pagination["page_size"] == 10
+    assert pagination["total_elements"] == 25
+    assert pagination["total_pages"] == 3
+    assert pagination["has_more"] is True
+    assert pagination["limit"] == 10
+    assert pagination["total_count"] == 25
 
 
 @pytest.mark.asyncio

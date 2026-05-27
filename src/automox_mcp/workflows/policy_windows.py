@@ -7,6 +7,7 @@ from typing import Any
 from urllib.parse import quote
 
 from ..client import AutomoxClient
+from ..utils.response import build_pagination_metadata
 
 
 def _scheduled_windows_path(base_path: str, date: str | None) -> str:
@@ -244,6 +245,8 @@ async def search_policy_windows(
         "total_windows": len(windows),
         "windows": windows,
     }
+    # Legacy aliases retained for backwards-compat (#52). Canonical location
+    # for these fields is metadata.pagination.
     if total_elements is not None:
         data["total_elements"] = total_elements
     if total_pages is not None:
@@ -251,7 +254,15 @@ async def search_policy_windows(
 
     return {
         "data": data,
-        "metadata": {"deprecated_endpoint": False},
+        "metadata": {
+            "deprecated_endpoint": False,
+            "pagination": build_pagination_metadata(
+                page=page,
+                page_size=size,
+                total_elements=total_elements,
+                total_pages=total_pages,
+            ),
+        },
     }
 
 

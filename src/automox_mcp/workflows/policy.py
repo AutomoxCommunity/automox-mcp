@@ -12,8 +12,8 @@ import httpx
 
 from ..client import AutomoxAPIError, AutomoxClient, AutomoxResponse
 from ..utils import resolve_org_uuid
+from ..utils.response import build_pagination_metadata, require_org_id
 from ..utils.response import normalize_status as _normalize_status
-from ..utils.response import require_org_id
 
 logger = logging.getLogger(__name__)
 
@@ -383,19 +383,23 @@ async def summarize_policies(
     if normalized_page is not None and normalized_page > 0:
         previous_page = normalized_page - 1
 
-    pagination: dict[str, Any] = {
-        "page": normalized_page,
-        "current_page": normalized_page,
-        "limit": limit,
-        "returned_count": len(preview),
-        "returned_count_raw": returned_count_raw,
-        "has_more": bool(has_more),
-        "next_page": next_page,
-        "previous_page": previous_page,
-    }
-    if total_available is not None:
-        pagination["total_count"] = total_available
-    pagination["filtered_count"] = len(filtered)
+    pagination: dict[str, Any] = build_pagination_metadata(
+        page=normalized_page,
+        page_size=limit,
+        total_elements=total_available,
+        has_more=bool(has_more),
+        # Legacy aliases retained for backwards-compat (#52).
+        extra={
+            "current_page": normalized_page,
+            "limit": limit,
+            "returned_count": len(preview),
+            "returned_count_raw": returned_count_raw,
+            "next_page": next_page,
+            "previous_page": previous_page,
+            "total_count": total_available,
+            "filtered_count": len(filtered),
+        },
+    )
 
     suggested_next_call: dict[str, Any] | None = None
     if has_more and normalized_page is not None:
@@ -722,6 +726,9 @@ async def describe_policy_run_result(
         "pagination": pagination_meta,
     }
 
+    upstream_page = pagination_meta.get("current_page") if pagination_meta else None
+    upstream_limit = pagination_meta.get("limit") if pagination_meta else limit
+    upstream_total = pagination_meta.get("total_count") if pagination_meta else None
     metadata: dict[str, Any] = {
         "deprecated_endpoint": False,
         "org_uuid": str(org_uuid),
@@ -729,9 +736,16 @@ async def describe_policy_run_result(
         "exec_token": str(exec_token),
         "result_count": len(device_results),
         "status_breakdown": dict(status_counter),
-        "page": pagination_meta.get("current_page") if pagination_meta else None,
-        "limit": pagination_meta.get("limit") if pagination_meta else limit,
-        "total_count": pagination_meta.get("total_count") if pagination_meta else None,
+        # Legacy fields retained for backwards-compat (#52). Canonical
+        # pagination block lives under metadata.pagination.
+        "page": upstream_page,
+        "limit": upstream_limit,
+        "total_count": upstream_total,
+        "pagination": build_pagination_metadata(
+            page=upstream_page if isinstance(upstream_page, int) else None,
+            page_size=upstream_limit if isinstance(upstream_limit, int) else None,
+            total_elements=upstream_total if isinstance(upstream_total, int) else None,
+        ),
     }
 
     if requested_status is not None:

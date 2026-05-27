@@ -7,6 +7,7 @@ from typing import Any
 
 from ..client import AutomoxClient
 from ..utils import resolve_org_uuid
+from ..utils.response import build_pagination_metadata
 from ..utils.response import extract_list as _extract_list
 
 
@@ -191,20 +192,28 @@ async def get_device_assignments(
                     return value
             return None
 
-        pagination = {
-            "page": response.get("number"),
-            "page_size": response.get("size"),
-            "total_elements": _first_present(
-                response.get("total_elements"), response.get("totalElements")
-            ),
-            "total_pages": _first_present(response.get("total_pages"), response.get("totalPages")),
-            "first": response.get("first"),
-            "last": response.get("last"),
-            "page_number": _first_present(pageable.get("page_number"), pageable.get("pageNumber")),
-            "offset": pageable.get("offset"),
-            "sort": sort_block,
-        }
-        pagination = {k: v for k, v in pagination.items() if v is not None}
+        total_elements = _first_present(
+            response.get("total_elements"), response.get("totalElements")
+        )
+        total_pages = _first_present(response.get("total_pages"), response.get("totalPages"))
+        is_last = response.get("last")
+        pagination = build_pagination_metadata(
+            page=response.get("number"),
+            page_size=response.get("size"),
+            total_elements=total_elements,
+            total_pages=total_pages,
+            has_more=(not is_last) if is_last is not None else None,
+            extra={
+                "first": response.get("first"),
+                "last": is_last,
+                "page_number": _first_present(
+                    pageable.get("page_number"), pageable.get("pageNumber")
+                ),
+                "offset": pageable.get("offset"),
+                "sort": sort_block,
+            },
+        )
+        pagination = pagination or None
     else:
         assignments = _extract_list(response)
 

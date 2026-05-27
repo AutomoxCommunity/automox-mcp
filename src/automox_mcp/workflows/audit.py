@@ -13,6 +13,7 @@ from pydantic import EmailStr, TypeAdapter, ValidationError
 
 from ..client import AutomoxAPIError, AutomoxClient
 from ..utils import resolve_org_uuid
+from ..utils.response import build_pagination_metadata
 from ..utils.tooling import SENSITIVE_KEYWORDS, _redact_sensitive_fields
 
 _EMAIL_VALIDATOR: TypeAdapter[EmailStr] = TypeAdapter(EmailStr)
@@ -792,6 +793,8 @@ async def audit_trail_user_activity(
         "org_id": org_id,
         "org_uuid": resolved_org_uuid,
         "date": query_date,
+        # Legacy cursor fields retained for backwards-compat (#52). The
+        # canonical pagination block lives under metadata.pagination.
         "cursor": cursor,
         "next_cursor": next_cursor,
         "last_event_cursor": last_filtered_cursor,
@@ -799,6 +802,12 @@ async def audit_trail_user_activity(
         "events_seen": api_result_count if isinstance(api_result_count, int) else len(events),
         "events_returned": len(filtered_events),
         "applied_filters": applied_filters,
+        "pagination": build_pagination_metadata(
+            page_size=limit,
+            total_elements=api_result_count if isinstance(api_result_count, int) else None,
+            has_more=bool(next_cursor),
+            next_cursor=next_cursor,
+        ),
     }
     # When an actor filter is applied, the upstream audit API returns
     # org-wide events and we filter them client-side. If this page had

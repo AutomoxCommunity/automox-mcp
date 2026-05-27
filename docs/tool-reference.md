@@ -216,6 +216,36 @@ Per the Anthropic MCP Directory Policy, every tool has at least one of `readOnly
 
 ---
 
+## Pagination
+
+Every tool that returns multiple records exposes pagination state under a single canonical key:
+
+```json
+{
+  "metadata": {
+    "pagination": {
+      "page": 0,
+      "page_size": 25,
+      "total_elements": 100,
+      "total_pages": 4,
+      "has_more": true,
+      "next_cursor": "..."
+    }
+  }
+}
+```
+
+Fields are emitted only when applicable to the tool's pagination style:
+
+- **Offset pagination** (`policy_catalog`, `policy_runs_v2` filtered path, `search_policy_windows`, `get_device_assignments`, `policy_run_results`): `page`, `page_size`, `total_elements`, `total_pages`, `has_more`.
+- **Cursor pagination** (`audit_trail_user_activity`, `audit_events_ocsf`, `list_webhooks`): `page_size`, `has_more`, `next_cursor`.
+
+A generic pagination loop can therefore read `metadata.pagination.has_more` and either increment `page` or pass `metadata.pagination.next_cursor` to the next call without per-tool special-cases.
+
+**Legacy aliases retained for backwards-compat:** Some tools also still emit `metadata.current_page`, `metadata.total_count`, `metadata.limit`, `data.total_elements`, `data.total_pages`, `data.next_cursor`, `metadata.next_cursor`, and `metadata.last_event_cursor` at their pre-#52 locations. These are aliases; prefer the canonical `metadata.pagination` block in new code.
+
+---
+
 ## Tool Parameters
 
 Most tools accept optional parameters for filtering and pagination:

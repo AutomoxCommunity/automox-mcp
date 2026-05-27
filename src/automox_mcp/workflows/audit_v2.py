@@ -13,6 +13,7 @@ from uuid import UUID
 
 from ..client import AutomoxClient
 from ..utils import resolve_org_uuid
+from ..utils.response import build_pagination_metadata
 
 
 def _summarize_ocsf_event(event: Mapping[str, Any]) -> dict[str, Any]:
@@ -155,7 +156,14 @@ async def audit_events_ocsf(
         },
         "metadata": {
             "deprecated_endpoint": False,
+            # Legacy alias retained for backwards-compat (#52). The canonical
+            # location is metadata.pagination.next_cursor.
             "next_cursor": next_cursor,
+            "pagination": build_pagination_metadata(
+                page_size=limit,
+                has_more=bool(next_cursor),
+                next_cursor=next_cursor,
+            ),
             "events_before_filter": len(events),
             "applied_filters": {
                 "category_name": category_name,

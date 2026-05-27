@@ -5,6 +5,12 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.29] - 2026-05-27
+
+### Fixed
+
+- **`get_noncompliant_report` dropped devices past the first page (#68)** — The pagination loop terminated when `len(device_list) >= summary["total"]`. A live-tenant probe (138 devices, page size 10) confirmed that `summary["total"]` on `/reports/needs-attention` is the **per-page device count**, not a total-fleet count — every page reported `total: 10`. With the workflow's hardcoded page size of 500, any tenant with more than 500 non-compliant devices would receive only the first 500 silently. Removed the early-break and rely on empty-page termination (the same pattern `get_prepatch_report` already documents). Also fixed `data.total_devices` to use the accumulated device count instead of `summary["total"]`. A regression test exercises the auto-pagination path with two full-sized pages.
+
 ## [1.0.28] - 2026-05-27
 
 ### Fixed

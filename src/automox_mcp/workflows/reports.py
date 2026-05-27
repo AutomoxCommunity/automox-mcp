@@ -263,10 +263,13 @@ async def get_noncompliant_report(
         if single_page:
             break
 
-        total = summary.get("total")
+        # Note: summary["total"] on /reports/needs-attention reports the
+        # **per-page device count** (probed against a live tenant for #68 —
+        # tenant had 138 devices; with limit=10, summary["total"] was 10 on
+        # every page). It is NOT a total-device count and must NOT be used to
+        # terminate pagination — doing so would break after the first page.
+        # Mirrors the sibling warning in get_prepatch_report above.
         if not page_devices:
-            break
-        if total is not None and len(device_list) >= total:
             break
 
         params["offset"] = params["offset"] + page_size
@@ -295,7 +298,10 @@ async def get_noncompliant_report(
 
     return {
         "data": {
-            "total_devices": summary.get("total") or len(devices),
+            # Use the actual accumulated device count, not summary["total"] —
+            # see the per-page-count caveat above. summary["total"] would
+            # report ~limit on tenants with more devices than fit in one page.
+            "total_devices": len(devices),
             "summary": summary,
             "devices": devices,
         },

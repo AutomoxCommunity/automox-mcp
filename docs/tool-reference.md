@@ -126,7 +126,7 @@ Manage vulnerability remediation workflows via the Vuln Sync API. Supports CSV-b
 
 ## Compound Workflows (3 tools)
 
-- **`get_patch_tuesday_readiness`** - Combined view of pre-patch report, pending approvals, and patch policy schedules. Answers "Are we ready for Patch Tuesday?" in a single call. Includes per-device severity classification computed from CVE data.
+- **`get_patch_tuesday_readiness`** - Combined view of pre-patch report, pending approvals, and patch policy schedules. Answers "Are we ready for Patch Tuesday?" in a single call. Includes per-device severity classification computed from CVE data. Each inner list is capped at `detail_limit` (default 10); see the **Compound tools** section under [Pagination](#pagination) for the `metadata.section_summaries` shape and how to fetch the full data via the linked detail tools.
 - **`get_compliance_snapshot`** - Combined view of non-compliant devices, fleet health metrics, and policy statistics. Answers "What is our compliance posture?" in a single call. Includes compliance rate, device health breakdown, and stale device detection.
 - **`get_device_full_profile`** - Complete device profile combining device detail, inventory summary, packages, and policy assignments in a single call. Inventory is summarized with key values per category; packages capped at 25 by default. Metadata includes per-section status, data completeness flag, and item counts for verification.
 
@@ -243,6 +243,34 @@ Fields are emitted only when applicable to the tool's pagination style:
 A generic pagination loop can therefore read `metadata.pagination.has_more` and either increment `page` or pass `metadata.pagination.next_cursor` to the next call without per-tool special-cases.
 
 **Legacy aliases retained for backwards-compat:** Some tools also still emit `metadata.current_page`, `metadata.total_count`, `metadata.limit`, `data.total_elements`, `data.total_pages`, `data.next_cursor`, `metadata.next_cursor`, and `metadata.last_event_cursor` at their pre-#52 locations. These are aliases; prefer the canonical `metadata.pagination` block in new code.
+
+### Compound tools
+
+Compound tools (`get_patch_tuesday_readiness`, `get_compliance_snapshot`, `get_device_full_profile`) fold several upstream calls into a single response. Each inner list (e.g. `prepatch_report.devices`, `patch_approvals.approvals`, `patch_policy_schedules`) is capped at a `detail_limit` parameter (default 10) so the response fits the token budget on tenants of any size. Counts and aggregates are always returned in full.
+
+When a section is truncated, the response surfaces a per-section entry under `metadata.section_summaries`:
+
+```json
+{
+  "metadata": {
+    "detail_limit": 10,
+    "section_summaries": {
+      "prepatch_report.devices": {
+        "total": 230,
+        "returned": 10,
+        "has_more": true,
+        "follow_up_tool": "get_prepatch_report",
+        "follow_up_args_hint": {"group_id": 42}
+      }
+    },
+    "notes": [
+      "prepatch_report.devices capped at 10 of 230 — call `get_prepatch_report` for the full set."
+    ]
+  }
+}
+```
+
+`detail_limit=0` returns counts only (pure-summary mode); the previews are empty and `section_summaries` describes everything that was omitted. To pull the full data for a specific section, call the `follow_up_tool` named in its entry — those tools paginate normally via the canonical `metadata.pagination` block.
 
 ---
 

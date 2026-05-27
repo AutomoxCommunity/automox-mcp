@@ -781,6 +781,17 @@ class DeviceByUuidParams(ForbidExtraModel):
 class PatchTuesdayReadinessParams(OrgIdRequiredMixin, ForbidExtraModel):
     group_id: int | None = Field(None, ge=1, description="Restrict to a specific server group")
     org_uuid: str | None = Field(None, description="Organization UUID (auto-resolved)")
+    detail_limit: int = Field(
+        10,
+        ge=0,
+        le=200,
+        description=(
+            "Cap each inner list (devices, approvals, patch policy schedules) at "
+            "this size. 0 returns counts only — useful for a pure summary. Truncated "
+            "sections surface `metadata.section_summaries.<key>` with the total, "
+            "returned count, and the detail tool to call for the rest."
+        ),
+    )
 
 
 class ComplianceSnapshotParams(OrgIdRequiredMixin, ForbidExtraModel):

@@ -32,10 +32,18 @@ async def get_patch_tuesday_readiness(
     org_id: int,
     org_uuid: str,
     group_id: int | None = None,
+    detail_limit: int = 10,
 ) -> dict[str, Any]:
     """Combine pre-patch report, pending approvals, and policy schedules into one view.
 
     Answers: "Are we ready for Patch Tuesday?"
+
+    Each inner list is capped at ``detail_limit`` (default 10) so the response
+    fits the token budget on tenants of any size. Counts and aggregates are
+    always returned in full; sections that exceed the cap surface a
+    ``metadata.section_summaries.<key>`` entry with ``total``, ``returned``,
+    ``has_more``, and a ``follow_up_tool``/``follow_up_args_hint`` pointing
+    at the underlying detail tool (#53 compound contract).
     """
     raw_results = await asyncio.gather(
         reports.get_prepatch_report(client, org_id=org_id, group_id=group_id),
@@ -74,29 +82,94 @@ async def get_patch_tuesday_readiness(
             if isinstance(a, Mapping) and a.get("status") in ("pending", "Pending")
         )
 
+    prepatch_devices_full = prepatch_data.get("devices") or []
+    approval_items_full = approval_items if isinstance(approval_items, list) else []
+    patch_policy_entries_full = [
+        {
+            "id": p.get("policy_id"),
+            "name": p.get("name"),
+            "status": p.get("status"),
+            "schedule_days": p.get("schedule_days"),
+            "schedule_time": p.get("schedule_time"),
+            "next_run": p.get("next_run"),
+            "server_groups": p.get("server_groups"),
+        }
+        for p in patch_policies
+    ]
+
+    prepatch_devices_preview = prepatch_devices_full[:detail_limit]
+    approvals_preview = approval_items_full[:detail_limit]
+    patch_policy_schedules_preview = patch_policy_entries_full[:detail_limit]
+
+    follow_up_hint = {"group_id": group_id} if group_id is not None else {}
+    section_summaries: dict[str, Any] = {}
+
+    def _record(
+        section_key: str,
+        full: list[Any],
+        preview: list[Any],
+        follow_up_tool: str,
+        args_hint: dict[str, Any],
+    ) -> None:
+        if len(full) > len(preview):
+            section_summaries[section_key] = {
+                "total": len(full),
+                "returned": len(preview),
+                "has_more": True,
+                "follow_up_tool": follow_up_tool,
+                "follow_up_args_hint": args_hint,
+            }
+
+    _record(
+        "prepatch_report.devices",
+        prepatch_devices_full,
+        prepatch_devices_preview,
+        "get_prepatch_report",
+        follow_up_hint,
+    )
+    _record(
+        "patch_approvals.approvals",
+        approval_items_full,
+        approvals_preview,
+        "patch_approvals_summary",
+        {},
+    )
+    _record(
+        "patch_policy_schedules",
+        patch_policy_entries_full,
+        patch_policy_schedules_preview,
+        "policy_catalog",
+        # The detail tool returns all policies; the caller filters by
+        # type=patch client-side (no native type filter today).
+        {"include_inactive": False, "limit": 200},
+    )
+
+    metadata: dict[str, Any] = {
+        "errors": errors if errors else None,
+        "detail_limit": detail_limit,
+    }
+    if section_summaries:
+        metadata["section_summaries"] = section_summaries
+        metadata["notes"] = [
+            (
+                f"{key} capped at {detail_limit} of {info['total']} — call "
+                f"`{info['follow_up_tool']}` for the full set."
+            )
+            for key, info in section_summaries.items()
+        ]
+
     return {
         "data": {
             "prepatch_report": {
                 "total_devices_needing_patches": prepatch_data.get("total_devices", 0),
                 "summary": prepatch_data.get("summary", {}),
-                "devices": prepatch_data.get("devices", []),
+                "devices": prepatch_devices_preview,
             },
             "patch_approvals": {
                 "pending_count": pending_approval_count,
-                "approvals": approval_items,
+                "approvals": approvals_preview,
             },
-            "patch_policy_schedules": [
-                {
-                    "id": p.get("policy_id"),
-                    "name": p.get("name"),
-                    "status": p.get("status"),
-                    "schedule_days": p.get("schedule_days"),
-                    "schedule_time": p.get("schedule_time"),
-                    "next_run": p.get("next_run"),
-                    "server_groups": p.get("server_groups"),
-                }
-                for p in patch_policies
-            ],
+            "patch_policy_schedules": patch_policy_schedules_preview,
             "readiness_summary": {
                 "devices_needing_patches": prepatch_data.get("total_devices", 0),
                 "pending_approvals": pending_approval_count,
@@ -107,9 +180,7 @@ async def get_patch_tuesday_readiness(
                 ),
             },
         },
-        "metadata": {
-            "errors": errors if errors else None,
-        },
+        "metadata": metadata,
     }
 
 

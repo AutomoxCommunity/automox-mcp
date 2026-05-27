@@ -239,6 +239,164 @@ async def test_patch_tuesday_readiness_handles_partial_failures() -> None:
 
 
 @pytest.mark.asyncio
+async def test_patch_tuesday_readiness_caps_inner_lists_at_detail_limit() -> None:
+    """#53 contract: each inner list is capped at detail_limit; truncated
+    sections surface metadata.section_summaries with follow-up tool hints."""
+    # 30 prepatch devices, 30 approvals, 30 patch policies — well over the
+    # default detail_limit=10.
+    devices_payload = {
+        "prepatch": {
+            "devices": [
+                {"id": i, "name": f"host-{i}", "patches": [{"severity": "high"}] * 3}
+                for i in range(30)
+            ],
+            "total": 30,
+        }
+    }
+    approvals_payload = [
+        {
+            "id": i,
+            "title": f"Approval {i}",
+            "status": "pending",
+            "severity": "high",
+            "device_count": 1,
+        }
+        for i in range(30)
+    ]
+    policies_payload = [
+        {
+            "id": 1000 + i,
+            "name": f"Patch Policy {i}",
+            "policy_type_name": "patch",
+            "status": "active",
+            "schedule_days": 124,
+            "schedule_time": "02:00",
+        }
+        for i in range(30)
+    ]
+    client = StubClient(
+        get_responses={
+            "/reports/prepatch": [devices_payload],
+            "/approvals": [approvals_payload],
+            "/policies": [policies_payload],
+            "/policystats": [[]],
+        }
+    )
+    client.org_id = 555
+
+    result = await get_patch_tuesday_readiness(
+        cast(AutomoxClient, client),
+        org_id=555,
+        org_uuid="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        detail_limit=10,
+    )
+
+    data = result["data"]
+    # Each preview is capped.
+    assert len(data["prepatch_report"]["devices"]) == 10
+    assert len(data["patch_approvals"]["approvals"]) == 10
+    assert len(data["patch_policy_schedules"]) == 10
+
+    # Counts remain accurate.
+    assert data["prepatch_report"]["total_devices_needing_patches"] == 30
+    assert data["readiness_summary"]["devices_needing_patches"] == 30
+
+    # Section summaries surface the truncation + follow-up tool.
+    summaries = result["metadata"]["section_summaries"]
+    assert summaries["prepatch_report.devices"] == {
+        "total": 30,
+        "returned": 10,
+        "has_more": True,
+        "follow_up_tool": "get_prepatch_report",
+        "follow_up_args_hint": {},
+    }
+    assert summaries["patch_approvals.approvals"]["follow_up_tool"] == "patch_approvals_summary"
+    assert summaries["patch_policy_schedules"]["follow_up_tool"] == "policy_catalog"
+
+    # Notes are LLM-friendly hints; one per truncated section.
+    notes = result["metadata"]["notes"]
+    assert len(notes) == 3
+    assert all("call `" in n for n in notes)
+
+
+@pytest.mark.asyncio
+async def test_patch_tuesday_readiness_detail_limit_zero_returns_summary_only() -> None:
+    """detail_limit=0 — pure summary mode. Inner lists are empty but counts and
+    section_summaries describe what was omitted."""
+    devices_payload = {
+        "prepatch": {
+            "devices": [{"id": i, "name": f"host-{i}"} for i in range(5)],
+            "total": 5,
+        }
+    }
+    approvals_payload = [{"id": i, "title": f"A{i}", "status": "pending"} for i in range(5)]
+    policies_payload = [
+        {"id": 1000 + i, "name": f"P{i}", "policy_type_name": "patch", "status": "active"}
+        for i in range(3)
+    ]
+    client = StubClient(
+        get_responses={
+            "/reports/prepatch": [devices_payload],
+            "/approvals": [approvals_payload],
+            "/policies": [policies_payload],
+            "/policystats": [[]],
+        }
+    )
+    client.org_id = 555
+
+    result = await get_patch_tuesday_readiness(
+        cast(AutomoxClient, client),
+        org_id=555,
+        org_uuid="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        detail_limit=0,
+    )
+
+    assert result["data"]["prepatch_report"]["devices"] == []
+    assert result["data"]["patch_approvals"]["approvals"] == []
+    assert result["data"]["patch_policy_schedules"] == []
+    # Counts intact.
+    assert result["data"]["prepatch_report"]["total_devices_needing_patches"] == 5
+    assert result["data"]["patch_approvals"]["pending_count"] == 5
+    # All three sections summarized.
+    assert set(result["metadata"]["section_summaries"]) == {
+        "prepatch_report.devices",
+        "patch_approvals.approvals",
+        "patch_policy_schedules",
+    }
+
+
+@pytest.mark.asyncio
+async def test_patch_tuesday_readiness_no_summary_when_under_limit() -> None:
+    """If a section is already under detail_limit, no truncation metadata for it."""
+    devices_payload = {"prepatch": {"devices": [], "total": 0}}
+    approvals_payload: list[Any] = []
+    policies_payload = [
+        {"id": 1, "name": "P1", "policy_type_name": "patch", "status": "active"},
+        {"id": 2, "name": "P2", "policy_type_name": "patch", "status": "active"},
+    ]
+    client = StubClient(
+        get_responses={
+            "/reports/prepatch": [devices_payload],
+            "/approvals": [approvals_payload],
+            "/policies": [policies_payload],
+            "/policystats": [[]],
+        }
+    )
+    client.org_id = 555
+
+    result = await get_patch_tuesday_readiness(
+        cast(AutomoxClient, client),
+        org_id=555,
+        org_uuid="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        detail_limit=10,
+    )
+
+    # No truncation metadata when everything fits.
+    assert result["metadata"].get("section_summaries") is None
+    assert "notes" not in result["metadata"]
+
+
+@pytest.mark.asyncio
 async def test_patch_tuesday_readiness_no_errors_when_all_succeed() -> None:
     client = _build_readiness_client()
     result = await get_patch_tuesday_readiness(

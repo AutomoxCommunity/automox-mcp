@@ -10,7 +10,6 @@ from automox_mcp.utils.tooling import (
     _IDEMPOTENCY_CACHE,
     IdempotencyCache,
     check_idempotency,
-    release_idempotency,
     store_idempotency,
 )
 
@@ -111,49 +110,3 @@ async def test_global_cache_is_reset_by_conftest():
 async def test_global_cache_is_clean():
     """Verify the fixture from the previous test cleaned up."""
     assert await _IDEMPOTENCY_CACHE.get("leak-test", "tool") is None
-
-
-# ---------------------------------------------------------------------------
-# release_idempotency: failure-path sentinel cleanup
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.asyncio
-async def test_release_clears_inflight_sentinel_so_retry_can_proceed():
-    """A reserved slot must be released on the failure path, otherwise every
-    retry with the same request_id is shadowed by the in-flight sentinel for
-    the full TTL.
-    """
-    # Reserve the slot (simulates check_idempotency entering the body).
-    cached = await check_idempotency("req-fail", "tool_x")
-    assert cached is None  # fresh reservation
-
-    # Simulate workflow failure: release the sentinel before raising.
-    await release_idempotency("req-fail", "tool_x")
-
-    # Next retry must see a clean slate, not the duplicate marker.
-    cached_after = await check_idempotency("req-fail", "tool_x")
-    assert cached_after is None
-
-
-@pytest.mark.asyncio
-async def test_release_does_not_clobber_completed_entry():
-    """If a parallel worker already stored a real response, release() must not
-    erase it — that would defeat the idempotency guarantee.
-    """
-    await check_idempotency("req-done", "tool_x")  # reserve
-    await store_idempotency("req-done", "tool_x", {"data": {"ok": True}})
-
-    await release_idempotency("req-done", "tool_x")
-
-    # The stored response must still be returned to subsequent retries.
-    cached = await check_idempotency("req-done", "tool_x")
-    assert cached == {"data": {"ok": True}}
-
-
-@pytest.mark.asyncio
-async def test_release_with_none_request_id_is_noop():
-    # Mirrors store_idempotency's None-tolerance — callers shouldn't have to
-    # branch on whether request_id was supplied.
-    await release_idempotency(None, "tool_x")
-    await release_idempotency("", "tool_x")

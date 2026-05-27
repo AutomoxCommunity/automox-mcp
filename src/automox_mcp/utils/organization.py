@@ -55,22 +55,15 @@ async def resolve_org_uuid(
             uuid_text = str(explicit_uuid).strip()
             if not uuid_text:
                 raise ValueError("org_uuid cannot be blank")
-            # S-004: Validate UUID format before returning to prevent malformed values.
-            # Do NOT cache caller-supplied UUIDs on client.org_uuid — the client is a
-            # shared singleton across tool invocations, and caching here would let one
-            # tool's explicit_uuid leak into another tool's call for a different org.
+            # S-004: Validate UUID format before caching to prevent malformed values
             UUID(uuid_text)
+            client.org_uuid = uuid_text
             return uuid_text
 
-        resolved_org_id = org_id or client.org_id
-
-        # Only return the cached client.org_uuid when the caller is asking about the
-        # same org the cache was populated for. Otherwise (multi-org API key with
-        # per-call org_id), fall through to a fresh /orgs lookup to avoid returning a
-        # UUID that belongs to a different tenant.
-        if client.org_uuid and (resolved_org_id is None or resolved_org_id == client.org_id):
+        if client.org_uuid:
             return client.org_uuid
 
+        resolved_org_id = org_id or client.org_id
         if resolved_org_id is None:
             if allow_account_uuid and client.account_uuid:
                 account_text = str(client.account_uuid).strip()
@@ -110,11 +103,7 @@ async def resolve_org_uuid(
                 if uuid_text:
                     # Validate UUID format before caching (matches explicit_uuid path)
                     UUID(uuid_text)
-                    # Cache on the client only when the resolved org matches the
-                    # client's configured org_id; otherwise the cache would poison
-                    # subsequent calls that target the configured org.
-                    if resolved_org_id == client.org_id:
-                        client.org_uuid = uuid_text
+                    client.org_uuid = uuid_text
                     return uuid_text
 
         if allow_account_uuid and client.account_uuid:

@@ -1216,10 +1216,6 @@ async def summarize_device_health(
         response_size = None
 
     if response_size and response_size > _MAX_HEALTH_RESPONSE_BYTES:
-        # Mutating metadata in place updates the same dict already referenced
-        # by `response`, so no rebuild or second serialization is needed. The
-        # reported size is pre-truncation-metadata, which is the figure the
-        # caller cares about (it's what triggered truncation).
         metadata["response_truncated"] = True
         _add_followup(
             metadata,
@@ -1231,6 +1227,11 @@ async def summarize_device_health(
             "search_devices",
             "Filter by hostname, tag, or pending patches to focus on specific devices.",
         )
+        response = {"data": data, "metadata": metadata}
+        try:
+            response_size = len(json.dumps(response))
+        except (TypeError, ValueError):
+            response_size = None
 
     if response_size is not None:
         metadata["approx_response_bytes"] = response_size

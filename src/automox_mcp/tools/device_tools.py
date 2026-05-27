@@ -23,7 +23,6 @@ from ..utils.tooling import (
     call_tool_workflow,
     check_idempotency,
     maybe_format_markdown,
-    release_idempotency,
     store_idempotency,
 )
 
@@ -284,16 +283,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "command_type": command_type,
                 "patch_names": patch_names,
             }
-            try:
-                result = await call_tool_workflow(
-                    client,
-                    workflows.issue_device_command,
-                    params,
-                    params_model=IssueDeviceCommandParams,
-                )
-            except BaseException:
-                await release_idempotency(request_id, "execute_device_command")
-                raise
+            result = await call_tool_workflow(
+                client,
+                workflows.issue_device_command,
+                params,
+                params_model=IssueDeviceCommandParams,
+            )
             await store_idempotency(request_id, "execute_device_command", result)
             return result
 

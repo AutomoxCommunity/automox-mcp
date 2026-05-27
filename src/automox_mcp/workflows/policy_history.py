@@ -346,12 +346,7 @@ async def get_policy_history_detail(
     runs: list[dict[str, Any]] = []
     banner_stats: dict[str, Any] = {}
     runs_error: str | None = None
-    if isinstance(runs_response, asyncio.CancelledError):
-        raise runs_response
-    if isinstance(runs_response, BaseException) and not isinstance(runs_response, Exception):
-        # KeyboardInterrupt / SystemExit — propagate, do not swallow.
-        raise runs_response
-    if isinstance(runs_response, Exception):
+    if isinstance(runs_response, BaseException):
         # The runs sub-call is best-effort; preserve detail even when it fails.
         runs_error = f"{type(runs_response).__name__}: {runs_response}"
     elif isinstance(runs_response, Mapping):

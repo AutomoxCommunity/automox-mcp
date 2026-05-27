@@ -27,7 +27,6 @@ from ..utils.tooling import (
     call_tool_workflow,
     check_idempotency,
     maybe_format_markdown,
-    release_idempotency,
     store_idempotency,
 )
 
@@ -273,16 +272,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "decision": decision,
                 "notes": notes,
             }
-            try:
-                result = await call_tool_workflow(
-                    client,
-                    workflows.resolve_patch_approval,
-                    params,
-                    params_model=PatchApprovalDecisionParams,
-                )
-            except BaseException:
-                await release_idempotency(request_id, "decide_patch_approval")
-                raise
+            result = await call_tool_workflow(
+                client,
+                workflows.resolve_patch_approval,
+                params,
+                params_model=PatchApprovalDecisionParams,
+            )
             await store_idempotency(request_id, "decide_patch_approval", result)
             return result
 
@@ -305,16 +300,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 return cached
 
             params = {"policy_id": policy_id}
-            try:
-                result = await call_tool_workflow(
-                    client,
-                    workflows.delete_policy,
-                    params,
-                    params_model=DeletePolicyToolParams,
-                )
-            except BaseException:
-                await release_idempotency(request_id, "delete_policy")
-                raise
+            result = await call_tool_workflow(
+                client,
+                workflows.delete_policy,
+                params,
+                params_model=DeletePolicyToolParams,
+            )
             await store_idempotency(request_id, "delete_policy", result)
             return result
 
@@ -346,16 +337,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 params["name"] = name
             if server_groups is not None:
                 params["server_groups"] = server_groups
-            try:
-                result = await call_tool_workflow(
-                    client,
-                    workflows.clone_policy,
-                    params,
-                    params_model=ClonePolicyParams,
-                )
-            except BaseException:
-                await release_idempotency(request_id, "clone_policy")
-                raise
+            result = await call_tool_workflow(
+                client,
+                workflows.clone_policy,
+                params,
+                params_model=ClonePolicyParams,
+            )
             await store_idempotency(request_id, "clone_policy", result)
             return result
 
@@ -383,16 +370,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "operations": normalized_operations,
                 "preview": preview,
             }
-            try:
-                result = await call_tool_workflow(
-                    client,
-                    workflows.apply_policy_changes,
-                    params,
-                    params_model=PolicyChangeRequestParams,
-                )
-            except BaseException:
-                await release_idempotency(request_id, "apply_policy_changes")
-                raise
+            result = await call_tool_workflow(
+                client,
+                workflows.apply_policy_changes,
+                params,
+                params_model=PolicyChangeRequestParams,
+            )
             await store_idempotency(request_id, "apply_policy_changes", result)
             return result
 
@@ -424,16 +407,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "action": action,
                 "device_id": device_id,
             }
-            try:
-                result = await call_tool_workflow(
-                    client,
-                    workflows.execute_policy,
-                    params,
-                    params_model=ExecutePolicyParams,
-                )
-            except BaseException:
-                await release_idempotency(request_id, "execute_policy_now")
-                raise
+            result = await call_tool_workflow(
+                client,
+                workflows.execute_policy,
+                params,
+                params_model=ExecutePolicyParams,
+            )
             await store_idempotency(request_id, "execute_policy_now", result)
             return result
 

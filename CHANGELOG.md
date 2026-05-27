@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- **Bump `idna` floor to 3.15 (CVE-2026-45409)** — `idna.encode()` could consume disproportionate CPU on arbitrarily long inputs (`"٠" * N`, `"・" * N + "漢"`), enabling a DoS. The original 2024 fix (CVE-2024-3651) was incomplete; the 3.15 fix extends the early length-rejection to lesser-used per-label conversions and codec helpers. Constrained via `tool.uv.constraint-dependencies`. (Closes the same CVE that dependabot PR #58 addressed; that PR can be closed once this lands.)
 - **Bump `starlette` floor to 1.0.1 (PYSEC-2026-161)** — Starlette reconstructed the requested URL from the HTTP `Host` header without validating its value, allowing path injection into the host portion. Routing still uses the actual request path, so the inconsistency can lead to authentication bypass when auth depends on the reconstructed URL. Constrained via `tool.uv.constraint-dependencies` (alongside the existing `urllib3` floor). Affects the HTTP/SSE transport path; stdio transport is unaffected.
 
 ## [1.0.23] - 2026-05-07

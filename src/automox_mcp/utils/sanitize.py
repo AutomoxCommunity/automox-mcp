@@ -62,6 +62,22 @@ _DANGEROUS_TAGS = frozenset({"script", "style"})
 _DANGEROUS_PROTOCOL_RE = re.compile(r"^\s*(?:javascript|data):", re.IGNORECASE)
 _EVENT_HANDLER_RE = re.compile(r"^on\w+$", re.IGNORECASE)
 
+# Fast-path triggers: any string containing one of these chars MIGHT match a
+# downstream regex, so we run the full pipeline. ASCII strings containing none
+# of these characters cannot match any of our markdown/HTML/code-block regexes
+# and skip straight to the instruction-prefix check.
+_SANITIZE_TRIGGER_CHARS: frozenset[str] = frozenset("[!`<​‌‍‎‏﻿­⁠⁡⁢⁣⁤᠎")
+
+# Cheap prefix probe — matches the start of *any line* that might contain an
+# instruction prefix. Multi-line aware so the fast-path doesn't miss a prefix
+# on line 2+ of a notes/description field. The keyword regex is the full
+# alternation; this probe just checks the first letter so we skip strings
+# that can't possibly match (the vast majority of API values: UUIDs,
+# statuses, numeric strings).
+_INSTRUCTION_PREFIX_PROBE = re.compile(
+    r"^\s*(?:I|S|O|A|C|D|F|N|P|U|R|W|Y|<)", re.IGNORECASE | re.MULTILINE
+)
+
 
 class _HTMLTextExtractor(HTMLParser):
     """Extract safe text from HTML, dropping tags and dangerous content."""
@@ -199,6 +215,19 @@ def sanitize_for_llm(text: str, *, field_name: str | None = None) -> str:
     """
     if not text:
         return text
+
+    # Fast-path: short ASCII strings with no markdown/HTML/zero-width triggers
+    # can only ever match the instruction-prefix regex. A cheap leading-char
+    # probe filters out almost every API value (UUIDs, statuses, timestamps,
+    # numeric strings) before any of the ~8 substitution passes below. Saves a
+    # significant fraction of total request time on large list responses where
+    # most strings are short identifiers.
+    if text.isascii() and not any(c in text for c in _SANITIZE_TRIGGER_CHARS):
+        apply_prefix_strip = field_name is None or (
+            field_name.lower() not in _PRESERVE_PREFIX_FIELDS
+        )
+        if not apply_prefix_strip or not _INSTRUCTION_PREFIX_PROBE.search(text):
+            return text
 
     original = text
 

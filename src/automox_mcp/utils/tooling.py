@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import copy
 import json
 import logging
 import os
@@ -163,6 +162,21 @@ class IdempotencyCache:
             key = (request_id, tool_name)
             self._cache[key] = (response, time.monotonic() + self._ttl)
 
+    async def release(self, request_id: str, tool_name: str) -> None:
+        """Release an in-flight reservation without storing a response.
+
+        Used on the failure path of a write tool so that the next retry with the
+        same ``request_id`` can proceed instead of being shadowed by the in-flight
+        sentinel for the cache TTL. Only clears the slot if it is still holding
+        the sentinel — a completed entry (a successful store from a parallel
+        worker) is preserved.
+        """
+        async with self._lock:
+            key = (request_id, tool_name)
+            entry = self._cache.get(key)
+            if entry is not None and entry[0] == _SENTINEL_IN_FLIGHT:
+                del self._cache[key]
+
     def _evict_expired(self) -> None:
         now = time.monotonic()
         expired = [k for k, (_, exp) in self._cache.items() if now > exp]
@@ -207,6 +221,17 @@ async def store_idempotency(
     if not request_id:
         return
     await _IDEMPOTENCY_CACHE.put(request_id, tool_name, response)
+
+
+async def release_idempotency(request_id: str | None, tool_name: str) -> None:
+    """Release an in-flight reservation when a write tool fails before storing.
+
+    Without this, a transient upstream failure leaves the sentinel in place for
+    the full TTL, locking out every retry that reuses the same ``request_id``.
+    """
+    if not request_id:
+        return
+    await _IDEMPOTENCY_CACHE.release(request_id, tool_name)
 
 
 class RateLimiter:
@@ -327,6 +352,15 @@ def format_error(exc: AutomoxAPIError) -> str:
     safe_payload = _sanitize_error_payload(payload)
     if not safe_payload and payload:
         safe_payload = _redact_sensitive_fields(payload)
+    # Scrub attacker-controlled string values BEFORE JSON serialization. After
+    # json.dumps(indent=2), each value sits behind `  "key": "` on its line, so
+    # the line-anchored instruction-prefix regex no longer matches embedded
+    # injections like `IMPORTANT: ...`. Sanitizing first puts each value at its
+    # own logical line start where the anchor can fire.
+    if is_sanitization_enabled() and safe_payload:
+        from .sanitize import sanitize_dict
+
+        safe_payload = sanitize_dict(safe_payload)
     try:
         payload_block = json.dumps(safe_payload, indent=2, sort_keys=True) if safe_payload else None
     except TypeError:
@@ -381,15 +415,15 @@ def _apply_token_budget(
 ) -> dict[str, Any]:
     """Add a token warning and optionally truncate list data.
 
-    Works on a deep copy to avoid mutating cached data.
+    Mutates ``response_dict`` in place. The sole production caller
+    (``as_tool_response``) always supplies a freshly built dict — there is no
+    cache or shared structure to protect — so the earlier deep copy was wasted
+    work on the largest responses.
     """
     effective_budget = budget if budget is not None else _DEFAULT_TOKEN_BUDGET
     estimated = _estimate_tokens(response_dict)
     if estimated <= effective_budget:
         return response_dict
-
-    # Deep copy to avoid mutating idempotency cache entries
-    response_dict = copy.deepcopy(response_dict)
 
     meta = response_dict.setdefault("metadata", {})
     meta["estimated_tokens"] = estimated

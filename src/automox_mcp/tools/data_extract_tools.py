@@ -17,6 +17,7 @@ from ..utils.tooling import (
     call_tool_workflow,
     check_idempotency,
     maybe_format_markdown,
+    release_idempotency,
     store_idempotency,
 )
 from ..workflows.data_extracts import (
@@ -103,12 +104,16 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             cached = await check_idempotency(request_id, "create_data_extract")
             if cached is not None:
                 return cached
-            result = await call_tool_workflow(
-                client,
-                _create_data_extract,
-                {"extract_data": extract_data},
-                params_model=CreateDataExtractParams,
-            )
+            try:
+                result = await call_tool_workflow(
+                    client,
+                    _create_data_extract,
+                    {"extract_data": extract_data},
+                    params_model=CreateDataExtractParams,
+                )
+            except BaseException:
+                await release_idempotency(request_id, "create_data_extract")
+                raise
             await store_idempotency(request_id, "create_data_extract", result)
             return result
 

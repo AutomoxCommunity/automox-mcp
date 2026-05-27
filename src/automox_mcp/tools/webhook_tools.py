@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import concurrent.futures
+import asyncio
 import ipaddress
 import logging
 import socket
@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 from uuid import UUID
 
 from fastmcp import FastMCP
+from fastmcp.exceptions import ToolError
 from pydantic import Field, model_validator
 
 from .. import workflows
@@ -20,6 +21,7 @@ from ..utils.tooling import (
     call_tool_workflow,
     check_idempotency,
     maybe_format_markdown,
+    release_idempotency,
     store_idempotency,
 )
 
@@ -35,8 +37,32 @@ _BLOCKED_HOSTS: frozenset[str] = frozenset(
 )
 
 
-def _validate_webhook_url(url: str) -> None:
-    """Validate a webhook URL: HTTPS, no userinfo, no private/internal IPs."""
+_PRIVATE_ADDR_REJECTION = (
+    "Webhook URL must not target private, loopback, link-local, multicast, or unspecified addresses"
+)
+
+
+def _addr_is_private(addr: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    return bool(
+        addr.is_private
+        or addr.is_loopback
+        or addr.is_link_local
+        or addr.is_reserved
+        or addr.is_multicast
+        or addr.is_unspecified
+    )
+
+
+def _validate_webhook_url_sync(url: str) -> str | None:
+    """Synchronous webhook URL validation — scheme, userinfo, bare-IP, hostname.
+
+    Returns the hostname for the async DNS pass to resolve, or ``None`` if the
+    URL targets a bare public IP (no DNS required).
+
+    DNS lookup deliberately lives in a separate async function because Pydantic
+    validators must be synchronous; blocking on DNS here would stall the entire
+    asyncio event loop for every concurrent tool call (S-1).
+    """
     parsed = urlparse(url)
     if parsed.scheme.lower() != "https" or not parsed.hostname:
         raise ValueError(
@@ -44,66 +70,60 @@ def _validate_webhook_url(url: str) -> None:
         )
     if "@" in (parsed.netloc or ""):
         raise ValueError("Webhook URL must not contain userinfo (user:pass@host)")
-    # Block private, loopback, and link-local IP addresses to prevent SSRF relay
     hostname = parsed.hostname
     # Strip trailing dot from FQDN to prevent blocklist bypass
     hostname_normalized = hostname.rstrip(".")
     try:
         addr = ipaddress.ip_address(hostname)
-        if (
-            addr.is_private
-            or addr.is_loopback
-            or addr.is_link_local
-            or addr.is_reserved
-            or addr.is_multicast
-            or addr.is_unspecified
-        ):
-            raise ValueError(
-                "Webhook URL must not target private, loopback, link-local, "
-                "multicast, or unspecified addresses"
-            )
-    except ValueError as exc:
-        if "must not target" in str(exc):
-            raise
-        # Not a bare IP — perform best-effort DNS resolution to catch hostnames
-        # that resolve to private/internal IPs (V-126: SSRF defense-in-depth)
-        # V-150: Run DNS resolution in a thread pool to avoid blocking the
-        # async event loop (was freezing all concurrent operations for up to 3s).
-        try:
-
-            def _resolve_with_timeout() -> list[Any]:
-                _prev_timeout = socket.getdefaulttimeout()
-                socket.setdefaulttimeout(3.0)
-                try:
-                    return socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
-                finally:
-                    socket.setdefaulttimeout(_prev_timeout)
-
-            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(_resolve_with_timeout)
-                resolved = future.result(timeout=5.0)
-            for _family, _type, _proto, _canonname, sockaddr in resolved:
-                resolved_addr = ipaddress.ip_address(sockaddr[0])
-                if (
-                    resolved_addr.is_private
-                    or resolved_addr.is_loopback
-                    or resolved_addr.is_link_local
-                    or resolved_addr.is_reserved
-                    or resolved_addr.is_multicast
-                    or resolved_addr.is_unspecified
-                ):
-                    raise ValueError("Webhook URL hostname resolves to a private/internal address")
-        except (socket.gaierror, OSError, concurrent.futures.TimeoutError):
-            # DNS resolution failed or timed out — reject by default (fail-closed).
-            # S-001: TOCTOU risk remains between validation and delivery.
-            raise ValueError(
-                "Webhook URL hostname could not be resolved via DNS. "
-                "Ensure the hostname is publicly resolvable."
-            ) from None
-    # Block well-known cloud metadata endpoints by hostname (using normalized name)
+    except ValueError:
+        addr = None
+    if addr is not None:
+        if _addr_is_private(addr):
+            raise ValueError(_PRIVATE_ADDR_REJECTION)
+        # Bare public IP — DNS resolution would be a no-op.
+        return None
     lower_host = hostname_normalized.lower()
     if lower_host in _BLOCKED_HOSTS or lower_host.endswith(".internal"):
         raise ValueError("Webhook URL must not target cloud metadata endpoints")
+    return hostname
+
+
+async def _validate_webhook_url_dns(url: str) -> None:
+    """Async DNS-level webhook URL validation for SSRF defense.
+
+    Resolves the hostname via the event loop's async ``getaddrinfo`` (which
+    delegates to a worker thread without blocking the loop) and rejects URLs
+    that resolve to any private/internal address. Called from tool wrappers
+    *after* sync structural validation has already passed.
+    """
+    hostname = _validate_webhook_url_sync(url)
+    if hostname is None:
+        return
+    loop = asyncio.get_event_loop()
+    try:
+        resolved = await asyncio.wait_for(
+            loop.getaddrinfo(hostname, None, family=socket.AF_UNSPEC, type=socket.SOCK_STREAM),
+            timeout=5.0,
+        )
+    except (TimeoutError, socket.gaierror, OSError) as exc:
+        # S-001: TOCTOU risk remains between validation and delivery.
+        raise ValueError(
+            "Webhook URL hostname could not be resolved via DNS. "
+            "Ensure the hostname is publicly resolvable."
+        ) from exc
+    for _family, _type, _proto, _canonname, sockaddr in resolved:
+        resolved_addr = ipaddress.ip_address(sockaddr[0])
+        if _addr_is_private(resolved_addr):
+            raise ValueError("Webhook URL hostname resolves to a private/internal address")
+
+
+def _validate_webhook_url(url: str) -> None:
+    """Backwards-compatible wrapper performing only sync validation.
+
+    The DNS check now happens in :func:`_validate_webhook_url_dns`, called from
+    the async tool wrapper.
+    """
+    _validate_webhook_url_sync(url)
 
 
 def _strip_secret(result: dict[str, Any]) -> dict[str, Any]:
@@ -307,13 +327,24 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "url": url,
                 "event_types": event_types,
             }
-            result = await call_tool_workflow(
-                client,
-                workflows.create_webhook,
-                params,
-                params_model=CreateWebhookParams,
-                org_uuid_field="org_uuid",
-            )
+            try:
+                # Async SSRF defense — resolves DNS without blocking the event
+                # loop. Sync structural validation runs separately inside the
+                # Pydantic model.
+                try:
+                    await _validate_webhook_url_dns(url)
+                except ValueError as exc:
+                    raise ToolError(str(exc)) from exc
+                result = await call_tool_workflow(
+                    client,
+                    workflows.create_webhook,
+                    params,
+                    params_model=CreateWebhookParams,
+                    org_uuid_field="org_uuid",
+                )
+            except BaseException:
+                await release_idempotency(request_id, "create_webhook")
+                raise
             # Cache without the one-time secret to avoid keeping it in memory.
             cache_safe = _strip_secret(result)
             await store_idempotency(request_id, "create_webhook", cache_safe)
@@ -353,13 +384,22 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "enabled": enabled,
                 "event_types": event_types,
             }
-            result = await call_tool_workflow(
-                client,
-                workflows.update_webhook,
-                params,
-                params_model=UpdateWebhookParams,
-                org_uuid_field="org_uuid",
-            )
+            try:
+                if url is not None:
+                    try:
+                        await _validate_webhook_url_dns(url)
+                    except ValueError as exc:
+                        raise ToolError(str(exc)) from exc
+                result = await call_tool_workflow(
+                    client,
+                    workflows.update_webhook,
+                    params,
+                    params_model=UpdateWebhookParams,
+                    org_uuid_field="org_uuid",
+                )
+            except BaseException:
+                await release_idempotency(request_id, "update_webhook")
+                raise
             await store_idempotency(request_id, "update_webhook", result)
             return result
 
@@ -386,13 +426,17 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "org_uuid": org_uuid,
                 "webhook_id": webhook_id,
             }
-            result = await call_tool_workflow(
-                client,
-                workflows.delete_webhook,
-                params,
-                params_model=DeleteWebhookParams,
-                org_uuid_field="org_uuid",
-            )
+            try:
+                result = await call_tool_workflow(
+                    client,
+                    workflows.delete_webhook,
+                    params,
+                    params_model=DeleteWebhookParams,
+                    org_uuid_field="org_uuid",
+                )
+            except BaseException:
+                await release_idempotency(request_id, "delete_webhook")
+                raise
             await store_idempotency(request_id, "delete_webhook", result)
             return result
 
@@ -422,13 +466,17 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "org_uuid": org_uuid,
                 "webhook_id": webhook_id,
             }
-            result = await call_tool_workflow(
-                client,
-                workflows.test_webhook,
-                params,
-                params_model=TestWebhookParams,
-                org_uuid_field="org_uuid",
-            )
+            try:
+                result = await call_tool_workflow(
+                    client,
+                    workflows.test_webhook,
+                    params,
+                    params_model=TestWebhookParams,
+                    org_uuid_field="org_uuid",
+                )
+            except BaseException:
+                await release_idempotency(request_id, "test_webhook")
+                raise
             await store_idempotency(request_id, "test_webhook", result)
             return result
 
@@ -458,13 +506,17 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "org_uuid": org_uuid,
                 "webhook_id": webhook_id,
             }
-            result = await call_tool_workflow(
-                client,
-                workflows.rotate_webhook_secret,
-                params,
-                params_model=RotateWebhookSecretParams,
-                org_uuid_field="org_uuid",
-            )
+            try:
+                result = await call_tool_workflow(
+                    client,
+                    workflows.rotate_webhook_secret,
+                    params,
+                    params_model=RotateWebhookSecretParams,
+                    org_uuid_field="org_uuid",
+                )
+            except BaseException:
+                await release_idempotency(request_id, "rotate_webhook_secret")
+                raise
             cache_safe = _strip_secret(result)
             await store_idempotency(request_id, "rotate_webhook_secret", cache_safe)
             return result

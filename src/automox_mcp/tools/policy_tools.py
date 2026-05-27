@@ -153,12 +153,14 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         limit: int | None = 20,
         page: int | None = 0,
         include_inactive: bool | None = False,
+        include_stats: bool | None = False,
         output_format: str | None = "json",
     ) -> dict[str, Any]:
         params = {
             "limit": limit,
             "page": page,
             "include_inactive": include_inactive,
+            "include_stats": include_stats,
         }
         result = await call_tool_workflow(
             client,

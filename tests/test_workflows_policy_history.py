@@ -89,22 +89,106 @@ async def test_list_runs_returns_summaries() -> None:
 
 
 @pytest.mark.asyncio
-async def test_list_runs_passes_filters() -> None:
-    client = _make_client(get_responses={"/policy-history/policy-runs": [[]]})
+async def test_list_runs_filters_client_side() -> None:
+    """The upstream policy-report-api silently ignores filter query params,
+    so the workflow fetches a large window and filters locally. The HTTP
+    call must NOT pass the filter params (they would be noise on the
+    wire), and the upstream `limit` is bumped to the pool size."""
+    client = _make_client(get_responses={"/policy-history/policy-runs": [_POLICY_RUNS]})
+    result = await list_policy_runs_v2(
+        cast(AutomoxClient, client),
+        org_id=42,
+        policy_type="patch",
+        limit=10,
+        page=0,
+    )
+
+    _, _path, params = client.calls[0]
+    # Filter params must not be forwarded upstream.
+    assert "policy_type" not in params
+    assert "policy_name" not in params
+    assert "result_status" not in params
+    assert "start_time" not in params
+    # Upstream is asked for the full pool when filtering client-side.
+    assert params["limit"] == 5000
+    # Only the patch run survives the filter.
+    runs = result["data"]["runs"]
+    assert len(runs) == 1
+    assert runs[0]["policy_type"] == "patch"
+    assert result["metadata"]["filter_strategy"] == "client_side"
+    assert result["metadata"]["filters_applied"] == {"policy_type": "patch"}
+    assert result["metadata"]["filtered_count"] == 1
+    assert result["metadata"]["pagination"]["has_more"] is False
+
+
+@pytest.mark.asyncio
+async def test_list_runs_passes_pagination_when_unfiltered() -> None:
+    """Without filters, upstream pagination is honored — page/limit pass through."""
+    client = _make_client(get_responses={"/policy-history/policy-runs": [_POLICY_RUNS]})
     await list_policy_runs_v2(
         cast(AutomoxClient, client),
         org_id=42,
-        start_time="2026-01-01",
-        policy_type="patch",
-        result_status="failure",
-        limit=10,
+        page=2,
+        limit=25,
     )
 
-    _, path, params = client.calls[0]
-    assert params["start_time"] == "2026-01-01"
-    assert params["policy_type"] == "patch"
-    assert params["result_status"] == "failure"
-    assert params["limit"] == 10
+    _, _path, params = client.calls[0]
+    assert params["page"] == 2
+    assert params["limit"] == 25
+
+
+@pytest.mark.asyncio
+async def test_list_runs_filters_by_policy_name_substring() -> None:
+    runs = [
+        {"policy_uuid": "p1", "policy_name": "Patch All Devices", "policy_type": "patch"},
+        {"policy_uuid": "p2", "policy_name": "Custom Worklet", "policy_type": "custom"},
+        {"policy_uuid": "p3", "policy_name": "Patch Linux", "policy_type": "patch"},
+    ]
+    client = _make_client(get_responses={"/policy-history/policy-runs": [runs]})
+    result = await list_policy_runs_v2(
+        cast(AutomoxClient, client),
+        org_id=42,
+        policy_name="patch",
+    )
+    names = sorted(r["policy_name"] for r in result["data"]["runs"])
+    assert names == ["Patch All Devices", "Patch Linux"]
+
+
+@pytest.mark.asyncio
+async def test_list_runs_filters_result_status_by_counter() -> None:
+    """result_status="failed" should include only runs with non-zero `failed`."""
+    runs = [
+        {"policy_uuid": "p1", "policy_name": "A", "failed": 0, "success": 10},
+        {"policy_uuid": "p2", "policy_name": "B", "failed": 3, "success": 7},
+    ]
+    client = _make_client(get_responses={"/policy-history/policy-runs": [runs]})
+    result = await list_policy_runs_v2(
+        cast(AutomoxClient, client),
+        org_id=42,
+        result_status="failed",
+    )
+    assert len(result["data"]["runs"]) == 1
+    assert result["data"]["runs"][0]["policy_uuid"] == "p2"
+
+
+@pytest.mark.asyncio
+async def test_list_runs_client_pagination_slices_filtered_results() -> None:
+    runs = [
+        {"policy_uuid": f"p{i}", "policy_name": f"name-{i}", "policy_type": "custom"}
+        for i in range(25)
+    ]
+    client = _make_client(get_responses={"/policy-history/policy-runs": [runs]})
+    result = await list_policy_runs_v2(
+        cast(AutomoxClient, client),
+        org_id=42,
+        policy_type="custom",
+        limit=10,
+        page=1,
+    )
+    returned = [r["policy_uuid"] for r in result["data"]["runs"]]
+    assert returned == [f"p{i}" for i in range(10, 20)]
+    pagination = result["metadata"]["pagination"]
+    assert pagination == {"page": 1, "limit": 10, "total_count": 25, "has_more": True}
 
 
 @pytest.mark.asyncio

@@ -14,6 +14,7 @@ class StubResponse:
         json_data: Any = None,
         text: str | None = None,
         json_error: bool = False,
+        headers: dict[str, str] | None = None,
     ) -> None:
         self.status_code = status_code
         self._json_data = json_data
@@ -26,6 +27,7 @@ class StubResponse:
         self.text = text or ""
         if not self.content and self.text:
             self.content = self.text.encode("utf-8")
+        self.headers: dict[str, str] = headers or {}
 
     def json(self) -> Any:
         if self._json_error:

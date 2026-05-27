@@ -387,6 +387,14 @@ class PolicySummaryParams(OrgIdContextMixin, ForbidExtraModel):
     include_inactive: bool | None = Field(
         False, description="Include inactive policies in the summary"
     )
+    include_stats: bool | None = Field(
+        False,
+        description=(
+            "Include the per-policy compliance stats array. Off by default — the "
+            "stats payload is large and previously caused response truncation that "
+            "hid policies. Use policy_compliance_stats for a focused breakdown."
+        ),
+    )
 
 
 class PolicyDetailParams(OrgIdContextMixin, ForbidExtraModel):

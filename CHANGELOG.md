@@ -5,6 +5,25 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.24] - 2026-05-26
+
+### Fixed
+
+- **`policy_catalog` pagination stalled past page 2 at `limit=10` (#57.1)** — The wrapper over-fetched `min(limit*3, 500)` from `/policies` while passing the user's `page` directly, so the upstream offset was `page * (limit*3)` instead of `page * limit`. With `limit=10, page=3` against a 79-policy tenant the wrapper asked upstream for offset 90, got zero results, and still reported `has_more=true` (computed from the stats-derived total). The over-fetch and multi-page walk are gone: user `page` and `limit` now map 1:1 to upstream `/policies` params. A page may return fewer than `limit` active policies when some entries on that page are inactive and `include_inactive=False`, but the cursor remains correct and `has_more` reflects the actual upstream state.
+
+- **`policy_runs_v2` silently ignored `policy_name` and `policy_type` filters (#57.2)** — Verified directly against the upstream `/policy-history/policy-runs` endpoint: the policy-report-api list endpoint silently ignores **every** filter query parameter (`policy_name`, `policy_uuid`, `policy_type`, `start_time`, `end_time`, `result_status`) regardless of param casing (`snake_case`, `camelCase`, or short forms). The wrapper now applies filters client-side after fetching a large pool (up to 5000 runs, matching the schema cap). `policy_name` matches as a case-insensitive substring; `policy_type` and `policy_uuid` match exactly; `start_time`/`end_time` filter on `run_time`; `result_status` is reinterpreted against the aggregated counter model (include runs where the named counter — `success`/`failed`/`pending`/`not_included`/`remediation_not_applicable`/`blocked`, plus `failure`/`successful` aliases — is non-zero). When any filter is active, `metadata.filter_strategy="client_side"`, `metadata.filters_applied`, `metadata.upstream_pool_size`, `metadata.filtered_count`, and a `metadata.pagination` block (`page`, `limit`, `total_count`, `has_more`) describe the local pagination. Pagination is pass-through when no filter is set.
+
+- **`policy_catalog` truncated the `policies` array because `policy_stats` filled the budget (#57.3)** — Every response auto-fetched `/policystats` and embedded the full per-policy stats array under `data.policy_stats`. On the verified tenant, this 79-entry array consumed ~80% of the 4000-token response budget, leaving the `policies` array truncated to whatever fit. One real policy was invisible across ~20 catalog queries because the truncation always cut the alphabetical slot before reaching it. `policy_stats` is now opt-in via `include_stats=true` (default `false`); callers needing the per-policy compliance breakdown can use the dedicated `policy_compliance_stats` tool. `metadata.notes` includes a hint when stats are omitted. `total_policies_available` (derived from the stats payload) is now only present when `include_stats=true`.
+
+### Added
+
+- **Upstream HTTP observability** — The `AutomoxClient._request` path now emits one structured log line per upstream call with `method`, `path`, `status`, `latency_ms`, `correlation_id`, and (on 429/5xx) `retry_after`. Network failures (`httpx.RequestError`) log the exception type and elapsed time. The previous DEBUG line is retained. No retry policy is introduced; this is groundwork for diagnosing the intermittent multi-minute hangs reported in #57 issue 4.
+
+### Security
+
+- **Bump `idna` floor to 3.15 (CVE-2026-45409)** — `idna.encode()` could consume disproportionate CPU on arbitrarily long inputs (`"٠" * N`, `"・" * N + "漢"`), enabling a DoS. The original 2024 fix (CVE-2024-3651) was incomplete; the 3.15 fix extends the early length-rejection to lesser-used per-label conversions and codec helpers. Constrained via `tool.uv.constraint-dependencies`. (Closes the same CVE that dependabot PR #58 addressed; that PR can be closed once this lands.)
+- **Bump `starlette` floor to 1.0.1 (PYSEC-2026-161)** — Starlette reconstructed the requested URL from the HTTP `Host` header without validating its value, allowing path injection into the host portion. Routing still uses the actual request path, so the inconsistency can lead to authentication bypass when auth depends on the reconstructed URL. Constrained via `tool.uv.constraint-dependencies` (alongside the existing `urllib3` floor). Affects the HTTP/SSE transport path; stdio transport is unaffected.
+
 ## [1.0.23] - 2026-05-07
 
 ### Fixed

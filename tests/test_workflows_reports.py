@@ -516,6 +516,76 @@ async def test_get_noncompliant_report_uses_len_when_total_absent() -> None:
     assert result["data"]["total_devices"] == 2
 
 
+@pytest.mark.asyncio
+async def test_get_noncompliant_report_paginates_when_total_equals_page_size() -> None:
+    """Regression for issue #68 — verified against a live tenant on 2026-05-27.
+
+    On /reports/needs-attention the API's ``summary["total"]`` is the
+    **per-page device count**, not the total fleet device count. A 138-device
+    tenant paginated at limit=10 returned ``summary.total == 10`` on every
+    page. The previous code terminated the loop when
+    ``len(device_list) >= summary.total`` — which fires after page 0 with the
+    page-size value, dropping every subsequent page.
+
+    The bug only triggers in the workflow's auto-pagination path (no explicit
+    limit), so the test must not pass ``limit`` either. The workflow's
+    hardcoded page size is 500, so we need at least one full page plus a
+    short page to exercise the multi-page loop.
+    """
+    # 600 devices total → two pages: 500, then 100 (short page terminates loop).
+    all_devices = [{"id": i, "name": f"device-{i}"} for i in range(600)]
+    workflow_page_size = 500  # matches the hardcoded value in get_noncompliant_report
+    pages = [
+        # Each page reports summary.total == this page's device count, matching
+        # the upstream API behavior observed in the live-tenant probe.
+        {
+            "nonCompliant": {
+                "total": len(all_devices[i : i + workflow_page_size]),
+                "devices": all_devices[i : i + workflow_page_size],
+            }
+        }
+        for i in range(0, len(all_devices), workflow_page_size)
+    ]
+
+    client = StubClient(get_responses={"/reports/needs-attention": pages})
+
+    # No explicit limit — exercises the auto-paginate path where the bug fired.
+    result = await get_noncompliant_report(cast(AutomoxClient, client), org_id=42)
+
+    # All 600 devices must be returned across both pages — the early-break
+    # on summary.total would have cut this off at 500.
+    assert len(result["data"]["devices"]) == 600
+    assert result["data"]["total_devices"] == 600
+    # The workflow terminates on the first empty page, so a third request
+    # (offset=1000, returns no devices) is expected.
+    assert len(client.calls) >= 2
+
+
+@pytest.mark.asyncio
+async def test_get_noncompliant_report_total_devices_reflects_actual_count() -> None:
+    """``data.total_devices`` must reflect the accumulated device count, not
+    ``summary["total"]`` (which is per-page on /reports/needs-attention).
+    """
+    devices = [{"id": i} for i in range(15)]
+    response = {
+        "nonCompliant": {
+            # Mimic the live tenant: total == page size, not total devices.
+            "total": 15,
+            "devices": devices,
+        }
+    }
+    client = StubClient(get_responses={"/reports/needs-attention": [response]})
+
+    result = await get_noncompliant_report(
+        cast(AutomoxClient, client),
+        org_id=42,
+        limit=500,
+    )
+
+    # 15 devices in, 15 reported back — independent of whatever summary.total said.
+    assert result["data"]["total_devices"] == 15
+
+
 # ===========================================================================
 # Error path tests — API errors propagate through the workflow
 # ===========================================================================

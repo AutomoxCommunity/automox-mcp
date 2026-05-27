@@ -18,7 +18,6 @@ from automox_mcp.tools.webhook_tools import (
     _validate_webhook_url_sync,
 )
 
-
 # ---------------------------------------------------------------------------
 # Sync validator — structural checks only, no DNS
 # ---------------------------------------------------------------------------

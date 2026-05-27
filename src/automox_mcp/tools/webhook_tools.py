@@ -43,8 +43,8 @@ _PRIVATE_ADDR_REJECTION = (
 )
 
 
-def _addr_is_private(addr: ipaddress._BaseAddress) -> bool:
-    return (
+def _addr_is_private(addr: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    return bool(
         addr.is_private
         or addr.is_loopback
         or addr.is_link_local

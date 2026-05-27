@@ -321,7 +321,7 @@ async def summarize_policies(
         if not include_inactive and not is_active:
             continue
 
-        policy_type = (
+        policy_type = str(
             policy_item.get("policy_type_name")
             or policy_item.get("policy_type")
             or policy_item.get("type")
@@ -791,10 +791,10 @@ async def summarize_patch_approvals(
     for approval_item in approvals:
         if not isinstance(approval_item, Mapping):
             continue
-        approval_status = (approval_item.get("status") or "unknown").lower()
+        approval_status = str(approval_item.get("status") or "unknown").lower()
         status_counts[approval_status] += 1
 
-        severity = (
+        severity = str(
             approval_item.get("severity") or approval_item.get("cvss_severity") or "unknown"
         ).lower()
         severity_counts[severity] += 1

@@ -943,6 +943,30 @@ async def test_summarize_policies_custom_type_normalized_to_worklet() -> None:
     assert result["data"]["policy_type_breakdown"].get("worklet", 0) == 1
 
 
+@pytest.mark.asyncio
+async def test_summarize_policies_handles_non_string_policy_type() -> None:
+    """Regression: a non-string `type` (e.g., integer enum from legacy endpoints)
+    must not crash the summary with AttributeError on `.lower()`.
+    """
+    policy = {
+        "id": 7,
+        "name": "Integer-typed Policy",
+        "type": 3,  # non-string — exposes the .lower() bug
+        "status": "active",
+    }
+    stub = StubClient(
+        get_responses={
+            "/policies": [[policy], []],
+            "/policystats": [[]],
+        }
+    )
+
+    result = await summarize_policies(cast(AutomoxClient, stub), org_id=42, limit=20)
+
+    # The numeric type is coerced to string and lower-cased, then counted normally.
+    assert result["data"]["policy_type_breakdown"].get("3", 0) == 1
+
+
 # ---------------------------------------------------------------------------
 # describe_policy
 # ---------------------------------------------------------------------------

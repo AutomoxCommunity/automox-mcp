@@ -796,8 +796,39 @@ class PatchTuesdayReadinessParams(OrgIdRequiredMixin, ForbidExtraModel):
 
 class ComplianceSnapshotParams(OrgIdRequiredMixin, ForbidExtraModel):
     group_id: int | None = Field(None, ge=1, description="Restrict to a specific server group")
+    detail_limit: int = Field(
+        10,
+        ge=0,
+        le=200,
+        description=(
+            "Cap each inner list (noncompliant devices, stale devices) at this "
+            "size. 0 returns counts only. Truncated sections surface "
+            "`metadata.section_summaries.<key>` with the follow-up tool to call "
+            "for the rest. See compound-tool contract in the Pagination docs."
+        ),
+    )
 
 
 class DeviceFullProfileParams(OrgIdRequiredMixin, ForbidExtraModel):
     device_id: int = Field(description="Device identifier", ge=1)
-    max_packages: int = Field(25, ge=0, le=500, description="Max packages to include")
+    max_packages: int = Field(
+        25,
+        ge=0,
+        le=500,
+        description=(
+            "Legacy alias for `detail_limit`, retained for backwards-compat. "
+            "Used when `detail_limit` is omitted."
+        ),
+    )
+    detail_limit: int | None = Field(
+        None,
+        ge=0,
+        le=500,
+        description=(
+            "Cap on the `packages.packages` inner list. When omitted falls "
+            "back to `max_packages`. 0 returns counts only. Truncated sections "
+            "surface `metadata.section_summaries.<key>` with the follow-up "
+            "tool to call for the rest. See the compound-tool contract in the "
+            "Pagination docs."
+        ),
+    )

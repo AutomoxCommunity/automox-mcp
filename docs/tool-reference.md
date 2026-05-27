@@ -127,8 +127,8 @@ Manage vulnerability remediation workflows via the Vuln Sync API. Supports CSV-b
 ## Compound Workflows (3 tools)
 
 - **`get_patch_tuesday_readiness`** - Combined view of pre-patch report, pending approvals, and patch policy schedules. Answers "Are we ready for Patch Tuesday?" in a single call. Includes per-device severity classification computed from CVE data. Each inner list is capped at `detail_limit` (default 10); see the **Compound tools** section under [Pagination](#pagination) for the `metadata.section_summaries` shape and how to fetch the full data via the linked detail tools.
-- **`get_compliance_snapshot`** - Combined view of non-compliant devices, fleet health metrics, and policy statistics. Answers "What is our compliance posture?" in a single call. Includes compliance rate, device health breakdown, and stale device detection.
-- **`get_device_full_profile`** - Complete device profile combining device detail, inventory summary, packages, and policy assignments in a single call. Inventory is summarized with key values per category; packages capped at 25 by default. Metadata includes per-section status, data completeness flag, and item counts for verification.
+- **`get_compliance_snapshot`** - Combined view of non-compliant devices, fleet health metrics, and policy statistics. Answers "What is our compliance posture?" in a single call. Includes compliance rate, device health breakdown, and stale device detection. Inner lists capped at `detail_limit` (default 10) per the compound-tool contract.
+- **`get_device_full_profile`** - Complete device profile combining device detail, inventory summary, packages, and policy assignments in a single call. Inventory is summarized server-side with key values per category (its raw payload is dict-shaped, not a flat list). The `packages.packages` list is capped at `detail_limit` (default falls back to legacy `max_packages=25`); `metadata.section_summaries.packages.packages` surfaces the truncation and points at `list_device_packages` for full data.
 
 ## Events (1 tool)
 
@@ -246,7 +246,13 @@ A generic pagination loop can therefore read `metadata.pagination.has_more` and 
 
 ### Compound tools
 
-Compound tools (`get_patch_tuesday_readiness`, `get_compliance_snapshot`, `get_device_full_profile`) fold several upstream calls into a single response. Each inner list (e.g. `prepatch_report.devices`, `patch_approvals.approvals`, `patch_policy_schedules`) is capped at a `detail_limit` parameter (default 10) so the response fits the token budget on tenants of any size. Counts and aggregates are always returned in full.
+Compound tools (`get_patch_tuesday_readiness`, `get_compliance_snapshot`, `get_device_full_profile`) fold several upstream calls into a single response. Each inner list is capped at a `detail_limit` parameter (default 10) so the response fits the token budget on tenants of any size. Counts and aggregates are always returned in full.
+
+| Compound tool | Capped sections | Follow-up detail tools |
+|---|---|---|
+| `get_patch_tuesday_readiness` | `prepatch_report.devices`, `patch_approvals.approvals`, `patch_policy_schedules` | `get_prepatch_report`, `patch_approvals_summary`, `policy_catalog` |
+| `get_compliance_snapshot` | `noncompliant_report.devices`, `device_health.stale_devices` | `get_noncompliant_report`, `device_health_metrics` |
+| `get_device_full_profile` | `packages.packages` (inventory is server-side summarized) | `list_device_packages` |
 
 When a section is truncated, the response surfaces a per-section entry under `metadata.section_summaries`:
 

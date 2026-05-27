@@ -5,6 +5,14 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.27] - 2026-05-26
+
+### Added
+
+- **`get_compliance_snapshot` adopts the compound-tool contract (#53)** — The tool now accepts `detail_limit` (default `10`) and caps `data.noncompliant_report.devices` and `data.device_health.stale_devices` per the contract from v1.0.26. Truncated sections surface `metadata.section_summaries.<key>` with `follow_up_tool` (`get_noncompliant_report`, `device_health_metrics`) and `follow_up_args_hint` (including `group_id` when set). The `stale_devices` summary reads `metadata.stale_device_count` from `summarize_device_health` so the reported total reflects the true fleet count, not just what fit in the per-section cap.
+- **`get_device_full_profile` adopts the compound-tool contract (#53)** — The tool now accepts `detail_limit`. When omitted it falls back to the legacy `max_packages` parameter (default `25`), preserving existing callers. The `packages.packages` list is capped at the effective limit; `metadata.section_summaries.packages.packages` surfaces `total`, `returned`, `has_more`, and `follow_up_tool="list_device_packages"` with `follow_up_args_hint={"device_id": ...}`. The legacy `data.packages.truncated` / `data.packages.note` fields are retained for backwards-compat. Inventory remains server-side summarized (counts + key-values per category) because its upstream payload is dict-structured, not a flat list.
+- **`build_section_summary` / `build_section_summary_notes` helpers in `automox_mcp.utils.response`** — The per-section truncation block (`total` / `returned` / `has_more` / `follow_up_tool` / `follow_up_args_hint`) is now built by a shared helper instead of duplicated across the three compound workflows. `build_section_summary_notes` builds the LLM-facing `metadata.notes` strings.
+
 ## [1.0.26] - 2026-05-26
 
 ### Added

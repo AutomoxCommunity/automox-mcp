@@ -3,7 +3,14 @@
 from __future__ import annotations
 
 from .organization import resolve_org_uuid
-from .response import build_pagination_metadata, extract_list, normalize_status, require_org_id
+from .response import (
+    build_pagination_metadata,
+    build_section_summary,
+    build_section_summary_notes,
+    extract_list,
+    normalize_status,
+    require_org_id,
+)
 from .tooling import (
     RateLimiter,
     RateLimitError,
@@ -20,6 +27,8 @@ __all__ = [
     "RateLimiter",
     "as_tool_response",
     "build_pagination_metadata",
+    "build_section_summary",
+    "build_section_summary_notes",
     "call_tool_workflow",
     "enforce_rate_limit",
     "extract_list",

@@ -863,3 +863,149 @@ async def test_full_profile_metadata_counts(monkeypatch: pytest.MonkeyPatch) -> 
     assert counts["packages_returned"] == 3
     assert counts["policy_assignments"] == 2
     assert counts["pending_commands"] == 1
+
+
+# ---------------------------------------------------------------------------
+# #53 sweep: detail_limit contract on get_compliance_snapshot and
+# get_device_full_profile.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_compliance_snapshot_caps_inner_lists_at_detail_limit() -> None:
+    """#53: noncompliant_report.devices and device_health.stale_devices are
+    capped at detail_limit; metadata.section_summaries points at the detail
+    tools for full data."""
+    noncompliant_payload = {
+        "nonCompliant": {
+            "total": 30,
+            "devices": [{"id": i, "name": f"host-{i}", "groupId": 10} for i in range(30)],
+        }
+    }
+    # 30 servers all marked stale (no recent check-in)
+    servers_payload = [
+        {
+            "id": 1000 + i,
+            "managed": True,
+            "status": {"policy_status": "success"},
+            "last_check_in": "2024-01-01T00:00:00Z",
+        }
+        for i in range(30)
+    ]
+    client = StubClient(
+        get_responses={
+            "/reports/needs-attention": [noncompliant_payload],
+            "/servers": [servers_payload],
+            "/policies": [_POLICIES_RESPONSE],
+            "/policystats": [_POLICYSTATS_RESPONSE],
+        }
+    )
+    client.org_id = 555
+
+    result = await get_compliance_snapshot(
+        cast(AutomoxClient, client),
+        org_id=555,
+        detail_limit=10,
+    )
+
+    data = result["data"]
+    assert len(data["noncompliant_report"]["devices"]) == 10
+    assert len(data["device_health"]["stale_devices"]) <= 10
+    # Counts unaffected.
+    assert data["compliance_overview"]["noncompliant_devices"] == 30
+
+    summaries = result["metadata"]["section_summaries"]
+    assert summaries["noncompliant_report.devices"]["total"] == 30
+    assert summaries["noncompliant_report.devices"]["returned"] == 10
+    assert summaries["noncompliant_report.devices"]["follow_up_tool"] == "get_noncompliant_report"
+    assert summaries["device_health.stale_devices"]["follow_up_tool"] == "device_health_metrics"
+    # LLM-friendly notes.
+    notes = result["metadata"]["notes"]
+    assert any("get_noncompliant_report" in n for n in notes)
+
+
+@pytest.mark.asyncio
+async def test_compliance_snapshot_no_summary_when_under_limit() -> None:
+    """Already-small sections shouldn't surface section_summaries."""
+    client = _build_compliance_client()
+    result = await get_compliance_snapshot(
+        cast(AutomoxClient, client),
+        org_id=555,
+        detail_limit=10,
+    )
+    assert result["metadata"].get("section_summaries") is None
+
+
+@pytest.mark.asyncio
+async def test_full_profile_emits_section_summary_for_truncated_packages(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """#53: packages.packages truncation surfaces via metadata.section_summaries
+    in addition to the legacy packages.truncated / packages.note fields."""
+    many_packages = {
+        "data": {
+            "device_id": 101,
+            "total_packages": 50,
+            "packages": [{"id": i, "name": f"pkg-{i}", "version": "1.0"} for i in range(50)],
+        },
+        "metadata": {},
+    }
+    _patch_sub_workflows(
+        monkeypatch,
+        list_device_packages=AsyncMock(return_value=many_packages),
+    )
+    client = StubClient()
+
+    result = await get_device_full_profile(
+        cast(AutomoxClient, client),
+        org_id=555,
+        device_id=101,
+        detail_limit=5,
+    )
+
+    # Canonical section summary present.
+    summaries = result["metadata"]["section_summaries"]
+    assert summaries["packages.packages"] == {
+        "total": 50,
+        "returned": 5,
+        "has_more": True,
+        "follow_up_tool": "list_device_packages",
+        "follow_up_args_hint": {"device_id": 101},
+    }
+    # Legacy fields still emitted for backwards-compat.
+    pkg_section = result["data"]["packages"]
+    assert pkg_section["truncated"] is True
+    assert "use list_device_packages" in pkg_section["note"]
+    # detail_limit recorded in metadata.
+    assert result["metadata"]["detail_limit"] == 5
+
+
+@pytest.mark.asyncio
+async def test_full_profile_detail_limit_falls_back_to_max_packages(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Legacy callers passing only max_packages still get the old behavior."""
+    many_packages = {
+        "data": {
+            "device_id": 101,
+            "total_packages": 50,
+            "packages": [{"id": i, "name": f"pkg-{i}", "version": "1.0"} for i in range(50)],
+        },
+        "metadata": {},
+    }
+    _patch_sub_workflows(
+        monkeypatch,
+        list_device_packages=AsyncMock(return_value=many_packages),
+    )
+    client = StubClient()
+
+    # Only max_packages set, no detail_limit
+    result = await get_device_full_profile(
+        cast(AutomoxClient, client),
+        org_id=555,
+        device_id=101,
+        max_packages=7,
+    )
+
+    assert result["data"]["packages"]["returned"] == 7
+    assert result["metadata"]["detail_limit"] == 7

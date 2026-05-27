@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from ..client import AutomoxClient
+from ..utils.response import build_section_summary, build_section_summary_notes
 from . import devices, packages, policy, reports
 
 
@@ -103,46 +104,39 @@ async def get_patch_tuesday_readiness(
 
     follow_up_hint = {"group_id": group_id} if group_id is not None else {}
     section_summaries: dict[str, Any] = {}
-
-    def _record(
-        section_key: str,
-        full: list[Any],
-        preview: list[Any],
-        follow_up_tool: str,
-        args_hint: dict[str, Any],
-    ) -> None:
-        if len(full) > len(preview):
-            section_summaries[section_key] = {
-                "total": len(full),
-                "returned": len(preview),
-                "has_more": True,
-                "follow_up_tool": follow_up_tool,
-                "follow_up_args_hint": args_hint,
-            }
-
-    _record(
-        "prepatch_report.devices",
-        prepatch_devices_full,
-        prepatch_devices_preview,
-        "get_prepatch_report",
-        follow_up_hint,
-    )
-    _record(
-        "patch_approvals.approvals",
-        approval_items_full,
-        approvals_preview,
-        "patch_approvals_summary",
-        {},
-    )
-    _record(
-        "patch_policy_schedules",
-        patch_policy_entries_full,
-        patch_policy_schedules_preview,
-        "policy_catalog",
-        # The detail tool returns all policies; the caller filters by
-        # type=patch client-side (no native type filter today).
-        {"include_inactive": False, "limit": 200},
-    )
+    for key, full, preview, tool, args in (
+        (
+            "prepatch_report.devices",
+            prepatch_devices_full,
+            prepatch_devices_preview,
+            "get_prepatch_report",
+            follow_up_hint,
+        ),
+        (
+            "patch_approvals.approvals",
+            approval_items_full,
+            approvals_preview,
+            "patch_approvals_summary",
+            {},
+        ),
+        (
+            "patch_policy_schedules",
+            patch_policy_entries_full,
+            patch_policy_schedules_preview,
+            "policy_catalog",
+            # The detail tool returns all policies; the caller filters by
+            # type=patch client-side (no native type filter today).
+            {"include_inactive": False, "limit": 200},
+        ),
+    ):
+        summary = build_section_summary(
+            total=len(full),
+            returned=len(preview),
+            follow_up_tool=tool,
+            follow_up_args_hint=args,
+        )
+        if summary is not None:
+            section_summaries[key] = summary
 
     metadata: dict[str, Any] = {
         "errors": errors if errors else None,
@@ -150,13 +144,9 @@ async def get_patch_tuesday_readiness(
     }
     if section_summaries:
         metadata["section_summaries"] = section_summaries
-        metadata["notes"] = [
-            (
-                f"{key} capped at {detail_limit} of {info['total']} — call "
-                f"`{info['follow_up_tool']}` for the full set."
-            )
-            for key, info in section_summaries.items()
-        ]
+        metadata["notes"] = build_section_summary_notes(
+            section_summaries, detail_limit=detail_limit
+        )
 
     return {
         "data": {
@@ -189,10 +179,15 @@ async def get_compliance_snapshot(
     *,
     org_id: int,
     group_id: int | None = None,
+    detail_limit: int = 10,
 ) -> dict[str, Any]:
     """Combine non-compliant report, health metrics, and policy stats into one view.
 
     Answers: "What's our overall compliance posture?"
+
+    Each inner list is capped at ``detail_limit`` (default 10); see
+    :func:`get_patch_tuesday_readiness` for the compound-tool contract
+    (#53). Counts and aggregates are always returned in full.
     """
     raw_results = await asyncio.gather(
         reports.get_noncompliant_report(client, org_id=org_id, group_id=group_id),
@@ -202,7 +197,7 @@ async def get_compliance_snapshot(
             group_id=group_id,
             include_unmanaged=False,
             limit=500,
-            max_stale_devices=10,
+            max_stale_devices=max(detail_limit, 10),
         ),
         policy.summarize_policies(
             client,
@@ -246,6 +241,61 @@ async def get_compliance_snapshot(
     compliant_count = max(0, total_devices - noncompliant_count)
     compliance_rate = round(compliant_count / total_devices * 100, 1) if total_devices > 0 else 0
 
+    noncompliant_devices_full = noncompliant_data.get("devices") or []
+    noncompliant_devices_preview = noncompliant_devices_full[:detail_limit]
+
+    # summarize_device_health already capped stale_devices at max_stale_devices,
+    # but its metadata.stale_device_count reports the true fleet-wide count
+    # so we can still emit an honest section_summary.
+    stale_devices_preview = (health_data.get("stale_devices") or [])[:detail_limit]
+    health_meta = health.get("metadata") if isinstance(health, Mapping) else None
+    stale_total = (
+        health_meta.get("stale_device_count") if isinstance(health_meta, Mapping) else None
+    )
+    if not isinstance(stale_total, int):
+        stale_total = len(stale_devices_preview)
+
+    follow_up_hint = {"group_id": group_id} if group_id is not None else {}
+    section_summaries: dict[str, Any] = {}
+    for key, full, preview, tool, args in (
+        (
+            "noncompliant_report.devices",
+            noncompliant_devices_full,
+            noncompliant_devices_preview,
+            "get_noncompliant_report",
+            follow_up_hint,
+        ),
+    ):
+        summary = build_section_summary(
+            total=len(full),
+            returned=len(preview),
+            follow_up_tool=tool,
+            follow_up_args_hint=args,
+        )
+        if summary is not None:
+            section_summaries[key] = summary
+
+    # stale_devices uses the upstream-reported total instead of the local
+    # length, since summarize_device_health caps its own output.
+    stale_summary = build_section_summary(
+        total=stale_total,
+        returned=len(stale_devices_preview),
+        follow_up_tool="device_health_metrics",
+        follow_up_args_hint=follow_up_hint,
+    )
+    if stale_summary is not None:
+        section_summaries["device_health.stale_devices"] = stale_summary
+
+    metadata: dict[str, Any] = {
+        "errors": errors if errors else None,
+        "detail_limit": detail_limit,
+    }
+    if section_summaries:
+        metadata["section_summaries"] = section_summaries
+        metadata["notes"] = build_section_summary_notes(
+            section_summaries, detail_limit=detail_limit
+        )
+
     return {
         "data": {
             "compliance_overview": {
@@ -256,18 +306,16 @@ async def get_compliance_snapshot(
             },
             "noncompliant_report": {
                 "summary": noncompliant_data.get("summary", {}),
-                "devices": noncompliant_data.get("devices", []),
+                "devices": noncompliant_devices_preview,
             },
             "device_health": {
                 "status_breakdown": health_data.get("device_status_breakdown", {}),
                 "check_in_recency": health_data.get("check_in_recency_breakdown", {}),
-                "stale_devices": health_data.get("stale_devices", []),
+                "stale_devices": stale_devices_preview,
             },
             "policy_summary": policy_summary,
         },
-        "metadata": {
-            "errors": errors if errors else None,
-        },
+        "metadata": metadata,
     }
 
 
@@ -277,17 +325,23 @@ async def get_device_full_profile(
     org_id: int,
     device_id: int,
     max_packages: int = 25,
+    detail_limit: int | None = None,
 ) -> dict[str, Any]:
     """Combine device detail, packages, inventory, and policy status into one view.
 
     Answers: "Give me the full profile for [device]."
 
-    Inventory is summarized (counts + key values per category) to keep
-    the response readable.  Packages are capped at *max_packages* with a
-    note indicating how many were omitted.  Use get_device_inventory or
-    list_device_packages for full data.
+    Inventory is summarized server-side (counts + key values per category)
+    because the raw payload is dict-structured rather than a flat list.
+    The ``packages.packages`` array is capped at ``detail_limit`` and the
+    canonical ``metadata.section_summaries`` block points at
+    ``list_device_packages`` for the full list. ``max_packages`` is a
+    legacy alias retained for backwards-compat — when ``detail_limit`` is
+    omitted, ``max_packages`` is used.
     """
     labels = ("device_detail", "device_inventory", "device_packages")
+
+    effective_limit = detail_limit if detail_limit is not None else max_packages
 
     raw_results = await asyncio.gather(
         devices.describe_device(
@@ -307,7 +361,7 @@ async def get_device_full_profile(
             client,
             org_id=org_id,
             device_id=device_id,
-            limit=max_packages,
+            limit=effective_limit,
         ),
         return_exceptions=True,
     )
@@ -354,12 +408,42 @@ async def get_device_full_profile(
     # Cap packages
     all_packages = packages_data.get("packages", [])
     total_packages = packages_data.get("total_packages", 0)
-    packages_preview = all_packages[:max_packages]
+    packages_preview = all_packages[:effective_limit]
     packages_truncated = total_packages > len(packages_preview)
 
     # Policy assignments
     policy_assignments = device_data.get("policy_assignments", {})
     total_policies = policy_assignments.get("total", 0)
+
+    section_summaries: dict[str, Any] = {}
+    package_section_summary = build_section_summary(
+        total=total_packages,
+        returned=len(packages_preview),
+        follow_up_tool="list_device_packages",
+        follow_up_args_hint={"device_id": device_id},
+    )
+    if package_section_summary is not None:
+        section_summaries["packages.packages"] = package_section_summary
+
+    metadata: dict[str, Any] = {
+        "errors": errors if errors else None,
+        "section_status": section_status,
+        "data_complete": not errors,
+        "detail_limit": effective_limit,
+        "counts": {
+            "inventory_categories": len(inventory_summary),
+            "inventory_items": total_inventory_items,
+            "packages_total": total_packages,
+            "packages_returned": len(packages_preview),
+            "policy_assignments": total_policies,
+            "pending_commands": len(device_data.get("pending_commands", [])),
+        },
+    }
+    if section_summaries:
+        metadata["section_summaries"] = section_summaries
+        metadata["notes"] = build_section_summary_notes(
+            section_summaries, detail_limit=effective_limit
+        )
 
     return {
         "data": {
@@ -374,6 +458,8 @@ async def get_device_full_profile(
                 "note": "Summarized view — use get_device_inventory for full data",
             },
             "packages": {
+                # Legacy shape retained for backwards-compat (#53). Canonical
+                # truncation state now lives in metadata.section_summaries.
                 "total": total_packages,
                 "returned": len(packages_preview),
                 "truncated": packages_truncated,
@@ -386,17 +472,5 @@ async def get_device_full_profile(
                 else None,
             },
         },
-        "metadata": {
-            "errors": errors if errors else None,
-            "section_status": section_status,
-            "data_complete": not errors,
-            "counts": {
-                "inventory_categories": len(inventory_summary),
-                "inventory_items": total_inventory_items,
-                "packages_total": total_packages,
-                "packages_returned": len(packages_preview),
-                "policy_assignments": total_policies,
-                "pending_commands": len(device_data.get("pending_commands", [])),
-            },
-        },
+        "metadata": metadata,
     }

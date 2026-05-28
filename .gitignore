@@ -26,3 +26,4 @@ mcp-registry-key.pem
 *.mcpb
 mcpb/.venv/
 mcpb/uv.lock
+.claude/

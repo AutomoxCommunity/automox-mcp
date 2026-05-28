@@ -265,7 +265,7 @@ These are always enabled on HTTP/SSE transports with no opt-out (defense-in-dept
 
 Client-side controls that complement the server's safety features:
 
-- Enable **confirmation dialogs** in your MCP client for all write tools (the server's 22 write tools are identifiable by their MCP Tool Annotations: `readOnlyHint: false`, `destructiveHint: true`)
+- Enable **confirmation dialogs** in your MCP client for all write tools (the server's 21 write tools are identifiable by their MCP Tool Annotations: `readOnlyHint: false`, `destructiveHint: true`)
 - Use `AUTOMOX_MCP_READ_ONLY=true` for monitoring and read-only use cases
 - Use `AUTOMOX_MCP_MODULES` to load only required tool domains (principle of least functionality)
 - Test new or untrusted server versions in a staging environment with `AUTOMOX_MCP_READ_ONLY=true` before production use

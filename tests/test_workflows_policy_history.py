@@ -196,6 +196,35 @@ async def test_list_runs_client_pagination_slices_filtered_results() -> None:
     assert pagination["has_more"] is True
     assert pagination["limit"] == 10
     assert pagination["total_count"] == 25
+    # #76: emit next_page so the LLM doesn't have to derive it from page+1.
+    assert pagination["next_page"] == 2
+    suggested = result["metadata"]["suggested_next_call"]
+    assert suggested["tool"] == "policy_runs_v2"
+    assert suggested["args"]["page"] == 2
+    assert suggested["args"]["limit"] == 10
+    assert suggested["args"]["policy_type"] == "custom"
+
+
+@pytest.mark.asyncio
+async def test_list_runs_last_page_omits_next_page_hints() -> None:
+    """#76: when has_more=False, neither next_page nor suggested_next_call
+    should appear — the LLM must know there's nothing more to fetch."""
+    runs = [
+        {"policy_uuid": f"p{i}", "policy_name": f"name-{i}", "policy_type": "custom"}
+        for i in range(15)
+    ]
+    client = _make_client(get_responses={"/policy-history/policy-runs": [runs]})
+    result = await list_policy_runs_v2(
+        cast(AutomoxClient, client),
+        org_id=42,
+        policy_type="custom",
+        limit=10,
+        page=1,  # 15 items, limit=10, page=1 → items 10-14, no more pages
+    )
+    pagination = result["metadata"]["pagination"]
+    assert pagination["has_more"] is False
+    assert "next_page" not in pagination
+    assert "suggested_next_call" not in result["metadata"]
 
 
 @pytest.mark.asyncio

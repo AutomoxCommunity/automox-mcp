@@ -204,14 +204,43 @@ async def list_policy_runs_v2(
         metadata["filters_applied"] = filters_applied
         metadata["upstream_pool_size"] = fetched_total
         metadata["filtered_count"] = filtered_total
+        next_page = effective_page + 1 if has_more else None
         metadata["pagination"] = build_pagination_metadata(
             page=effective_page,
             page_size=effective_limit,
             total_elements=filtered_total,
             has_more=has_more,
-            # Legacy aliases retained for backwards-compat (#52).
-            extra={"limit": effective_limit, "total_count": filtered_total},
+            # Legacy aliases retained for backwards-compat (#52). `next_page`
+            # matches the hint policy_catalog already provides so the LLM
+            # doesn't have to derive it from current_page + 1 (#76).
+            extra={
+                "limit": effective_limit,
+                "total_count": filtered_total,
+                "next_page": next_page,
+            },
         )
+        # Top-level suggested_next_call mirrors policy_catalog's contract
+        # (#76): when more pages are available, hand the LLM the exact next
+        # invocation rather than making it infer args from raw counters.
+        if has_more:
+            metadata["suggested_next_call"] = {
+                "tool": "policy_runs_v2",
+                "args": {
+                    k: v
+                    for k, v in {
+                        "policy_uuid": policy_uuid_str or policy_uuid,
+                        "policy_name": policy_name,
+                        "policy_type": policy_type,
+                        "start_time": start_time,
+                        "end_time": end_time,
+                        "result_status": result_status,
+                        "sort": sort,
+                        "page": next_page,
+                        "limit": effective_limit,
+                    }.items()
+                    if v is not None
+                },
+            }
         if fetched_total >= _FILTER_POOL_LIMIT:
             metadata["upstream_pool_capped"] = True
             metadata["pool_cap_note"] = (

@@ -103,7 +103,7 @@ For the full list of tools, parameters, and MCP resources, see the **[Tool Refer
 | `AUTOMOX_API_KEY` | Yes | — | Automox API key |
 | `AUTOMOX_ACCOUNT_UUID` | Yes | — | Account UUID from Secrets & Keys |
 | `AUTOMOX_ORG_ID` | Recommended | — | Numeric organization ID (required by most tools) |
-| `AUTOMOX_MCP_READ_ONLY` | No | `false` | Disable all write operations (57 of 79 tools remain) |
+| `AUTOMOX_MCP_READ_ONLY` | No | `false` | Disable all write operations (58 of 79 tools remain) |
 | `AUTOMOX_MCP_MODULES` | No | all | Comma-separated list of modules to load (see below) |
 | `AUTOMOX_MCP_TOKEN_BUDGET` | No | `4000` | Max estimated tokens per response before truncation |
 | `AUTOMOX_MCP_SANITIZE_RESPONSES` | No | `true` | Sanitize API data to mitigate prompt injection |
@@ -130,7 +130,7 @@ For the full list of tools, parameters, and MCP resources, see the **[Tool Refer
 AUTOMOX_MCP_READ_ONLY=true
 ```
 
-Disables all write operations. Only read-only tools are registered (58 of 80). Useful for auditing and monitoring.
+Disables all write operations. Only read-only tools are registered (58 of 79). Useful for auditing and monitoring.
 
 ### Modular Loading
 
@@ -182,7 +182,7 @@ The Automox MCP server is designed for enterprise deployment with defense-in-dep
 
 **Highlights:**
 
-- **Read-only mode** (`AUTOMOX_MCP_READ_ONLY`) disables all 22 write tools
+- **Read-only mode** (`AUTOMOX_MCP_READ_ONLY`) disables all 21 write tools
 - **Module filtering** (`AUTOMOX_MCP_MODULES`) for least-privilege tool loading
 - **Correlation IDs** on every tool call, forwarded to Automox API as `X-Correlation-ID`
 - **Rate limiting** (30 calls/60s) with token budget estimation and auto-truncation

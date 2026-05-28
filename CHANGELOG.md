@@ -5,6 +5,18 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.32] - 2026-05-27
+
+### Changed
+
+- **`policy_runs_v2` now provides `next_page` + `suggested_next_call` (#76)** — Previously the filtered-pagination branch emitted `metadata.pagination.has_more=true` without telling the caller how to fetch the rest, forcing an LLM to infer "call with `page=current_page+1`" from raw counters. That diverged from `policy_catalog`'s richer contract. Now matches `policy_catalog`: when `has_more=True`, the response includes `pagination.next_page` and a top-level `metadata.suggested_next_call` with the exact tool name and args (carrying through the original filter parameters). On the last page neither hint is emitted, so the LLM knows there's nothing more to fetch. Surfaced by `tests/exploratory_sweep.py`.
+
+### Fixed
+
+- **Documentation corrections — tool names + counts** —
+  - `docs/tool-reference.md` documented the wrong follow-up tool names in the compound-tool contract (`get_prepatch_report`, `get_noncompliant_report`), the same bug that landed in production code with v1.0.27 / v1.0.26 and was fixed in v1.0.30 but never propagated to the doc. Updated to the registered names (`prepatch_report`, `noncompliant_report`).
+  - Tool-count drift across `README.md`, `SECURITY.md`, and `docs/deployment-security.md`: "22 write tools" → 21; "all 80 tools" → 79; "57 of 79 tools remain" → 58; "58 of 80" → 58 of 79. Reflects the actual surface: 79 total, 58 read-only, 21 write.
+
 ## [1.0.31] - 2026-05-27
 
 ### Changed

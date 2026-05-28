@@ -250,8 +250,8 @@ Compound tools (`get_patch_tuesday_readiness`, `get_compliance_snapshot`, `get_d
 
 | Compound tool | Capped sections | Follow-up detail tools |
 |---|---|---|
-| `get_patch_tuesday_readiness` | `prepatch_report.devices`, `patch_approvals.approvals`, `patch_policy_schedules` | `get_prepatch_report`, `patch_approvals_summary`, `policy_catalog` |
-| `get_compliance_snapshot` | `noncompliant_report.devices`, `device_health.stale_devices` | `get_noncompliant_report`, `device_health_metrics` |
+| `get_patch_tuesday_readiness` | `prepatch_report.devices`, `patch_approvals.approvals`, `patch_policy_schedules` | `prepatch_report`, `patch_approvals_summary`, `policy_catalog` |
+| `get_compliance_snapshot` | `noncompliant_report.devices`, `device_health.stale_devices` | `noncompliant_report`, `device_health_metrics` |
 | `get_device_full_profile` | `packages.packages` (inventory is server-side summarized) | `list_device_packages` |
 
 When a section is truncated, the response surfaces a per-section entry under `metadata.section_summaries`:
@@ -265,12 +265,12 @@ When a section is truncated, the response surfaces a per-section entry under `me
         "total": 230,
         "returned": 10,
         "has_more": true,
-        "follow_up_tool": "get_prepatch_report",
+        "follow_up_tool": "prepatch_report",
         "follow_up_args_hint": {"group_id": 42}
       }
     },
     "notes": [
-      "prepatch_report.devices capped at 10 of 230 — call `get_prepatch_report` for the full set."
+      "prepatch_report.devices capped at 10 of 230 — call `prepatch_report` for the full set."
     ]
   }
 }

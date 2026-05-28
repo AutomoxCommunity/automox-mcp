@@ -120,6 +120,18 @@ _DOMAIN_CATALOG: dict[str, list[tuple[str, str]]] = {
         ("get_compliance_snapshot", "Compliance posture view"),
         ("get_device_full_profile", "Complete device profile"),
     ],
+    "splashtop": [
+        ("splashtop_device_status", "Splashtop installation and registration status"),
+        ("splashtop_session_status", "Active Splashtop sessions and capacity for a device"),
+        ("splashtop_get_attended_access", "Current attended-access setting for a device"),
+        ("splashtop_install", "Install the Splashtop RMM client on a device"),
+        ("splashtop_bulk_install_uninstall", "Bulk install/uninstall across a server group"),
+        ("splashtop_initiate_connection", "Generate a splashtop-sos:// deeplink for an operator"),
+        ("splashtop_force_disconnect", "Force-disconnect all active sessions on a device"),
+        ("splashtop_set_attended_access", "Set the end-user-consent requirement for a device"),
+        ("splashtop_set_bulk_attended_access", "Bulk-set end-user consent across many devices"),
+        ("splashtop_uninstall", "Uninstall Splashtop and delete the device registration"),
+    ],
     "policy_windows": [
         ("search_policy_windows", "Search maintenance/exclusion windows"),
         ("get_policy_window", "Details for a specific window"),
@@ -144,7 +156,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "Returns tool names and descriptions. "
             "Valid domains: devices, device_search, policies, policy_history, "
             "patches, groups, events, reports, audit, webhooks, worklets, "
-            "data_extracts, vuln_sync, account, compound, policy_windows. "
+            "data_extracts, vuln_sync, account, compound, policy_windows, splashtop. "
             "Call with no domain to list all available domains."
         ),
         annotations={

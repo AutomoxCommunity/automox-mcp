@@ -239,6 +239,97 @@ class TestAssignPoliciesToSavedSearchParams:
 
 
 # ---------------------------------------------------------------------------
+# Splashtop schemas
+# ---------------------------------------------------------------------------
+
+
+class TestSplashtopInstallParams:
+    def test_minimal_accepted(self):
+        from automox_mcp.schemas import SplashtopInstallParams
+
+        p = SplashtopInstallParams(
+            device_uuid="550e8400-e29b-41d4-a716-446655440000",
+            os_family="windows",
+        )
+        assert p.request_permission is None
+
+    def test_rejects_unknown_os_family(self):
+        from automox_mcp.schemas import SplashtopInstallParams
+
+        with pytest.raises(ValidationError, match="os_family"):
+            SplashtopInstallParams(
+                device_uuid="550e8400-e29b-41d4-a716-446655440000",
+                os_family="solaris",
+            )
+
+    def test_rejects_unknown_request_permission(self):
+        from automox_mcp.schemas import SplashtopInstallParams
+
+        with pytest.raises(ValidationError, match="request_permission"):
+            SplashtopInstallParams(
+                device_uuid="550e8400-e29b-41d4-a716-446655440000",
+                os_family="windows",
+                request_permission="silent_force",
+            )
+
+
+class TestSplashtopInitiateConnectionParams:
+    def test_accepts_remote_control(self):
+        from automox_mcp.schemas import SplashtopInitiateConnectionParams
+
+        p = SplashtopInitiateConnectionParams(
+            device_uuid="550e8400-e29b-41d4-a716-446655440000",
+            os_family="windows",
+            connection_type="remote_control",
+        )
+        assert p.connection_type == "remote_control"
+
+    def test_rejects_unknown_connection_type(self):
+        from automox_mcp.schemas import SplashtopInitiateConnectionParams
+
+        with pytest.raises(ValidationError, match="connection_type"):
+            SplashtopInitiateConnectionParams(
+                device_uuid="550e8400-e29b-41d4-a716-446655440000",
+                os_family="windows",
+                connection_type="screen_share",
+            )
+
+
+class TestSplashtopBulkActionParams:
+    def test_accepts_install(self):
+        from automox_mcp.schemas import SplashtopBulkActionParams
+
+        p = SplashtopBulkActionParams(action="install", server_group_id=1)
+        assert p.action == "install"
+
+    def test_rejects_unknown_action(self):
+        from automox_mcp.schemas import SplashtopBulkActionParams
+
+        with pytest.raises(ValidationError, match="action"):
+            SplashtopBulkActionParams(action="reboot")
+
+
+class TestSplashtopSetBulkAttendedAccessParams:
+    def test_requires_non_empty_device_uuids(self):
+        from automox_mcp.schemas import SplashtopSetBulkAttendedAccessParams
+
+        with pytest.raises(ValidationError):
+            SplashtopSetBulkAttendedAccessParams(
+                device_uuids=[],
+                required_attended_access=True,
+            )
+
+    def test_accepts_one_uuid(self):
+        from automox_mcp.schemas import SplashtopSetBulkAttendedAccessParams
+
+        p = SplashtopSetBulkAttendedAccessParams(
+            device_uuids=["550e8400-e29b-41d4-a716-446655440000"],
+            required_attended_access=False,
+        )
+        assert p.required_attended_access is False
+
+
+# ---------------------------------------------------------------------------
 # PolicyChangeRequestParams — discriminated union
 # ---------------------------------------------------------------------------
 

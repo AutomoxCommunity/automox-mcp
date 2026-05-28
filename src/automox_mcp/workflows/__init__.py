@@ -100,6 +100,34 @@ from .policy_windows import (
     update_policy_window,
 )
 from .reports import get_noncompliant_report, get_prepatch_report
+from .splashtop import (
+    bulk_install_uninstall as splashtop_bulk_install_uninstall,
+)
+from .splashtop import (
+    force_disconnect as splashtop_force_disconnect,
+)
+from .splashtop import (
+    get_attended_access as splashtop_get_attended_access,
+)
+from .splashtop import (
+    get_device_status as splashtop_get_device_status,
+)
+from .splashtop import (
+    get_session_status as splashtop_get_session_status,
+)
+from .splashtop import (
+    initiate_connection as splashtop_initiate_connection,
+)
+from .splashtop import (
+    install_splashtop,
+    uninstall_splashtop,
+)
+from .splashtop import (
+    set_attended_access as splashtop_set_attended_access,
+)
+from .splashtop import (
+    set_bulk_attended_access as splashtop_set_bulk_attended_access,
+)
 from .vuln_sync import (
     get_action_set_detail,
     get_action_set_issues,
@@ -138,6 +166,7 @@ __all__ = [
     "policy_history",
     "policy_windows",
     "reports",
+    "splashtop",
     "vuln_sync",
     "webhooks",
     "worklets",
@@ -186,6 +215,7 @@ __all__ = [
     "get_upload_formats",
     "get_webhook",
     "get_worklet_detail",
+    "install_splashtop",
     "invite_user_to_account",
     "issue_device_command",
     "list_data_extracts",
@@ -209,12 +239,21 @@ __all__ = [
     "search_devices",
     "search_org_packages",
     "search_worklet_catalog",
+    "splashtop_bulk_install_uninstall",
+    "splashtop_force_disconnect",
+    "splashtop_get_attended_access",
+    "splashtop_get_device_status",
+    "splashtop_get_session_status",
+    "splashtop_initiate_connection",
+    "splashtop_set_attended_access",
+    "splashtop_set_bulk_attended_access",
     "summarize_device_health",
     "summarize_patch_approvals",
     "summarize_policies",
     "summarize_policy_activity",
     "summarize_policy_execution_history",
     "test_webhook",
+    "uninstall_splashtop",
     "update_saved_search",
     "update_server_group",
     "update_webhook",

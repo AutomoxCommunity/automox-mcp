@@ -73,6 +73,27 @@ def test_device_search_tools_register() -> None:
         "get_device_metadata_fields",
         "get_device_assignments",
         "get_device_by_uuid",
+        # Read-only saved-search tools (always registered)
+        "get_saved_search",
+        "get_saved_search_results",
+        "get_cached_search_results",
+        "get_search_scopes",
+    }
+    assert expected.issubset(tool_names)
+    # Write tools must be gated by read_only=True
+    assert "create_saved_search" not in tool_names
+    assert "delete_saved_search" not in tool_names
+    assert "assign_policies_to_saved_search" not in tool_names
+
+
+def test_device_search_tools_register_with_writes() -> None:
+    server = _make_server_with_module("device_search_tools", has_writes=True)
+    tool_names = automox_mcp.tools._get_tool_names(server)
+    expected = {
+        "create_saved_search",
+        "update_saved_search",
+        "delete_saved_search",
+        "assign_policies_to_saved_search",
     }
     assert expected.issubset(tool_names)
 

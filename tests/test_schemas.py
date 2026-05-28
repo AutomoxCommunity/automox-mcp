@@ -9,8 +9,10 @@ from pydantic import ValidationError
 
 from automox_mcp.schemas import (
     AdvancedDeviceSearchParams,
+    AssignPoliciesToSavedSearchParams,
     CreateDataExtractParams,
     CreatePolicyOperation,
+    CreateSavedSearchParams,
     DeviceSearchParams,
     ForbidExtraModel,
     InviteUserParams,
@@ -18,6 +20,7 @@ from automox_mcp.schemas import (
     PolicyChangeRequestParams,
     PolicyDefinition,
     UpdatePolicyOperation,
+    UpdateSavedSearchParams,
     UploadActionSetParams,
 )
 
@@ -182,6 +185,57 @@ class TestAdvancedDeviceSearchParams:
         huge = {"filter": "x" * 60_000}
         with pytest.raises(ValidationError, match="50 KB"):
             AdvancedDeviceSearchParams(query=huge)
+
+
+# ---------------------------------------------------------------------------
+# Saved-search CRUD schemas
+# ---------------------------------------------------------------------------
+
+
+class TestCreateSavedSearchParams:
+    def test_minimal_fields_accepted(self):
+        p = CreateSavedSearchParams(name="x", query={"k": "v"})
+        assert p.description is None
+
+    def test_oversized_query_rejected(self):
+        huge = {"filter": "x" * 60_000}
+        with pytest.raises(ValidationError, match="50 KB"):
+            CreateSavedSearchParams(name="x", query=huge)
+
+    def test_empty_name_rejected(self):
+        with pytest.raises(ValidationError):
+            CreateSavedSearchParams(name="", query={"k": "v"})
+
+
+class TestUpdateSavedSearchParams:
+    def test_requires_at_least_one_field(self):
+        with pytest.raises(ValidationError, match="at least one"):
+            UpdateSavedSearchParams(saved_search_id="ss-1")
+
+    def test_name_only_accepted(self):
+        p = UpdateSavedSearchParams(saved_search_id="ss-1", name="renamed")
+        assert p.name == "renamed"
+
+    def test_oversized_query_rejected(self):
+        huge = {"filter": "x" * 60_000}
+        with pytest.raises(ValidationError, match="50 KB"):
+            UpdateSavedSearchParams(saved_search_id="ss-1", query=huge)
+
+
+class TestAssignPoliciesToSavedSearchParams:
+    def test_requires_non_empty_policy_ids(self):
+        with pytest.raises(ValidationError):
+            AssignPoliciesToSavedSearchParams(
+                saved_search_uuid="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+                policy_ids=[],
+            )
+
+    def test_accepts_uuid_string(self):
+        p = AssignPoliciesToSavedSearchParams(
+            saved_search_uuid="aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+            policy_ids=[1, 2],
+        )
+        assert p.policy_ids == [1, 2]
 
 
 # ---------------------------------------------------------------------------

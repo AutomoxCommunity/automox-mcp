@@ -1,13 +1,13 @@
 # Tool Reference
 
-Complete reference for all 79 tools, 6 workflow prompts, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
+Complete reference for all 87 tools, 6 workflow prompts, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
 
 > **Tip:** You don't need to memorize this. Call `discover_capabilities` from your AI assistant to get a live summary of available tools organized by domain.
 
 ## Table of Contents
 
 - [Device Management (8 tools)](#device-management-8-tools)
-- [Advanced Device Search (6 tools)](#advanced-device-search-6-tools)
+- [Advanced Device Search (14 tools)](#advanced-device-search-14-tools)
 - [Policy Management (12 tools)](#policy-management-12-tools)
 - [Policy History v2 (6 tools)](#policy-history-v2-6-tools)
 - [Package Management (2 tools)](#package-management-2-tools)
@@ -41,9 +41,9 @@ Complete reference for all 79 tools, 6 workflow prompts, MCP resources, paramete
 - **`get_device_inventory_categories`** - List available inventory categories for a device. Categories are dynamic per device.
 - **`execute_device_command`** - Issue an immediate command to a device (scan, patch_all, patch_specific, reboot).
 
-## Advanced Device Search (6 tools)
+## Advanced Device Search (14 tools)
 
-Uses the Server Groups API v2 for structured device queries, saved searches, and UUID-based lookups.
+Uses the Server Groups API v2 for structured device queries, saved searches, and UUID-based lookups. Read-only tools are always registered; write tools (create/update/delete/assign) are gated by `read_only=False`.
 
 - **`list_saved_searches`** - List saved device searches with names, queries, and metadata.
 - **`advanced_device_search`** - Execute an advanced device search using structured query language. Enables complex queries like "find all Windows devices not seen in 30 days" using field-based filtering.
@@ -51,6 +51,14 @@ Uses the Server Groups API v2 for structured device queries, saved searches, and
 - **`get_device_metadata_fields`** - Get available fields for device queries. Returns field names and types supported by the advanced search API.
 - **`get_device_assignments`** - Get device-to-policy and device-to-group assignments.
 - **`get_device_by_uuid`** - Get device details by UUID using the Server Groups API v2.
+- **`get_saved_search`** - Retrieve a single saved search by ID with its name, description, query, and metadata.
+- **`get_saved_search_results`** - Execute a saved search and return its current device result set (supports pagination).
+- **`get_cached_search_results`** - Retrieve cached server-side results for a previously-executed device search, keyed by search execution ID.
+- **`get_search_scopes`** - List available device-search scope options (org-independent metadata).
+- **`create_saved_search`** *(write)* - Create a new saved device search from a name + structured query.
+- **`update_saved_search`** *(write)* - Update an existing saved search (partial update: name, query, and/or description).
+- **`delete_saved_search`** *(write)* - Permanently delete a saved device search by ID.
+- **`assign_policies_to_saved_search`** *(write)* - Bulk-assign one or more policies to the result set of a saved search.
 
 ## Policy Management (12 tools)
 

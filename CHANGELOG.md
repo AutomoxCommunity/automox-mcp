@@ -5,6 +5,16 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.35] - 2026-05-28
+
+### Added
+
+- **Saved-search CRUD + bulk policy assignment for the Advanced Device Search API (#80)** — Automox shipped 23 new Device Explorer endpoints on 2025-12-11; this release exposes the saved-search composition surface most useful for agentic workflows. Eight new tools register under the `device_search` module:
+  - Read-only (always registered): `get_saved_search`, `get_saved_search_results`, `get_cached_search_results`, `get_search_scopes`.
+  - Write (gated by `read_only=False`): `create_saved_search`, `update_saved_search`, `delete_saved_search`, `assign_policies_to_saved_search`.
+  - Pydantic schemas validate query payload size (50 KB cap, matching `advanced_device_search`), enforce at-least-one-field on partial update, and reject empty `policy_ids` arrays. Write tools carry MCP Tool Annotations with `destructiveHint: true` and use the standard idempotency-key envelope.
+  - Total tool count: 79 → 87 (62 read-only + 25 write). `discover_capabilities` and `docs/tool-reference.md` reflect the new surface.
+
 ## [1.0.34] - 2026-05-28
 
 ### Performance

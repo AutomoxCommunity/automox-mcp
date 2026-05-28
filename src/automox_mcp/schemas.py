@@ -773,6 +773,69 @@ class DeviceByUuidParams(ForbidExtraModel):
     device_uuid: UUID = Field(description="Device UUID")
 
 
+class GetSavedSearchParams(ForbidExtraModel):
+    saved_search_id: str = Field(description="Saved search ID", min_length=1, max_length=200)
+
+
+class CreateSavedSearchParams(ForbidExtraModel):
+    name: str = Field(description="Saved search name", min_length=1, max_length=200)
+    query: dict[str, Any] = Field(description="Structured device-search query")
+    description: str | None = Field(None, description="Optional description", max_length=1000)
+
+    @model_validator(mode="after")
+    def _limit_query_size(self) -> CreateSavedSearchParams:
+        import json
+
+        raw = json.dumps(self.query, default=str)
+        if len(raw) > 50_000:
+            raise ValueError("query payload exceeds 50 KB limit")
+        return self
+
+
+class UpdateSavedSearchParams(ForbidExtraModel):
+    saved_search_id: str = Field(description="Saved search ID", min_length=1, max_length=200)
+    name: str | None = Field(None, description="Saved search name", max_length=200)
+    query: dict[str, Any] | None = Field(None, description="Structured device-search query")
+    description: str | None = Field(None, description="Optional description", max_length=1000)
+
+    @model_validator(mode="after")
+    def _require_a_field(self) -> UpdateSavedSearchParams:
+        if self.name is None and self.query is None and self.description is None:
+            raise ValueError("at least one of name/query/description must be provided")
+        if self.query is not None:
+            import json
+
+            raw = json.dumps(self.query, default=str)
+            if len(raw) > 50_000:
+                raise ValueError("query payload exceeds 50 KB limit")
+        return self
+
+
+class DeleteSavedSearchParams(ForbidExtraModel):
+    saved_search_id: str = Field(description="Saved search ID", min_length=1, max_length=200)
+
+
+class SavedSearchResultsParams(ForbidExtraModel):
+    saved_search_id: str = Field(description="Saved search ID", min_length=1, max_length=200)
+    page: int | None = Field(None, ge=0, description="Page number")
+    limit: int | None = Field(None, ge=1, le=500, description="Results per page")
+
+
+class CachedSearchResultsParams(ForbidExtraModel):
+    search_id: str = Field(description="Search execution ID", min_length=1, max_length=200)
+    page: int | None = Field(None, ge=0, description="Page number")
+    limit: int | None = Field(None, ge=1, le=500, description="Results per page")
+
+
+class AssignPoliciesToSavedSearchParams(ForbidExtraModel):
+    saved_search_uuid: UUID = Field(description="Saved-search UUID")
+    policy_ids: list[int] = Field(
+        description="Policy IDs to assign to the saved-search result set",
+        min_length=1,
+        max_length=200,
+    )
+
+
 # ============================================================================
 # COMPOUND TOOL SCHEMAS
 # ============================================================================

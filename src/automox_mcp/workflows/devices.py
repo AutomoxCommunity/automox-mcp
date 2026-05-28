@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from typing import Any, Literal, cast
 
 from ..client import AutomoxAPIError, AutomoxClient
+from ..utils.pagination import parallel_paginate
 from ..utils.response import normalize_status as _normalize_status
 from ..utils.response import require_org_id
 from .device_inventory import get_device_inventory
@@ -521,25 +522,26 @@ async def list_device_inventory(
     policy_status_filter = _normalize_status(policy_status) if policy_status else None
     curated_devices: list[dict[str, Any]] = []
 
-    for page_num in range(max_pages):
-        params["page"] = page_num
-        payload = await client.get("/servers", params=params)
-        # Handle both list and paginated dict response formats
+    async def _fetch_inventory_page(page_num: int) -> Sequence[Mapping[str, Any]]:
+        page_params = dict(params)
+        page_params["page"] = page_num
+        payload = await client.get("/servers", params=page_params)
         if isinstance(payload, list):
-            devices: Sequence[Mapping[str, Any]] = payload
-        elif isinstance(payload, Mapping):
+            return payload
+        if isinstance(payload, Mapping):
             _data = payload.get("data") or payload.get("results")
-            devices = _data if isinstance(_data, list) else []
-        else:
-            devices = []
+            return _data if isinstance(_data, list) else []
+        return []
 
-        if not devices:
-            break
+    def _process_inventory_page(_page_num: int, items: Sequence[Mapping[str, Any]]) -> bool:
+        """Apply filters to each device in ``items``; stop when limit reached.
 
-        for item in devices:
+        Called by parallel_paginate in strict page order; safe to mutate
+        ``curated_devices`` from here.
+        """
+        for item in items:
             summary_fields = _summarize_device_common_fields(item)
             is_managed = summary_fields["is_managed"]
-
             if managed is not None and is_managed != managed:
                 continue
             if not include_unmanaged and not is_managed:
@@ -547,7 +549,6 @@ async def list_device_inventory(
             device_policy_status = summary_fields["policy_status"]
             if policy_status_filter and device_policy_status != policy_status_filter:
                 continue
-
             curated_devices.append(
                 {
                     "device_id": item.get("id") or item.get("device_id"),
@@ -565,13 +566,20 @@ async def list_device_inventory(
                 }
             )
             if len(curated_devices) >= limit:
-                break
+                return True
+        return False
 
-        if len(curated_devices) >= limit:
-            break
-        # If the API returned fewer than requested, there are no more pages
-        if len(devices) < fetch_limit:
-            break
+    # #69: parallel-paginate with on_page filtering and limit-driven stop.
+    # Concurrency 2 (not 4) because filtered queries already over-fetch
+    # at fetch_limit = limit*3, so the marginal value of more parallel
+    # pages is outweighed by potential over-fetch on selective filters.
+    await parallel_paginate(
+        _fetch_inventory_page,
+        page_size=fetch_limit,
+        max_pages=max_pages,
+        concurrency=2,
+        on_page=_process_inventory_page,
+    )
 
     preview = curated_devices[:limit]
 
@@ -942,32 +950,26 @@ async def search_devices(
 
     filtered: list[Any] = []
 
-    for page_num in range(max_pages):
-        params["page"] = page_num
-
+    async def _fetch_search_page(page_num: int) -> Sequence[Any]:
+        page_params = dict(params)
+        page_params["page"] = page_num
         # Build params as list of tuples so httpx repeats the severity key correctly
-        param_tuples = list(params.items())
+        param_tuples = list(page_params.items())
         for sev in severity_values:
             param_tuples.append(("filters[severity][]", sev))
-
         raw_devices = await client.get(
-            "/servers", params=dict(params) if not severity_values else param_tuples
+            "/servers", params=page_params if not severity_values else param_tuples
         )
-        # Handle both list and paginated dict response formats
         if isinstance(raw_devices, Sequence) and not isinstance(raw_devices, (str, bytes)):
-            devices = raw_devices
-        elif isinstance(raw_devices, Mapping):
+            return raw_devices
+        if isinstance(raw_devices, Mapping):
             _data = raw_devices.get("data") or raw_devices.get("results")
             if isinstance(_data, Sequence) and not isinstance(_data, (str, bytes)):
-                devices = _data
-            else:
-                devices = []
-        else:
-            devices = []
+                return _data
+        return []
 
-        if not devices:
-            break
-
+    def _process_search_page(_page_num: int, devices: Sequence[Any]) -> bool:
+        """Apply client-side filters per-device; stop when limit reached."""
         for device in devices:
             if hostname_term:
                 name = str(device.get("name") or device.get("hostname") or "").lower()
@@ -994,12 +996,21 @@ async def search_devices(
 
             filtered.append(device)
             if len(filtered) >= limit:
-                break
+                return True
+        return False
 
-        if len(filtered) >= limit:
-            break
-        if len(devices) < fetch_limit:
-            break
+    # #69: parallel-paginate with on_page filtering. Concurrency 2 for
+    # the same reason as list_device_inventory — filtered queries
+    # over-fetch on selective filters; tight concurrency caps the waste.
+    await parallel_paginate(
+        _fetch_search_page,
+        page_size=fetch_limit,
+        max_pages=max_pages,
+        concurrency=2,
+        on_page=_process_search_page,
+    )
+    # _process_search_page mutates `filtered`; the helper's return value
+    # is ignored. Building the preview is the only post-pagination work.
 
     preview = []
     for item in filtered[:limit]:
@@ -1065,26 +1076,29 @@ async def summarize_device_health(
     if group_id is not None:
         params["groupId"] = group_id
 
-    # Paginate to collect all devices (up to a safety cap)
+    # Paginate to collect all devices (up to a safety cap).
+    # #69: parallel-paginate via the shared helper. health is the cleanest
+    # case — no client-side filter, no early-break on limit, every page is
+    # needed. Concurrency 4 cuts wall-time roughly in half on big fleets.
     _MAX_HEALTH_PAGES = 20
-    all_devices: list[Any] = []
-    for _page_num in range(_MAX_HEALTH_PAGES):
-        params["page"] = _page_num
-        page_response = await client.get("/servers", params=params)
-        # Handle both list and paginated dict response formats
+
+    async def _fetch_health_page(page_num: int) -> Sequence[Any]:
+        page_params = dict(params)
+        page_params["page"] = page_num
+        page_response = await client.get("/servers", params=page_params)
         if isinstance(page_response, Sequence) and not isinstance(page_response, (str, bytes)):
-            page_items = page_response
-        elif isinstance(page_response, Mapping):
+            return page_response
+        if isinstance(page_response, Mapping):
             _data = page_response.get("data") or page_response.get("results")
             if isinstance(_data, Sequence) and not isinstance(_data, (str, bytes)):
-                page_items = _data
-            else:
-                page_items = []
-        else:
-            page_items = []
-        all_devices.extend(page_items)
-        if len(page_items) < effective_limit:
-            break
+                return _data
+        return []
+
+    all_devices = await parallel_paginate(
+        _fetch_health_page,
+        page_size=effective_limit,
+        max_pages=_MAX_HEALTH_PAGES,
+    )
     devices: Sequence[Any] = all_devices
 
     totals: Counter[str] = Counter()

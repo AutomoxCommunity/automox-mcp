@@ -5,6 +5,15 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.34] - 2026-05-28
+
+### Performance
+
+- **Parallel pagination for device-list workflows (#69)** — `summarize_device_health`, `list_device_inventory`, and `search_devices` previously paginated `/servers` serially, costing one upstream RTT per page; on multi-page tenants the loop dominated wall time. New shared helper `automox_mcp.utils.pagination.parallel_paginate` fetches page 0 serially (fast path for single-page tenants), then fans out subsequent pages via `asyncio.gather` in batches of `concurrency` (default 4 for exhaustive aggregation, 2 for filter-and-limit workflows). Results are walked in strict page order; short pages and `on_page` early-stop signals discard any prefetched pages after the terminator (offset pagination makes them empty or racily inconsistent).
+  - **Empirical speedup on a 5-page query against the live tenant: 4 parallel pages = 1.21s vs 4.49s serial (3.7×).** The full `summarize_device_health` workflow at `limit=50` (5 pages) ran in ~2.0s vs ~5s serial-projected.
+  - 12 new helper tests cover single-page, exact-multiple-of-page-size, off-by-one termination, short-page-discards-batch-tail, on_page early stop, strict page-order invariant under out-of-order completion, concurrency bound, gather-with-failure, and boundary conditions (`max_pages=0`, `max_pages=1`, empty page 0).
+  - No behavior change for callers: response shape and the canonical pagination metadata block are unchanged.
+
 ## [1.0.33] - 2026-05-28
 
 ### Changed

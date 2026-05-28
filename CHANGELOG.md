@@ -5,6 +5,13 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.33] - 2026-05-28
+
+### Changed
+
+- **Scheduled-windows `date` schema accepts the standard ISO 8601 surface (#78)** — `GetGroupScheduledWindowsParams.date` and `GetDeviceScheduledWindowsParams.date` previously rejected any ISO 8601 string with milliseconds or a timezone offset (e.g., `2026-05-28T00:00:00.000Z`, `2026-05-28T00:00:00+00:00`), which are the default outputs of `datetime.isoformat()` in Python and `Date.toISOString()` in JavaScript. Loosened the regex to `^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d{1,9})?)?(Z|[+-]\d{2}:\d{2})?)?$` so the schema matches what callers actually emit. Added a `description` to both fields documenting a known upstream Automox API bug (issue #78): the `/policy-windows/.../scheduled-windows` endpoints currently reject every `date` format including the one documented in their own error message — omit the parameter unless tenant-specific scoping is required. New parametrized schema tests cover the accepted formats and reject obvious garbage.
+- **`audit_events_ocsf` tool description documents the dual-permission requirement** — per the Automox API change log entry of 2025-10-27, the upstream OCSF audit endpoint now requires the calling API key to have BOTH `organization:manage` and `users:read` scopes; keys missing either scope return 403. The tool description now surfaces that requirement so callers can provision the right key without hitting a runtime 403.
+
 ## [1.0.32] - 2026-05-27
 
 ### Changed

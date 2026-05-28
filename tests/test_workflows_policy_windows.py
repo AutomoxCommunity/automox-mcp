@@ -495,3 +495,45 @@ async def test_all_functions_include_metadata() -> None:
     for r in results:
         assert "metadata" in r, f"Missing metadata in {r}"
         assert r["metadata"]["deprecated_endpoint"] is False
+
+
+# ---------------------------------------------------------------------------
+# Schema regex — #78: accept the full standard ISO 8601 surface so the
+# schema reflects what `datetime.isoformat()` and JS `Date.toISOString()`
+# actually emit. Previously the regex blocked milliseconds and offsets.
+# ---------------------------------------------------------------------------
+@pytest.mark.parametrize(
+    "value",
+    [
+        "2026-05-28",  # date only
+        "2026-05-28T00:00",  # date + HH:MM
+        "2026-05-28T00:00:00",  # + seconds
+        "2026-05-28T00:00:00.000",  # + milliseconds
+        "2026-05-28T00:00:00.000000",  # + microseconds
+        "2026-05-28T00:00:00Z",  # UTC
+        "2026-05-28T00:00:00.000Z",  # millis + UTC
+        "2026-05-28T00:00:00+00:00",  # offset
+        "2026-05-28T00:00:00.000+00:00",  # millis + offset
+        "2026-05-28T00:00:00-04:00",  # negative offset
+    ],
+)
+def test_scheduled_windows_date_accepts_iso8601(value: str) -> None:
+    """#78: the loosened regex must accept the formats standard ISO 8601 emitters produce."""
+    from automox_mcp.tools.policy_windows_tools import GetGroupScheduledWindowsParams
+
+    params = GetGroupScheduledWindowsParams(org_uuid=_ORG_UUID, group_uuid=_GROUP_UUID, date=value)
+    assert params.date == value
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["banana", "2026/05/28", "not-a-date", ""],
+)
+def test_scheduled_windows_date_rejects_obvious_garbage(value: str) -> None:
+    """Loosening the regex should not let free-text through."""
+    from pydantic import ValidationError
+
+    from automox_mcp.tools.policy_windows_tools import GetGroupScheduledWindowsParams
+
+    with pytest.raises(ValidationError):
+        GetGroupScheduledWindowsParams(org_uuid=_ORG_UUID, group_uuid=_GROUP_UUID, date=value)

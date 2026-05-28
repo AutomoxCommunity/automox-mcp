@@ -27,7 +27,10 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "Query OCSF-formatted audit events from the Automox Audit Service v2. "
             "Supports filtering by date, event category (authentication, account_change, "
             "entity_management, user_access, web_resource_activity), and event type name. "
-            "Uses cursor-based pagination for large result sets."
+            "Uses cursor-based pagination for large result sets. "
+            "Permissions: as of 2025-10-27 the upstream endpoint requires the API key "
+            "to have BOTH `organization:manage` and `users:read` scopes; keys missing "
+            "either scope return 403."
         ),
         annotations={
             "readOnlyHint": True,

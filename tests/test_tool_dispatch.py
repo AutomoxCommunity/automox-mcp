@@ -20,6 +20,7 @@ from automox_mcp.tools import (
     group_tools,
     package_tools,
     report_tools,
+    splashtop_tools,
     webhook_tools,
 )
 from automox_mcp.utils import tooling as _utils_tooling
@@ -1636,3 +1637,338 @@ class TestPolicyToolsErrorHandling:
         assert "delete_policy" not in server.tools
         assert "policy_catalog" in server.tools
         assert "policy_health_overview" in server.tools
+
+
+# ---------------------------------------------------------------------------
+# splashtop_tools
+# ---------------------------------------------------------------------------
+
+
+_DEV_UUID = "550e8400-e29b-41d4-a716-446655440000"
+
+
+class TestSplashtopToolsDispatch:
+    @pytest.mark.asyncio
+    async def test_device_status_calls_workflow(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        recorded: dict[str, Any] = {}
+
+        async def fake(client, **kwargs):
+            recorded.update(kwargs)
+            return _success()
+
+        monkeypatch.setattr(splashtop_tools, "_get_device_status", fake)
+
+        server = StubServer()
+        splashtop_tools.register(server, client=FakeClient())
+
+        await server.tools["splashtop_device_status"](device_uuid=_DEV_UUID)
+        assert str(recorded.get("device_uuid")) == _DEV_UUID
+
+    @pytest.mark.asyncio
+    async def test_session_status_passes_account_type(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        recorded: dict[str, Any] = {}
+
+        async def fake(client, **kwargs):
+            recorded.update(kwargs)
+            return _success()
+
+        monkeypatch.setattr(splashtop_tools, "_get_session_status", fake)
+
+        server = StubServer()
+        splashtop_tools.register(server, client=FakeClient())
+
+        await server.tools["splashtop_session_status"](
+            device_uuid=_DEV_UUID, account_type="PREMIUM"
+        )
+        assert str(recorded.get("device_uuid")) == _DEV_UUID
+        assert recorded.get("account_type") == "PREMIUM"
+
+    @pytest.mark.asyncio
+    async def test_get_attended_access_calls_workflow(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        recorded: dict[str, Any] = {}
+
+        async def fake(client, **kwargs):
+            recorded.update(kwargs)
+            return _success()
+
+        monkeypatch.setattr(splashtop_tools, "_get_attended_access", fake)
+
+        server = StubServer()
+        splashtop_tools.register(server, client=FakeClient())
+
+        await server.tools["splashtop_get_attended_access"](device_uuid=_DEV_UUID)
+        assert str(recorded.get("device_uuid")) == _DEV_UUID
+
+    @pytest.mark.asyncio
+    async def test_install_calls_workflow(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        recorded: dict[str, Any] = {}
+
+        async def fake(client, **kwargs):
+            recorded.update(kwargs)
+            return _success()
+
+        monkeypatch.setattr(splashtop_tools, "_install_splashtop", fake)
+
+        server = StubServer()
+        splashtop_tools.register(server, read_only=False, client=FakeClient())
+
+        await server.tools["splashtop_install"](
+            device_uuid=_DEV_UUID,
+            os_family="windows",
+            request_permission="not_needed",
+            organization_uuid="bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+            account_type="BASIC",
+        )
+        assert str(recorded.get("device_uuid")) == _DEV_UUID
+        assert recorded.get("os_family") == "windows"
+        assert recorded.get("request_permission") == "not_needed"
+
+    @pytest.mark.asyncio
+    async def test_bulk_install_uninstall_calls_workflow(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        recorded: dict[str, Any] = {}
+
+        async def fake(client, **kwargs):
+            recorded.update(kwargs)
+            return _success()
+
+        monkeypatch.setattr(splashtop_tools, "_bulk_install_uninstall", fake)
+
+        server = StubServer()
+        splashtop_tools.register(server, read_only=False, client=FakeClient())
+
+        await server.tools["splashtop_bulk_install_uninstall"](
+            action="uninstall", server_group_id=42
+        )
+        assert recorded.get("action") == "uninstall"
+        assert recorded.get("server_group_id") == 42
+
+    @pytest.mark.asyncio
+    async def test_initiate_connection_calls_workflow(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        recorded: dict[str, Any] = {}
+
+        async def fake(client, **kwargs):
+            recorded.update(kwargs)
+            return _success()
+
+        monkeypatch.setattr(splashtop_tools, "_initiate_connection", fake)
+
+        server = StubServer()
+        splashtop_tools.register(server, read_only=False, client=FakeClient())
+
+        await server.tools["splashtop_initiate_connection"](
+            device_uuid=_DEV_UUID,
+            os_family="windows",
+            connection_type="remote_control",
+        )
+        assert str(recorded.get("device_uuid")) == _DEV_UUID
+        assert recorded.get("connection_type") == "remote_control"
+
+    @pytest.mark.asyncio
+    async def test_force_disconnect_calls_workflow(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        recorded: dict[str, Any] = {}
+
+        async def fake(client, **kwargs):
+            recorded.update(kwargs)
+            return _success()
+
+        monkeypatch.setattr(splashtop_tools, "_force_disconnect", fake)
+
+        server = StubServer()
+        splashtop_tools.register(server, read_only=False, client=FakeClient())
+
+        await server.tools["splashtop_force_disconnect"](device_uuid=_DEV_UUID, os_family="windows")
+        assert str(recorded.get("device_uuid")) == _DEV_UUID
+
+    @pytest.mark.asyncio
+    async def test_set_attended_access_calls_workflow(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        recorded: dict[str, Any] = {}
+
+        async def fake(client, **kwargs):
+            recorded.update(kwargs)
+            return _success()
+
+        monkeypatch.setattr(splashtop_tools, "_set_attended_access", fake)
+
+        server = StubServer()
+        splashtop_tools.register(server, read_only=False, client=FakeClient())
+
+        await server.tools["splashtop_set_attended_access"](
+            device_uuid=_DEV_UUID, required_attended_access=False
+        )
+        assert str(recorded.get("device_uuid")) == _DEV_UUID
+        assert recorded.get("required_attended_access") is False
+
+    @pytest.mark.asyncio
+    async def test_set_bulk_attended_access_calls_workflow(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        recorded: dict[str, Any] = {}
+
+        async def fake(client, **kwargs):
+            recorded.update(kwargs)
+            return _success()
+
+        monkeypatch.setattr(splashtop_tools, "_set_bulk_attended_access", fake)
+
+        server = StubServer()
+        splashtop_tools.register(server, read_only=False, client=FakeClient())
+
+        await server.tools["splashtop_set_bulk_attended_access"](
+            device_uuids=[_DEV_UUID], required_attended_access=True
+        )
+        assert [str(u) for u in recorded.get("device_uuids", [])] == [_DEV_UUID]
+        assert recorded.get("required_attended_access") is True
+
+    @pytest.mark.asyncio
+    async def test_uninstall_calls_workflow(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        recorded: dict[str, Any] = {}
+
+        async def fake(client, **kwargs):
+            recorded.update(kwargs)
+            return _success()
+
+        monkeypatch.setattr(splashtop_tools, "_uninstall_splashtop", fake)
+
+        server = StubServer()
+        splashtop_tools.register(server, read_only=False, client=FakeClient())
+
+        await server.tools["splashtop_uninstall"](device_uuid=_DEV_UUID, os_family="windows")
+        assert str(recorded.get("device_uuid")) == _DEV_UUID
+
+    @pytest.mark.asyncio
+    async def test_write_tools_absent_in_read_only(self) -> None:
+        server = StubServer()
+        splashtop_tools.register(server, read_only=True, client=FakeClient())
+
+        for write_tool in (
+            "splashtop_install",
+            "splashtop_bulk_install_uninstall",
+            "splashtop_initiate_connection",
+            "splashtop_force_disconnect",
+            "splashtop_set_attended_access",
+            "splashtop_set_bulk_attended_access",
+            "splashtop_uninstall",
+        ):
+            assert write_tool not in server.tools
+
+        for read_tool in (
+            "splashtop_device_status",
+            "splashtop_session_status",
+            "splashtop_get_attended_access",
+        ):
+            assert read_tool in server.tools
+
+
+class TestSplashtopIdempotencyAndExceptionPaths:
+    """Exercise the cache-hit + exception-release branches for all
+    splashtop write tools to keep coverage of those handlers green."""
+
+    _WRITE_CASES = [
+        (
+            "splashtop_install",
+            "_install_splashtop",
+            {"device_uuid": _DEV_UUID, "os_family": "windows"},
+        ),
+        (
+            "splashtop_bulk_install_uninstall",
+            "_bulk_install_uninstall",
+            {"action": "install"},
+        ),
+        (
+            "splashtop_initiate_connection",
+            "_initiate_connection",
+            {
+                "device_uuid": _DEV_UUID,
+                "os_family": "windows",
+                "connection_type": "remote_control",
+            },
+        ),
+        (
+            "splashtop_force_disconnect",
+            "_force_disconnect",
+            {"device_uuid": _DEV_UUID, "os_family": "windows"},
+        ),
+        (
+            "splashtop_set_attended_access",
+            "_set_attended_access",
+            {"device_uuid": _DEV_UUID, "required_attended_access": True},
+        ),
+        (
+            "splashtop_set_bulk_attended_access",
+            "_set_bulk_attended_access",
+            {"device_uuids": [_DEV_UUID], "required_attended_access": True},
+        ),
+        (
+            "splashtop_uninstall",
+            "_uninstall_splashtop",
+            {"device_uuid": _DEV_UUID, "os_family": "windows"},
+        ),
+    ]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("tool_name,wf_attr,kwargs", _WRITE_CASES)
+    async def test_cache_hit_short_circuits_workflow(
+        self,
+        tool_name: str,
+        wf_attr: str,
+        kwargs: dict[str, Any],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        called: list[bool] = []
+
+        async def fake_check(request_id: str | None, name: str):
+            return {"data": {"cached": True}, "metadata": {"deprecated_endpoint": False}}
+
+        async def fake_wf(client, **_):
+            called.append(True)
+            return _success()
+
+        monkeypatch.setattr(splashtop_tools, "check_idempotency", fake_check)
+        monkeypatch.setattr(splashtop_tools, wf_attr, fake_wf)
+
+        server = StubServer()
+        splashtop_tools.register(server, read_only=False, client=FakeClient())
+
+        result = await server.tools[tool_name](request_id="req-1", **kwargs)
+        assert result == {"data": {"cached": True}, "metadata": {"deprecated_endpoint": False}}
+        assert called == []  # workflow not invoked on cache hit
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("tool_name,wf_attr,kwargs", _WRITE_CASES)
+    async def test_workflow_exception_releases_idempotency(
+        self,
+        tool_name: str,
+        wf_attr: str,
+        kwargs: dict[str, Any],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        released: list[str] = []
+
+        async def fake_release(request_id: str | None, name: str):
+            released.append(name)
+
+        async def fake_wf(client, **_):
+            raise RuntimeError("upstream blew up")
+
+        monkeypatch.setattr(splashtop_tools, "release_idempotency", fake_release)
+        monkeypatch.setattr(splashtop_tools, wf_attr, fake_wf)
+
+        server = StubServer()
+        splashtop_tools.register(server, read_only=False, client=FakeClient())
+
+        from fastmcp.exceptions import ToolError
+
+        with pytest.raises((RuntimeError, ToolError)):
+            await server.tools[tool_name](request_id="req-2", **kwargs)
+
+        assert released == [tool_name]

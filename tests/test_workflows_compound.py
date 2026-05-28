@@ -307,7 +307,10 @@ async def test_patch_tuesday_readiness_caps_inner_lists_at_detail_limit() -> Non
         "total": 30,
         "returned": 10,
         "has_more": True,
-        "follow_up_tool": "get_prepatch_report",
+        # Registered tool name is `prepatch_report` (no `get_` prefix); the
+        # earlier `get_prepatch_report` value was a real bug — LLMs following
+        # the hint hit `Unknown tool` errors. See v1.0.30 / sweep finding.
+        "follow_up_tool": "prepatch_report",
         "follow_up_args_hint": {},
     }
     assert summaries["patch_approvals.approvals"]["follow_up_tool"] == "patch_approvals_summary"
@@ -917,11 +920,14 @@ async def test_compliance_snapshot_caps_inner_lists_at_detail_limit() -> None:
     summaries = result["metadata"]["section_summaries"]
     assert summaries["noncompliant_report.devices"]["total"] == 30
     assert summaries["noncompliant_report.devices"]["returned"] == 10
-    assert summaries["noncompliant_report.devices"]["follow_up_tool"] == "get_noncompliant_report"
+    # Registered tool name is `noncompliant_report` (no `get_` prefix); the
+    # earlier `get_noncompliant_report` value was a real bug — LLMs following
+    # the hint hit `Unknown tool` errors. See v1.0.30 / sweep finding.
+    assert summaries["noncompliant_report.devices"]["follow_up_tool"] == "noncompliant_report"
     assert summaries["device_health.stale_devices"]["follow_up_tool"] == "device_health_metrics"
     # LLM-friendly notes.
     notes = result["metadata"]["notes"]
-    assert any("get_noncompliant_report" in n for n in notes)
+    assert any("noncompliant_report" in n for n in notes)
 
 
 @pytest.mark.asyncio
@@ -1009,3 +1015,133 @@ async def test_full_profile_detail_limit_falls_back_to_max_packages(
 
     assert result["data"]["packages"]["returned"] == 7
     assert result["metadata"]["detail_limit"] == 7
+
+
+# ===========================================================================
+# Contract enforcement: every `follow_up_tool` in compound responses must
+# resolve to an actually-registered tool name.
+#
+# This was a real bug: get_patch_tuesday_readiness and get_compliance_snapshot
+# both emitted follow_up_tool="get_prepatch_report" / "get_noncompliant_report"
+# while the registered tool names are `prepatch_report` and `noncompliant_report`
+# (no `get_` prefix). LLMs following the contract's hint got `Unknown tool`
+# errors. Surfaced by tests/exploratory_sweep.py.
+# ===========================================================================
+
+
+def _collect_follow_up_tools(metadata: dict[str, Any]) -> set[str]:
+    """Extract every follow_up_tool value from a compound-tool metadata block."""
+    out: set[str] = set()
+    sections = metadata.get("section_summaries") or {}
+    if isinstance(sections, dict):
+        for info in sections.values():
+            if isinstance(info, dict):
+                tool = info.get("follow_up_tool")
+                if isinstance(tool, str):
+                    out.add(tool)
+    return out
+
+
+def _all_registered_tool_names() -> set[str]:
+    """Register every tool module against a fresh FastMCP and return tool names.
+
+    Bypasses environment-driven module filtering so the assertion covers the
+    complete tool surface — any compound tool whose follow_up dispatch points
+    at a name outside this set is broken.
+    """
+    import importlib
+
+    from fastmcp import FastMCP
+
+    from automox_mcp.tools import _MODULE_REGISTRY, _get_tool_names
+
+    server = FastMCP("contract-check")
+    client = StubClient()
+    for _, (tool_module, _has_writes) in _MODULE_REGISTRY.items():
+        mod = importlib.import_module(f"automox_mcp.tools.{tool_module}")
+        # Register with writes enabled so destructive tools are also captured.
+        mod.register(server, read_only=False, client=cast(AutomoxClient, client))
+    return _get_tool_names(server)
+
+
+@pytest.mark.asyncio
+async def test_patch_tuesday_follow_up_tools_are_registered() -> None:
+    """Every `follow_up_tool` emitted by get_patch_tuesday_readiness must be
+    the name of an actually-registered tool. Regression: v1.0.27 shipped with
+    `get_prepatch_report` here, which does not resolve."""
+    # Force truncation so all three section_summaries fire.
+    devices = [{"id": i, "name": f"h-{i}", "patches": [{"severity": "high"}]} for i in range(30)]
+    approvals = [{"id": i, "status": "pending", "severity": "high"} for i in range(30)]
+    policies = [
+        {
+            "id": 1000 + i,
+            "name": f"P{i}",
+            "policy_type_name": "patch",
+            "status": "active",
+            "schedule_days": 124,
+            "schedule_time": "02:00",
+        }
+        for i in range(30)
+    ]
+    client = StubClient(
+        get_responses={
+            "/reports/prepatch": [{"prepatch": {"devices": devices, "total": 30}}],
+            "/approvals": [approvals],
+            "/policies": [policies],
+            "/policystats": [[]],
+        }
+    )
+    client.org_id = 555
+
+    result = await get_patch_tuesday_readiness(
+        cast(AutomoxClient, client),
+        org_id=555,
+        org_uuid="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        detail_limit=10,
+    )
+
+    emitted = _collect_follow_up_tools(result["metadata"])
+    registered = _all_registered_tool_names()
+    missing = emitted - registered
+    assert not missing, (
+        f"compound tool dispatch points at non-registered tool name(s): {missing}. "
+        f"Emitted follow_up_tools: {sorted(emitted)}. Registered surface size: {len(registered)}."
+    )
+
+
+@pytest.mark.asyncio
+async def test_compliance_snapshot_follow_up_tools_are_registered() -> None:
+    """Every `follow_up_tool` emitted by get_compliance_snapshot must be the
+    name of an actually-registered tool. Regression: v1.0.27 shipped with
+    `get_noncompliant_report` here, which does not resolve."""
+    noncompliant_devices = [{"id": i, "name": f"nc-{i}", "groupId": 10} for i in range(30)]
+    client = StubClient(
+        get_responses={
+            "/reports/needs-attention": [
+                {"nonCompliant": {"total": 30, "devices": noncompliant_devices}}
+            ],
+            "/servers": [
+                [
+                    {"id": 200 + i, "managed": True, "status": {"policy_status": "failed"}}
+                    for i in range(30)
+                ]
+            ],
+            "/policies": [[]],
+            "/policystats": [[]],
+        }
+    )
+    client.org_id = 555
+
+    result = await get_compliance_snapshot(
+        cast(AutomoxClient, client),
+        org_id=555,
+        detail_limit=10,
+    )
+
+    emitted = _collect_follow_up_tools(result["metadata"])
+    registered = _all_registered_tool_names()
+    missing = emitted - registered
+    assert not missing, (
+        f"compound tool dispatch points at non-registered tool name(s): {missing}. "
+        f"Emitted follow_up_tools: {sorted(emitted)}. Registered surface size: {len(registered)}."
+    )

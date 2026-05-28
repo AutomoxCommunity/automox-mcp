@@ -449,9 +449,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             policy_ids: list[int],
             request_id: str | None = None,
         ) -> dict[str, Any]:
-            cached = await check_idempotency(
-                request_id, "assign_policies_to_saved_search"
-            )
+            cached = await check_idempotency(request_id, "assign_policies_to_saved_search")
             if cached is not None:
                 return cached
 
@@ -466,13 +464,9 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                     params_model=AssignPoliciesToSavedSearchParams,
                 )
             except BaseException:
-                await release_idempotency(
-                    request_id, "assign_policies_to_saved_search"
-                )
+                await release_idempotency(request_id, "assign_policies_to_saved_search")
                 raise
-            await store_idempotency(
-                request_id, "assign_policies_to_saved_search", result
-            )
+            await store_idempotency(request_id, "assign_policies_to_saved_search", result)
             return result
 
 

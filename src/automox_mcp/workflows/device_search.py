@@ -387,9 +387,7 @@ async def get_saved_search_results(
     total: Any = None
     if isinstance(response, Mapping):
         total = (
-            response.get("total")
-            or response.get("totalCount")
-            or response.get("total_elements")
+            response.get("total") or response.get("totalCount") or response.get("total_elements")
         )
 
     return {
@@ -433,9 +431,7 @@ async def get_cached_search_results(
     total: Any = None
     if isinstance(response, Mapping):
         total = (
-            response.get("total")
-            or response.get("totalCount")
-            or response.get("total_elements")
+            response.get("total") or response.get("totalCount") or response.get("total_elements")
         )
 
     return {

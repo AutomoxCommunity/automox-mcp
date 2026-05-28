@@ -5,6 +5,12 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.31] - 2026-05-27
+
+### Changed
+
+- **Prompts teach the compound-tool contract (#67)** — `prepare_patch_tuesday` and `review_security_posture` now document the `detail_limit` parameter, the `metadata.section_summaries.<key>` shape, and the follow-up-tool dispatch pattern (which detail tool to call for each truncated section, and to use the `follow_up_args_hint` rather than guessing args). The compound-tool contract shipped across v1.0.26 / v1.0.27 / v1.0.30, but the prompts that drive these tools didn't teach how to use it — LLMs were learning the contract by reading the response only after potentially losing fidelity. Now the contract is taught up-front so the LLM can ask for `detail_limit=0` when it only wants the headline counts, or call the follow-up tool proactively when the user wants full detail. Two new regression tests assert each prompt mentions `detail_limit`, `section_summaries`, and `follow_up_tool`.
+
 ## [1.0.30] - 2026-05-27
 
 ### Fixed

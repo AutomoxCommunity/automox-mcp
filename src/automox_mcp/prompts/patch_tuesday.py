@@ -15,9 +15,12 @@ def register(server: FastMCP) -> None:
 
 1. **Get Patch Tuesday readiness**: Use `get_patch_tuesday_readiness` to get a combined view of pre-patch status, pending approvals, and policy schedules.
 
-2. **Review pending approvals**: Use `patch_approvals_summary` to see all pending patch approval requests. Prioritize by severity (critical > high > medium > low).
+   - The tool accepts an optional `detail_limit` (default `10`) that caps every inner list (`prepatch_report.devices`, `patch_approvals.approvals`, `patch_policy_schedules`). Counts and aggregates (`total_devices_needing_patches`, `pending_count`, `readiness_summary`) are always returned in full, so set `detail_limit=0` if you only need the headline numbers.
+   - If a section was truncated, the response surfaces `metadata.section_summaries.<key>` with `total`, `returned`, `has_more`, and a `follow_up_tool` + `follow_up_args_hint` pointing at the detail tool to call for the rest (`prepatch_report` for devices, `patch_approvals_summary` for approvals, `policy_catalog` for schedules). Use those hints rather than guessing at args.
 
-3. **Check pre-patch report**: Use `prepatch_report` to identify devices with pending patches and their severity breakdown.
+2. **Review pending approvals**: Use `patch_approvals_summary` to see all pending patch approval requests. Prioritize by severity (critical > high > medium > low). Use this if step 1 reported truncated `patch_approvals.approvals` via `metadata.section_summaries`.
+
+3. **Check pre-patch report**: Use `prepatch_report` to identify devices with pending patches and their severity breakdown. Use this if step 1 reported truncated `prepatch_report.devices`.
 
 4. **Review patch policies**: Use `policy_catalog` to list all patch policies. For each active patch policy, use `policy_detail` to check:
    - Schedule (is it aligned with the Patch Tuesday window?)

@@ -53,6 +53,17 @@ def test_patch_tuesday_prompt_renders(server: FastMCP) -> None:
     assert "patch_approvals_summary" in result
 
 
+def test_patch_tuesday_prompt_teaches_compound_contract(server: FastMCP) -> None:
+    """#67: the prompt that uses get_patch_tuesday_readiness must teach the
+    detail_limit / section_summaries / follow_up_tool dispatch contract so
+    the LLM knows what to do when a section is truncated."""
+    prompt = _get_prompts(server)["prepare_patch_tuesday"]
+    result = prompt.fn()
+    assert "detail_limit" in result
+    assert "section_summaries" in result
+    assert "follow_up_tool" in result
+
+
 def test_audit_policy_prompt_renders(server: FastMCP) -> None:
     prompt = _get_prompts(server)["audit_policy_execution"]
     result = prompt.fn(policy_id="999")
@@ -79,3 +90,14 @@ def test_security_posture_prompt_renders(server: FastMCP) -> None:
     result = prompt.fn()
     assert "compliance" in result.lower()
     assert "device_health_metrics" in result
+
+
+def test_security_posture_prompt_teaches_compound_contract(server: FastMCP) -> None:
+    """#67: the prompt that uses get_compliance_snapshot must teach the
+    detail_limit / section_summaries / follow_up_tool dispatch contract so
+    the LLM knows what to do when a section is truncated."""
+    prompt = _get_prompts(server)["review_security_posture"]
+    result = prompt.fn()
+    assert "detail_limit" in result
+    assert "section_summaries" in result
+    assert "follow_up_tool" in result

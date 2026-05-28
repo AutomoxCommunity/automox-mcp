@@ -5,6 +5,16 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.30] - 2026-05-27
+
+### Fixed
+
+- **Compound tools' `follow_up_tool` dispatch pointed at non-existent tool names** — Both `get_patch_tuesday_readiness` and `get_compliance_snapshot` emitted `metadata.section_summaries.<key>.follow_up_tool = "get_prepatch_report"` / `"get_noncompliant_report"` when their inner lists were truncated. The actual registered tool names are `prepatch_report` and `noncompliant_report` (no `get_` prefix). Every LLM that followed the contract's own dispatch hint received `Unknown tool` errors at exactly the moment it tried to recover from a truncated section. The compound-tool contract shipped in v1.0.26 / v1.0.27 (#53) was broken at its most important UX point. Surfaced by the new exploratory sweep harness (`tests/exploratory_sweep.py`). Added a regression test that registers the entire tool surface and asserts every `follow_up_tool` emitted by a compound response resolves to a known tool name.
+
+### Added
+
+- **`tests/exploratory_sweep.py`** — Persona-driven exploratory probe harness that exercises ~50 tool calls across 8 operator personas (patch admin, security analyst, fleet manager, policy operator, vuln manager, webhook admin, device drill-down, maintenance windows) plus safe-write probes with auto-cleanup. Reports PASS / ANOMALY / FAIL per probe. Manual debugging harness (not CI). Ships alongside `tests/verify_reported_bugs.py` and `tests/smoke_production.py`.
+
 ## [1.0.29] - 2026-05-27
 
 ### Fixed

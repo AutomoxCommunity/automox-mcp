@@ -119,7 +119,7 @@ async def get_patch_tuesday_readiness(
             "prepatch_report.devices",
             prepatch_devices_full,
             prepatch_devices_preview,
-            "get_prepatch_report",
+            "prepatch_report",
             follow_up_hint,
         ),
         (
@@ -272,7 +272,7 @@ async def get_compliance_snapshot(
             "noncompliant_report.devices",
             noncompliant_devices_full,
             noncompliant_devices_preview,
-            "get_noncompliant_report",
+            "noncompliant_report",
             follow_up_hint,
         ),
     ):

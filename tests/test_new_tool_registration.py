@@ -98,6 +98,43 @@ def test_device_search_tools_register_with_writes() -> None:
     assert expected.issubset(tool_names)
 
 
+def test_splashtop_tools_register_read_only() -> None:
+    server = _make_server_with_module("splashtop_tools", has_writes=False)
+    tool_names = automox_mcp.tools._get_tool_names(server)
+    read_only = {
+        "splashtop_device_status",
+        "splashtop_session_status",
+        "splashtop_get_attended_access",
+    }
+    assert read_only.issubset(tool_names)
+    # Write tools must NOT register in read-only mode
+    for write_tool in (
+        "splashtop_install",
+        "splashtop_bulk_install_uninstall",
+        "splashtop_initiate_connection",
+        "splashtop_force_disconnect",
+        "splashtop_set_attended_access",
+        "splashtop_set_bulk_attended_access",
+        "splashtop_uninstall",
+    ):
+        assert write_tool not in tool_names, f"{write_tool} leaked into read-only mode"
+
+
+def test_splashtop_tools_register_with_writes() -> None:
+    server = _make_server_with_module("splashtop_tools", has_writes=True)
+    tool_names = automox_mcp.tools._get_tool_names(server)
+    expected = {
+        "splashtop_install",
+        "splashtop_bulk_install_uninstall",
+        "splashtop_initiate_connection",
+        "splashtop_force_disconnect",
+        "splashtop_set_attended_access",
+        "splashtop_set_bulk_attended_access",
+        "splashtop_uninstall",
+    }
+    assert expected.issubset(tool_names)
+
+
 def test_vuln_sync_tools_register_read_only() -> None:
     server = _make_server_with_module("vuln_sync_tools", has_writes=False)
     tool_names = automox_mcp.tools._get_tool_names(server)

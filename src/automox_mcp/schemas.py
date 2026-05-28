@@ -837,6 +837,175 @@ class AssignPoliciesToSavedSearchParams(ForbidExtraModel):
 
 
 # ============================================================================
+# SPLASHTOP REMOTE CONTROL SCHEMAS (2026-01-14)
+# ============================================================================
+
+# OS values accepted by the install / initiate-connection / force-disconnect /
+# uninstall endpoints. The OpenAPI spec is inconsistent (initiate-connection
+# enums ``windows|macos``; install/uninstall/force-disconnect examples are
+# ``windows|mac|deb``). We accept the union and pass the value through; the
+# upstream validates per-endpoint.
+_SPLASHTOP_OS_FAMILIES: tuple[str, ...] = ("windows", "mac", "macos", "deb")
+_SPLASHTOP_ACCOUNT_TYPES: tuple[str, ...] = ("BASIC", "PREMIUM", "NONE")
+_SPLASHTOP_CONNECTION_TYPES: tuple[str, ...] = (
+    "remote_control",
+    "remote_command",
+    "file_transfer",
+    "registry_editor",
+)
+_SPLASHTOP_REQUEST_PERMISSIONS: tuple[str, ...] = ("not_needed", "ask_reject_on_timeout")
+
+
+class SplashtopDeviceStatusParams(ForbidExtraModel):
+    device_uuid: UUID = Field(description="Automox device UUID")
+
+
+class SplashtopSessionStatusParams(ForbidExtraModel):
+    device_uuid: UUID = Field(description="Automox device UUID")
+    account_type: str | None = Field(
+        None,
+        description="Optional accountType filter (BASIC, PREMIUM, NONE)",
+    )
+
+    @model_validator(mode="after")
+    def _validate_account_type(self) -> SplashtopSessionStatusParams:
+        if self.account_type is not None and self.account_type not in _SPLASHTOP_ACCOUNT_TYPES:
+            raise ValueError(
+                f"account_type must be one of {_SPLASHTOP_ACCOUNT_TYPES}, got {self.account_type!r}"
+            )
+        return self
+
+
+class SplashtopAttendedAccessGetParams(ForbidExtraModel):
+    device_uuid: UUID = Field(description="Automox device UUID")
+
+
+class SplashtopInstallParams(ForbidExtraModel):
+    device_uuid: UUID = Field(description="Automox device UUID")
+    os_family: str = Field(description="Device OS family", min_length=1, max_length=32)
+    request_permission: str | None = Field(
+        None,
+        description=(
+            "Install-time consent: 'not_needed' (silent install) or "
+            "'ask_reject_on_timeout' (prompt the user, reject on timeout). "
+            "Distinct from per-device attended-access for sessions."
+        ),
+    )
+    organization_uuid: UUID | None = Field(None, description="Optional organization UUID")
+    account_type: str | None = Field(
+        None,
+        description="Optional accountType (BASIC, PREMIUM, NONE)",
+    )
+
+    @model_validator(mode="after")
+    def _validate_enums(self) -> SplashtopInstallParams:
+        if self.os_family not in _SPLASHTOP_OS_FAMILIES:
+            raise ValueError(
+                f"os_family must be one of {_SPLASHTOP_OS_FAMILIES}, got {self.os_family!r}"
+            )
+        if (
+            self.request_permission is not None
+            and self.request_permission not in _SPLASHTOP_REQUEST_PERMISSIONS
+        ):
+            raise ValueError(f"request_permission must be one of {_SPLASHTOP_REQUEST_PERMISSIONS}")
+        if self.account_type is not None and self.account_type not in _SPLASHTOP_ACCOUNT_TYPES:
+            raise ValueError(f"account_type must be one of {_SPLASHTOP_ACCOUNT_TYPES}")
+        return self
+
+
+class SplashtopBulkActionParams(ForbidExtraModel):
+    action: str = Field(description="Bulk action: 'install' or 'uninstall'")
+    server_group_id: int | None = Field(None, ge=1, description="Optional server group ID")
+
+    @model_validator(mode="after")
+    def _validate_action(self) -> SplashtopBulkActionParams:
+        if self.action not in {"install", "uninstall"}:
+            raise ValueError("action must be 'install' or 'uninstall'")
+        return self
+
+
+class SplashtopInitiateConnectionParams(ForbidExtraModel):
+    device_uuid: UUID = Field(description="Automox device UUID")
+    os_family: str = Field(description="Device OS family (windows or macos)")
+    connection_type: str = Field(
+        description=(
+            "Connection type (remote_control, remote_command, file_transfer, registry_editor)"
+        )
+    )
+    account_type: str | None = Field(
+        None,
+        description="Optional accountType (BASIC, PREMIUM, NONE)",
+    )
+
+    @model_validator(mode="after")
+    def _validate_enums(self) -> SplashtopInitiateConnectionParams:
+        if self.os_family not in _SPLASHTOP_OS_FAMILIES:
+            raise ValueError(
+                f"os_family must be one of {_SPLASHTOP_OS_FAMILIES}, got {self.os_family!r}"
+            )
+        if self.connection_type not in _SPLASHTOP_CONNECTION_TYPES:
+            raise ValueError(
+                f"connection_type must be one of {_SPLASHTOP_CONNECTION_TYPES}, "
+                f"got {self.connection_type!r}"
+            )
+        if self.account_type is not None and self.account_type not in _SPLASHTOP_ACCOUNT_TYPES:
+            raise ValueError(f"account_type must be one of {_SPLASHTOP_ACCOUNT_TYPES}")
+        return self
+
+
+class SplashtopForceDisconnectParams(ForbidExtraModel):
+    device_uuid: UUID = Field(description="Automox device UUID")
+    os_family: str = Field(description="Device OS family")
+
+    @model_validator(mode="after")
+    def _validate_os(self) -> SplashtopForceDisconnectParams:
+        if self.os_family not in _SPLASHTOP_OS_FAMILIES:
+            raise ValueError(
+                f"os_family must be one of {_SPLASHTOP_OS_FAMILIES}, got {self.os_family!r}"
+            )
+        return self
+
+
+class SplashtopSetAttendedAccessParams(ForbidExtraModel):
+    device_uuid: UUID = Field(description="Automox device UUID")
+    required_attended_access: bool = Field(
+        description=(
+            "When True, end-user consent is required before sessions start. "
+            "When False, sessions can start without end-user approval — "
+            "review your organization's policy before disabling."
+        )
+    )
+
+
+class SplashtopSetBulkAttendedAccessParams(ForbidExtraModel):
+    device_uuids: list[UUID] = Field(
+        description="Automox device UUIDs",
+        min_length=1,
+        max_length=500,
+    )
+    required_attended_access: bool = Field(
+        description=(
+            "When True, end-user consent is required before sessions start. "
+            "When False, sessions can start without end-user approval — "
+            "review your organization's policy before disabling."
+        )
+    )
+
+
+class SplashtopUninstallParams(ForbidExtraModel):
+    device_uuid: UUID = Field(description="Automox device UUID")
+    os_family: str = Field(description="Device OS family")
+
+    @model_validator(mode="after")
+    def _validate_os(self) -> SplashtopUninstallParams:
+        if self.os_family not in _SPLASHTOP_OS_FAMILIES:
+            raise ValueError(
+                f"os_family must be one of {_SPLASHTOP_OS_FAMILIES}, got {self.os_family!r}"
+            )
+        return self
+
+
+# ============================================================================
 # COMPOUND TOOL SCHEMAS
 # ============================================================================
 

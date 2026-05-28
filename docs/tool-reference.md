@@ -1,6 +1,6 @@
 # Tool Reference
 
-Complete reference for all 87 tools, 6 workflow prompts, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
+Complete reference for all 97 tools, 6 workflow prompts, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
 
 > **Tip:** You don't need to memorize this. Call `discover_capabilities` from your AI assistant to get a live summary of available tools organized by domain.
 
@@ -22,6 +22,7 @@ Complete reference for all 87 tools, 6 workflow prompts, MCP resources, paramete
 - [Account Management (3 tools)](#account-management-3-tools)
 - [Audit Trail (2 tools)](#audit-trail-2-tools)
 - [Policy Windows (9 tools)](#policy-windows-9-tools)
+- [Splashtop Remote Control (10 tools)](#splashtop-remote-control-10-tools)
 - [Capability Discovery (1 tool)](#capability-discovery-1-tool)
 - [Workflow Prompts (6 prompts)](#workflow-prompts-6-prompts)
 - [MCP Resources](#mcp-resources)
@@ -171,6 +172,23 @@ Manage maintenance/exclusion windows that prevent policy execution during schedu
 - **`create_policy_window`** - Create a new maintenance/exclusion window with RFC 5545 RRULE scheduling. Supports recurring windows (e.g., every Monday 2–4 AM) and one-time windows. All fields required.
 - **`update_policy_window`** - Update an existing maintenance window. Only `dtstart` is required; all other fields are optional for partial updates.
 - **`delete_policy_window`** - Delete a maintenance/exclusion window permanently.
+
+## Splashtop Remote Control (10 tools)
+
+Wraps the ten `/remotecontrol-st/...` endpoints Automox shipped on 2026-01-14 (Splashtop partnership GA). Read-only tools (`splashtop_device_status`, `splashtop_session_status`, `splashtop_get_attended_access`) are always registered; write tools are gated by `read_only=False` and carry `destructiveHint: true`.
+
+Tenants without an active Remote Control subscription (Core bundled with Automate Enterprise, or Resolve as a paid add-on) will receive 4XX errors from the upstream — tools surface these as standard `AutomoxApiError`. Module loads only when `splashtop` is included in `AUTOMOX_MCP_MODULES` (or no module filter is set).
+
+- **`splashtop_device_status`** - Installation and registration status for a device (install_time, registration_status, install error if any).
+- **`splashtop_session_status`** - Active session count, max sessions, and whether a new session can be started.
+- **`splashtop_get_attended_access`** - Returns whether end-user consent is required before remote sessions can start.
+- **`splashtop_install`** *(write)* - Install the Splashtop RMM client on a device (asynchronous). `request_permission` controls install-time consent (`not_needed` or `ask_reject_on_timeout`), distinct from per-session attended access.
+- **`splashtop_bulk_install_uninstall`** *(write)* - Bulk install or uninstall across a server group. Returns 200 when queued, not when complete.
+- **`splashtop_initiate_connection`** *(write)* - Generate a `splashtop-sos://...` deeplink for an operator. The API does NOT start the session — the operator opens the URL in their local Splashtop RMM App, and end-user consent still applies when attended access is enabled.
+- **`splashtop_force_disconnect`** *(write)* - Force-disconnect all active Splashtop sessions on a device. Interrupts any in-progress operator work.
+- **`splashtop_set_attended_access`** *(write)* - Enable or disable the end-user-consent requirement for a device. Setting to `false` allows unattended sessions — review your organization's policy.
+- **`splashtop_set_bulk_attended_access`** *(write)* - Bulk-set the attended-access requirement across many devices in one call.
+- **`splashtop_uninstall`** *(write)* - Uninstall the Splashtop RMM client and delete the device's registration + attended-access setting. Permanent.
 
 ## Capability Discovery (1 tool)
 

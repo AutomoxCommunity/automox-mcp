@@ -39,6 +39,7 @@ _VALID_MODULES: frozenset[str] = frozenset(
         "vuln_sync",
         "compound",
         "policy_windows",
+        "splashtop",
     }
 )
 

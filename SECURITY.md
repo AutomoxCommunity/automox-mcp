@@ -60,7 +60,7 @@ For sensitive deployments, we recommend using an MCP gateway with inline guardra
 
 ### Privilege Escalation
 
-- `AUTOMOX_MCP_READ_ONLY` mode disables all 25 write tools
+- `AUTOMOX_MCP_READ_ONLY` mode disables all 32 write tools
 - `AUTOMOX_MCP_MODULES` limits which tool domains load (principle of least functionality)
 - Pagination capped at 50 pages to prevent resource exhaustion (V-011)
 - Report limits bounded to 500 results (V-004)
@@ -187,7 +187,7 @@ For sensitive deployments, we recommend using an MCP gateway with inline guardra
 | V-178 | Null-safe policy count in group summaries | `workflows/groups.py` |
 | V-179 | Rate limiter eviction covers `_failures` dict | `transport_security.py` |
 | V-180 | Code block sanitizer strips all fenced blocks regardless of language label | `utils/sanitize.py` |
-| V-181 | MCP Tool Annotations on all 87 tools (readOnlyHint, destructiveHint, idempotentHint, openWorldHint) | `tools/*.py` |
+| V-181 | MCP Tool Annotations on all 97 tools (readOnlyHint, destructiveHint, idempotentHint, openWorldHint) | `tools/*.py` |
 
 ## Scope and Limitations
 

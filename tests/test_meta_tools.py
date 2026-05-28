@@ -85,6 +85,7 @@ def test_all_domains_present():
         "account",
         "compound",
         "policy_windows",
+        "splashtop",
     }
     assert set(_DOMAIN_CATALOG.keys()) == expected
 

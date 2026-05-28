@@ -5,6 +5,20 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.36] - 2026-05-28
+
+### Added
+
+- **Splashtop Remote Control module (#81)** — Wraps all ten `/remotecontrol-st/...` endpoints Automox shipped on 2026-01-14 (Splashtop partnership GA). Endpoint paths, request/response shapes, and parameter enums are sourced verbatim from the [`AutomoxCommunity/openapi-defs`](https://github.com/AutomoxCommunity/openapi-defs/blob/main/openapi/bundles/ax-console-bundle.yaml) authoritative spec — no guessing.
+  - **Module name:** `splashtop` (load via `AUTOMOX_MCP_MODULES=splashtop,...`).
+  - **Read-only tools (always registered):** `splashtop_device_status`, `splashtop_session_status`, `splashtop_get_attended_access`.
+  - **Write tools (gated by `read_only=False`, `destructiveHint: true`):** `splashtop_install`, `splashtop_bulk_install_uninstall`, `splashtop_initiate_connection`, `splashtop_force_disconnect`, `splashtop_set_attended_access`, `splashtop_set_bulk_attended_access`, `splashtop_uninstall`.
+  - **Important semantics:** `splashtop_initiate_connection` returns a `splashtop-sos://...` deeplink — the API does NOT start the session. The operator's local Splashtop RMM App handles the URL, and end-user consent still applies when attended access is enabled on the device. The tool description and response both surface this.
+  - **Entitlement model:** Remote Control Core is bundled with Automate Enterprise; Resolve is a paid add-on. Tenants without either return upstream 4XX, which the shared client surfaces as `AutomoxApiError`.
+  - **Permission:** No separate API scope; standard Automox API key with the operator's RBAC `Devices: Control` (or `Remote Control Deployment: Manage` for bulk) permissions per the [Splashtop QSG](https://docs.automox.com/product/Product_Documentation/Remote_Control_Module/Splashtop_QSG.htm). No operator MFA per the API contract.
+  - Pydantic schemas validate the `os_family`, `connection_type`, `request_permission`, `accountType`, and `action` enums verbatim from the OpenAPI spec.
+  - Total tool count: 87 → 97 (65 read-only + 32 write). README, SECURITY.md, deployment-security.md, tool-reference.md, `discover_capabilities`, and `_VALID_MODULES` all updated.
+
 ## [1.0.35] - 2026-05-28
 
 ### Added

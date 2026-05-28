@@ -106,12 +106,12 @@ jobs:
       # quickstart. Tracked alongside other supply-chain items.
       # ---------------------------------------------------------------
 
-      # The MCP Registry validates the package by querying PyPI's JSON
-      # API. Between uploading to PyPI and PyPI's CDN serving the new
-      # version, the registry call routinely sees a 404 — observed on
-      # v1.0.29 and v1.0.30, both requiring a manual `gh workflow run
-      # release.yml --ref vX.Y.Z` backfill. Poll PyPI until it serves
-      # the version we just published, then continue.
+      # The MCP Registry validates the package by querying the SAME URL
+      # this step polls (https://pypi.org/pypi/<name>/<version>/json). On
+      # the happy path PyPI serves it within seconds; on the unhappy path
+      # this confirms PyPI itself completed the upload. The registry's
+      # *server-side* lookup is handled by the retry loop on the publish
+      # step below.
       - name: Wait for PyPI to serve new version
         if: steps.pypi_check.outputs.exists != 'true'
         run: |
@@ -125,7 +125,7 @@ jobs:
             echo "  attempt ${i}/30: not yet, sleeping 10s..."
             sleep 10
           done
-          echo "::error::PyPI did not serve ${VERSION} within 5 minutes — registry publish will likely fail. Re-run via 'gh workflow run release.yml --ref ${GITHUB_REF_NAME}' once PyPI catches up."
+          echo "::error::PyPI did not serve ${VERSION} within 5 minutes."
           exit 1
 
       - name: Install mcp-publisher
@@ -149,9 +149,30 @@ jobs:
           MCP_REGISTRY_PRIVATE_KEY: ${{ secrets.MCP_REGISTRY_PRIVATE_KEY }}
         run: ./mcp-publisher login dns --domain automox.com --private-key "$MCP_REGISTRY_PRIVATE_KEY"
 
-      - name: Publish to MCP Registry
+      # The MCP Registry validates by fetching the same PyPI JSON URL the
+      # wait step above just confirmed (see
+      # https://github.com/modelcontextprotocol/registry/blob/main/internal/validators/registries/pypi.go).
+      # But the registry's server-side lookup hits a different PyPI CDN
+      # edge than the GitHub Actions runner — observed on v1.0.29, v1.0.30,
+      # and v1.0.31 (which had the wait step in place, runner saw 200,
+      # registry saw 404 within 0.3 s). PoP propagation between PyPI edges
+      # typically catches up within 3-5 minutes. Retry with 30 s backoff
+      # so the publish lands as soon as the registry's PoP is in sync.
+      - name: Publish to MCP Registry (with retry)
         if: steps.pypi_check.outputs.exists != 'true'
-        run: ./mcp-publisher publish
+        run: |
+          for i in $(seq 1 6); do
+            if ./mcp-publisher publish; then
+              echo "MCP Registry publish succeeded on attempt ${i}."
+              exit 0
+            fi
+            if [ "$i" -lt 6 ]; then
+              echo "  attempt ${i}/6 failed, sleeping 30s before retry..."
+              sleep 30
+            fi
+          done
+          echo "::error::MCP Registry publish failed after 6 attempts (~2.5 min total). Re-run via 'gh workflow run release.yml --ref ${GITHUB_REF_NAME}'."
+          exit 1
 
       # ---------------------------------------------------------------
       # MCPB Desktop Extension build & upload

@@ -50,16 +50,59 @@ class CheckWindowActiveParams(ForbidExtraModel):
     window_uuid: UUID
 
 
+# ISO 8601 date or date-time. Accepts:
+#   YYYY-MM-DD                       (date only)
+#   YYYY-MM-DDTHH:MM[:SS]            (local time)
+#   YYYY-MM-DDTHH:MM[:SS].sss        (with sub-second precision)
+#   YYYY-MM-DDTHH:MM[:SS][.sss]Z         (UTC)
+#   YYYY-MM-DDTHH:MM[:SS][.sss]+HH:MM    (with offset)
+#
+# Previous regex was tighter (`^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?Z?)?$`)
+# and silently rejected ISO 8601 strings with milliseconds or offsets — both
+# common outputs from `datetime.isoformat()` and JS `Date.toISOString()`.
+# Loosened to accept the standard ISO 8601 surface so the schema reflects
+# what callers actually emit. Upstream date-format quirks documented per
+# field below — see issue #78.
+_ISO_DATE_OR_DATETIME = (
+    r"^\d{4}-\d{2}-\d{2}"
+    r"(T\d{2}:\d{2}(:\d{2}(\.\d{1,9})?)?(Z|[+-]\d{2}:\d{2})?)?$"
+)
+
+
+# Known upstream quirk (issue #78): the /policy-windows/.../scheduled-windows
+# endpoints declare `date` optional but treat it as required, and reject any
+# format containing URL-encoded colons (i.e., the format every standard HTTP
+# client emits). The Automox API error message says "Expected format:
+# YYYY-MM-DDTHH:mm:ss" but in practice rejects that too. Until upstream is
+# fixed, omitting `date` is the most reliable path; callers who must pass
+# one should expect a 400 from the upstream.
+_SCHEDULED_WINDOWS_DATE_DESCRIPTION = (
+    "Optional ISO 8601 date or date-time. Note: the upstream Automox API "
+    "currently has a known bug where this parameter is rejected for most "
+    "formats including the one documented in its own error message; omit "
+    "this parameter unless you have a tenant-specific reason to set it. "
+    "Tracked as issue #78."
+)
+
+
 class GetGroupScheduledWindowsParams(ForbidExtraModel):
     org_uuid: UUID
     group_uuid: UUID
-    date: str | None = Field(None, pattern=r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?Z?)?$")
+    date: str | None = Field(
+        None,
+        pattern=_ISO_DATE_OR_DATETIME,
+        description=_SCHEDULED_WINDOWS_DATE_DESCRIPTION,
+    )
 
 
 class GetDeviceScheduledWindowsParams(ForbidExtraModel):
     org_uuid: UUID
     device_uuid: UUID
-    date: str | None = Field(None, pattern=r"^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2})?Z?)?$")
+    date: str | None = Field(
+        None,
+        pattern=_ISO_DATE_OR_DATETIME,
+        description=_SCHEDULED_WINDOWS_DATE_DESCRIPTION,
+    )
 
 
 class CreatePolicyWindowParams(ForbidExtraModel):

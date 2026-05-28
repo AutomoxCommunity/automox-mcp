@@ -8,11 +8,19 @@ from conftest import StubClient
 from automox_mcp.client import AutomoxClient
 from automox_mcp.workflows.device_search import (
     advanced_device_search,
+    assign_policies_to_saved_search,
+    create_saved_search,
+    delete_saved_search,
     device_search_typeahead,
+    get_cached_search_results,
     get_device_assignments,
     get_device_by_uuid,
     get_device_metadata_fields,
+    get_saved_search,
+    get_saved_search_results,
+    get_search_scopes,
     list_saved_searches,
+    update_saved_search,
 )
 
 _ORG_UUID = "11111111-2222-3333-4444-555555555555"
@@ -281,3 +289,164 @@ async def test_device_by_uuid_handles_non_mapping() -> None:
         device_uuid="bad",
     )
     assert result["data"] == {}
+
+
+# ---------------------------------------------------------------------------
+# Saved-search CRUD + bulk-assignment (Device Explorer, 2025-12-11)
+# ---------------------------------------------------------------------------
+
+
+_SAVED_SEARCH_DETAIL = {
+    "id": "ss-001",
+    "name": "Stale Devices",
+    "description": "Not seen in 30 days",
+    "query": {"lastSeen": "<30d"},
+    "created_at": "2026-01-01T00:00:00Z",
+}
+
+_SAVED_SEARCH_UUID = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+
+
+@pytest.mark.asyncio
+async def test_get_saved_search_returns_detail() -> None:
+    path = f"/server-groups-api/v1/organizations/{_ORG_UUID}/device/saved-search/ss-001"
+    client = _make_client(get_responses={path: [_SAVED_SEARCH_DETAIL]})
+    result = await get_saved_search(cast(AutomoxClient, client), saved_search_id="ss-001")
+    assert result["data"]["name"] == "Stale Devices"
+    assert result["data"]["query"] == {"lastSeen": "<30d"}
+
+
+@pytest.mark.asyncio
+async def test_get_saved_search_handles_non_mapping() -> None:
+    path = f"/server-groups-api/v1/organizations/{_ORG_UUID}/device/saved-search/ss-bad"
+    client = _make_client(get_responses={path: [["unexpected"]]})
+    result = await get_saved_search(cast(AutomoxClient, client), saved_search_id="ss-bad")
+    assert result["data"] == {}
+
+
+@pytest.mark.asyncio
+async def test_create_saved_search_posts_body() -> None:
+    path = f"/server-groups-api/v1/organizations/{_ORG_UUID}/device/saved-search"
+    client = _make_client(post_responses={path: [{"id": "ss-new", "name": "All Windows"}]})
+    result = await create_saved_search(
+        cast(AutomoxClient, client),
+        name="All Windows",
+        query={"os_family": "Windows"},
+        description="Windows devices",
+    )
+
+    method, called_path, body = client.calls[0]
+    assert method == "POST"
+    assert called_path == path
+    assert body == {
+        "name": "All Windows",
+        "query": {"os_family": "Windows"},
+        "description": "Windows devices",
+    }
+    assert result["data"]["id"] == "ss-new"
+    assert result["data"]["created"] is True
+
+
+@pytest.mark.asyncio
+async def test_create_saved_search_omits_description_when_none() -> None:
+    path = f"/server-groups-api/v1/organizations/{_ORG_UUID}/device/saved-search"
+    client = _make_client(post_responses={path: [{"id": "ss-new"}]})
+    await create_saved_search(
+        cast(AutomoxClient, client),
+        name="Minimal",
+        query={"hostname": "host-*"},
+    )
+
+    _, _, body = client.calls[0]
+    assert "description" not in body
+    assert body["name"] == "Minimal"
+
+
+@pytest.mark.asyncio
+async def test_update_saved_search_sends_partial_body() -> None:
+    path = f"/server-groups-api/v1/organizations/{_ORG_UUID}/device/saved-search/ss-001"
+    client = _make_client(put_responses={path: [{"id": "ss-001", "name": "Renamed"}]})
+    result = await update_saved_search(
+        cast(AutomoxClient, client),
+        saved_search_id="ss-001",
+        name="Renamed",
+    )
+
+    method, _, body = client.calls[0]
+    assert method == "PUT"
+    assert body == {"name": "Renamed"}
+    assert result["data"]["updated"] is True
+    assert result["data"]["saved_search_id"] == "ss-001"
+
+
+@pytest.mark.asyncio
+async def test_delete_saved_search_calls_delete() -> None:
+    path = f"/server-groups-api/v1/organizations/{_ORG_UUID}/device/saved-search/ss-001"
+    client = _make_client(delete_responses={path: [None]})
+    result = await delete_saved_search(cast(AutomoxClient, client), saved_search_id="ss-001")
+
+    method, called_path, _ = client.calls[0]
+    assert method == "DELETE"
+    assert called_path == path
+    assert result["data"] == {"saved_search_id": "ss-001", "deleted": True}
+
+
+@pytest.mark.asyncio
+async def test_get_saved_search_results_returns_devices() -> None:
+    path = f"/server-groups-api/v1/organizations/{_ORG_UUID}/device/saved-search/ss-001/results"
+    client = _make_client(get_responses={path: [_SEARCH_RESULTS]})
+    result = await get_saved_search_results(
+        cast(AutomoxClient, client),
+        saved_search_id="ss-001",
+        page=1,
+        limit=25,
+    )
+
+    assert result["data"]["total_devices"] == 100
+    assert len(result["data"]["devices"]) == 2
+    assert result["data"]["saved_search_id"] == "ss-001"
+    _, _, params = client.calls[0]
+    assert params == {"page": 1, "limit": 25}
+
+
+@pytest.mark.asyncio
+async def test_get_cached_search_results_returns_devices() -> None:
+    path = f"/server-groups-api/v1/organizations/{_ORG_UUID}/device/search/run-42/saved"
+    client = _make_client(get_responses={path: [_SEARCH_RESULTS]})
+    result = await get_cached_search_results(
+        cast(AutomoxClient, client),
+        search_id="run-42",
+    )
+
+    assert result["data"]["search_id"] == "run-42"
+    assert result["data"]["total_devices"] == 100
+
+
+@pytest.mark.asyncio
+async def test_assign_policies_to_saved_search_posts_policy_ids() -> None:
+    path = f"/server-groups-api/v1/organizations/{_ORG_UUID}/saved-searches/{_SAVED_SEARCH_UUID}"
+    client = _make_client(post_responses={path: [{"status": "queued"}]})
+    result = await assign_policies_to_saved_search(
+        cast(AutomoxClient, client),
+        saved_search_uuid=_SAVED_SEARCH_UUID,
+        policy_ids=[101, 202],
+    )
+
+    method, called_path, body = client.calls[0]
+    assert method == "POST"
+    assert called_path == path
+    assert body == {"policy_ids": [101, 202]}
+    assert result["data"]["assigned"] is True
+    assert result["data"]["saved_search_uuid"] == _SAVED_SEARCH_UUID
+    assert result["data"]["policy_ids"] == [101, 202]
+
+
+@pytest.mark.asyncio
+async def test_get_search_scopes_returns_metadata() -> None:
+    path = "/server-groups-api/device/metadata/scopes"
+    scopes = [{"name": "device"}, {"name": "group"}, {"name": "org"}]
+    client = _make_client(get_responses={path: [scopes]})
+    result = await get_search_scopes(cast(AutomoxClient, client))
+
+    assert result["data"]["total_scopes"] == 3
+    assert result["data"]["scopes"] == scopes

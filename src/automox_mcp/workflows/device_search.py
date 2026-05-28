@@ -252,3 +252,238 @@ async def get_device_by_uuid(
         "data": detail,
         "metadata": {"deprecated_endpoint": False},
     }
+
+
+# ---------------------------------------------------------------------------
+# Saved-search CRUD + bulk-assignment (Device Explorer, 2025-12-11)
+# ---------------------------------------------------------------------------
+
+
+async def get_saved_search(
+    client: AutomoxClient,
+    *,
+    org_id: int | None = None,
+    saved_search_id: str,
+) -> dict[str, Any]:
+    """Retrieve a single saved device search by ID."""
+    org_uuid = await _resolve_org(client, org_id)
+    response = await client.get(
+        f"/server-groups-api/v1/organizations/{org_uuid}/device/saved-search/{saved_search_id}",
+    )
+
+    detail: dict[str, Any] = dict(response) if isinstance(response, Mapping) else {}
+
+    return {
+        "data": detail,
+        "metadata": {"deprecated_endpoint": False},
+    }
+
+
+async def create_saved_search(
+    client: AutomoxClient,
+    *,
+    org_id: int | None = None,
+    name: str,
+    query: dict[str, Any],
+    description: str | None = None,
+) -> dict[str, Any]:
+    """Create a new saved device search."""
+    org_uuid = await _resolve_org(client, org_id)
+
+    body: dict[str, Any] = {"name": name, "query": query}
+    if description is not None:
+        body["description"] = description
+
+    response = await client.post(
+        f"/server-groups-api/v1/organizations/{org_uuid}/device/saved-search",
+        json_data=body,
+    )
+
+    data: dict[str, Any] = dict(response) if isinstance(response, Mapping) else {"raw": response}
+    data["created"] = True
+
+    return {
+        "data": data,
+        "metadata": {"deprecated_endpoint": False},
+    }
+
+
+async def update_saved_search(
+    client: AutomoxClient,
+    *,
+    org_id: int | None = None,
+    saved_search_id: str,
+    name: str | None = None,
+    query: dict[str, Any] | None = None,
+    description: str | None = None,
+) -> dict[str, Any]:
+    """Update an existing saved device search."""
+    org_uuid = await _resolve_org(client, org_id)
+
+    body: dict[str, Any] = {}
+    if name is not None:
+        body["name"] = name
+    if query is not None:
+        body["query"] = query
+    if description is not None:
+        body["description"] = description
+
+    response = await client.put(
+        f"/server-groups-api/v1/organizations/{org_uuid}/device/saved-search/{saved_search_id}",
+        json_data=body,
+    )
+
+    data: dict[str, Any] = dict(response) if isinstance(response, Mapping) else {}
+    data["saved_search_id"] = saved_search_id
+    data["updated"] = True
+
+    return {
+        "data": data,
+        "metadata": {"deprecated_endpoint": False},
+    }
+
+
+async def delete_saved_search(
+    client: AutomoxClient,
+    *,
+    org_id: int | None = None,
+    saved_search_id: str,
+) -> dict[str, Any]:
+    """Delete a saved device search permanently."""
+    org_uuid = await _resolve_org(client, org_id)
+    await client.delete(
+        f"/server-groups-api/v1/organizations/{org_uuid}/device/saved-search/{saved_search_id}",
+    )
+
+    return {
+        "data": {"saved_search_id": saved_search_id, "deleted": True},
+        "metadata": {"deprecated_endpoint": False},
+    }
+
+
+async def get_saved_search_results(
+    client: AutomoxClient,
+    *,
+    org_id: int | None = None,
+    saved_search_id: str,
+    page: int | None = None,
+    limit: int | None = None,
+) -> dict[str, Any]:
+    """Execute a saved search and retrieve its current device results."""
+    org_uuid = await _resolve_org(client, org_id)
+
+    params: dict[str, Any] = {}
+    if page is not None:
+        params["page"] = page
+    if limit is not None:
+        params["limit"] = limit
+
+    response = await client.get(
+        f"/server-groups-api/v1/organizations/{org_uuid}/device/saved-search/{saved_search_id}/results",
+        params=params or None,
+    )
+
+    devices = _extract_list(response)
+    total: Any = None
+    if isinstance(response, Mapping):
+        total = (
+            response.get("total") or response.get("totalCount") or response.get("total_elements")
+        )
+
+    return {
+        "data": {
+            "saved_search_id": saved_search_id,
+            "total_devices": total if total is not None else len(devices),
+            "devices": devices,
+        },
+        "metadata": {"deprecated_endpoint": False},
+    }
+
+
+async def get_cached_search_results(
+    client: AutomoxClient,
+    *,
+    org_id: int | None = None,
+    search_id: str,
+    page: int | None = None,
+    limit: int | None = None,
+) -> dict[str, Any]:
+    """Retrieve cached results for a previously-run device search.
+
+    Distinct from `get_saved_search_results`: this returns the cached
+    server-side result set keyed by search execution `search_id` rather
+    than re-executing a saved-search definition.
+    """
+    org_uuid = await _resolve_org(client, org_id)
+
+    params: dict[str, Any] = {}
+    if page is not None:
+        params["page"] = page
+    if limit is not None:
+        params["limit"] = limit
+
+    response = await client.get(
+        f"/server-groups-api/v1/organizations/{org_uuid}/device/search/{search_id}/saved",
+        params=params or None,
+    )
+
+    devices = _extract_list(response)
+    total: Any = None
+    if isinstance(response, Mapping):
+        total = (
+            response.get("total") or response.get("totalCount") or response.get("total_elements")
+        )
+
+    return {
+        "data": {
+            "search_id": search_id,
+            "total_devices": total if total is not None else len(devices),
+            "devices": devices,
+        },
+        "metadata": {"deprecated_endpoint": False},
+    }
+
+
+async def assign_policies_to_saved_search(
+    client: AutomoxClient,
+    *,
+    org_id: int | None = None,
+    saved_search_uuid: str,
+    policy_ids: list[int],
+) -> dict[str, Any]:
+    """Bulk-assign one or more policies to a saved search's result set."""
+    org_uuid = await _resolve_org(client, org_id)
+
+    body: dict[str, Any] = {"policy_ids": policy_ids}
+    response = await client.post(
+        f"/server-groups-api/v1/organizations/{org_uuid}/saved-searches/{saved_search_uuid}",
+        json_data=body,
+    )
+
+    data: dict[str, Any]
+    if isinstance(response, Mapping):
+        data = dict(response)
+    else:
+        data = {"raw": response}
+    data.setdefault("saved_search_uuid", saved_search_uuid)
+    data.setdefault("policy_ids", list(policy_ids))
+    data["assigned"] = True
+
+    return {
+        "data": data,
+        "metadata": {"deprecated_endpoint": False},
+    }
+
+
+async def get_search_scopes(client: AutomoxClient) -> dict[str, Any]:
+    """List available device-search scope options (org-independent metadata)."""
+    response = await client.get("/server-groups-api/device/metadata/scopes")
+    scopes = _extract_list(response)
+
+    return {
+        "data": {
+            "total_scopes": len(scopes),
+            "scopes": scopes,
+        },
+        "metadata": {"deprecated_endpoint": False},
+    }

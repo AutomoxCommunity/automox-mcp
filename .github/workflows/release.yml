@@ -105,6 +105,29 @@ jobs:
       # the registry GAs. Currently uses `latest` to match the upstream
       # quickstart. Tracked alongside other supply-chain items.
       # ---------------------------------------------------------------
+
+      # The MCP Registry validates the package by querying PyPI's JSON
+      # API. Between uploading to PyPI and PyPI's CDN serving the new
+      # version, the registry call routinely sees a 404 — observed on
+      # v1.0.29 and v1.0.30, both requiring a manual `gh workflow run
+      # release.yml --ref vX.Y.Z` backfill. Poll PyPI until it serves
+      # the version we just published, then continue.
+      - name: Wait for PyPI to serve new version
+        if: steps.pypi_check.outputs.exists != 'true'
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Waiting for PyPI CDN to serve automox-mcp==${VERSION}..."
+          for i in $(seq 1 30); do
+            if curl -sf "https://pypi.org/pypi/automox-mcp/${VERSION}/json" > /dev/null 2>&1; then
+              echo "PyPI now serving ${VERSION} (after $((i * 10))s)."
+              exit 0
+            fi
+            echo "  attempt ${i}/30: not yet, sleeping 10s..."
+            sleep 10
+          done
+          echo "::error::PyPI did not serve ${VERSION} within 5 minutes — registry publish will likely fail. Re-run via 'gh workflow run release.yml --ref ${GITHUB_REF_NAME}' once PyPI catches up."
+          exit 1
+
       - name: Install mcp-publisher
         if: steps.pypi_check.outputs.exists != 'true'
         run: |

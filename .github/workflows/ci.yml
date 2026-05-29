@@ -127,9 +127,74 @@ jobs:
             requirements-ci.txt
           virtual-environment: .venv
 
+  manifests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Verify manifest versions are in sync with pyproject
+        run: |
+          python3 <<'PY'
+          import json, pathlib, re, sys, tomllib
+
+          pyproject = tomllib.loads(pathlib.Path("pyproject.toml").read_text())
+          source_version = pyproject["project"]["version"]
+          mismatches: list[str] = []
+
+          server = json.loads(pathlib.Path("server.json").read_text())
+          if server.get("version") != source_version:
+              mismatches.append(f"server.json .version = {server.get('version')!r} (expected {source_version!r})")
+          for i, pkg in enumerate(server.get("packages", [])):
+              if pkg.get("version") != source_version:
+                  mismatches.append(f"server.json .packages[{i}].version = {pkg.get('version')!r} (expected {source_version!r})")
+
+          mcpb_manifest = json.loads(pathlib.Path("mcpb/manifest.json").read_text())
+          if mcpb_manifest.get("version") != source_version:
+              mismatches.append(f"mcpb/manifest.json .version = {mcpb_manifest.get('version')!r} (expected {source_version!r})")
+
+          mcpb_pyproject = tomllib.loads(pathlib.Path("mcpb/pyproject.toml").read_text())
+          if mcpb_pyproject["project"]["version"] != source_version:
+              mismatches.append(
+                  f"mcpb/pyproject.toml .project.version = {mcpb_pyproject['project']['version']!r} "
+                  f"(expected {source_version!r})"
+              )
+          dep_floor_match = re.search(r'"automox-mcp>=([^"]+)"', pathlib.Path("mcpb/pyproject.toml").read_text())
+          if not dep_floor_match or dep_floor_match.group(1) != source_version:
+              found = dep_floor_match.group(1) if dep_floor_match else "<missing>"
+              mismatches.append(
+                  f"mcpb/pyproject.toml automox-mcp>= floor = {found!r} (expected {source_version!r})"
+              )
+
+          if mismatches:
+              for m in mismatches:
+                  print(f"::error::{m}")
+              print()
+              print(
+                  "Versions across pyproject.toml, server.json, mcpb/manifest.json, "
+                  "and mcpb/pyproject.toml must match. The release workflow rewrites "
+                  "these from the tag at publish time, but they should also be in "
+                  "sync on main so reviewers and packaging tools see consistent values."
+              )
+              sys.exit(1)
+          print(f"All manifest versions match pyproject ({source_version}).")
+          PY
+
+      - name: Install MCPB CLI
+        run: npm install -g @anthropic-ai/mcpb
+
+      - name: Validate MCPB manifest schema
+        run: mcpb validate mcpb/manifest.json
+
+      - name: Build MCPB bundle (smoke test)
+        run: mcpb pack mcpb /tmp/automox-mcp-ci.mcpb
+
   ci-pass:
     if: always()
-    needs: [lint, typecheck, test, build]
+    needs: [lint, typecheck, test, build, manifests]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -138,7 +203,8 @@ jobs:
           needs.lint.result != 'success' ||
           needs.typecheck.result != 'success' ||
           needs.test.result != 'success' ||
-          needs.build.result != 'success'
+          needs.build.result != 'success' ||
+          needs.manifests.result != 'success'
         run: |
           echo "::error::One or more CI jobs did not succeed."
           exit 1

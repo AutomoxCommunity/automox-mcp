@@ -15,7 +15,7 @@ Complete reference for all 97 tools, 6 workflow prompts, MCP resources, paramete
 - [Webhook Management (8 tools)](#webhook-management-8-tools)
 - [Worklet Catalog (2 tools)](#worklet-catalog-2-tools)
 - [Data Extracts (3 tools)](#data-extracts-3-tools)
-- [Vulnerability Sync (7 tools)](#vulnerability-sync-7-tools)
+- [Vulnerability Sync (6 tools)](#vulnerability-sync-6-tools)
 - [Compound Workflows (3 tools)](#compound-workflows-3-tools)
 - [Events (1 tool)](#events-1-tool)
 - [Reports (2 tools)](#reports-2-tools)

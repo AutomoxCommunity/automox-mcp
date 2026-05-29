@@ -321,8 +321,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         @server.tool(
             name="clone_policy",
             description=(
-                "Clone an existing Automox policy. Creates a copy with an optional "
-                "new name and server group assignments."
+                "Clone an existing Automox policy. By default creates an in-org copy "
+                "with an optional new name and server group assignments. Pass "
+                "target_zone_ids to instead clone a patch policy into one or more "
+                "zones/orgs in a single server-side call (patch policies only; "
+                "mutually exclusive with name/server_groups)."
             ),
             annotations={
                 "readOnlyHint": False,
@@ -335,6 +338,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             policy_id: int,
             name: str | None = None,
             server_groups: list[int] | None = None,
+            target_zone_ids: list[str] | None = None,
             request_id: str | None = None,
         ) -> dict[str, Any]:
             cached = await check_idempotency(request_id, "clone_policy")
@@ -346,6 +350,8 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 params["name"] = name
             if server_groups is not None:
                 params["server_groups"] = server_groups
+            if target_zone_ids is not None:
+                params["target_zone_ids"] = target_zone_ids
             try:
                 result = await call_tool_workflow(
                     client,

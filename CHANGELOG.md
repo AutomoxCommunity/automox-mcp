@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Multi-zone patch-policy clone on `clone_policy` (#91, category E).** New optional `target_zone_ids` argument routes to the server-side `POST /policies/{id}/clone` endpoint, cloning a patch policy into one or more zones/orgs (1–500 zone UUIDs) in a single atomic call and returning the per-zone `{policy_id, zone_id, org_id}` results. Upstream supports patch policies only; `target_zone_ids` is mutually exclusive with `name`/`server_groups`. Without it, `clone_policy` keeps its existing client-side GET-then-POST behavior, which works for all policy types but stays within the source org. No new tool, so the tool count is unchanged.
 - **Search & metadata enrichment — 4 device-search tools (#91, category D).**
   - `get_searchable_fields` — `GET /server-groups-api/device/metadata/fields`: searchable fields grouped by scope with per-field type metadata, richer than the existing flat `get_device_metadata_fields` (`device-fields`). Read-only.
   - `list_searches_for_device` — `GET …/device/saved-search/server/{deviceUUID}`: which saved searches currently contain a given device, with optional `type` filter. Read-only.

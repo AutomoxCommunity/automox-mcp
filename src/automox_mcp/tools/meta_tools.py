@@ -48,7 +48,7 @@ _DOMAIN_CATALOG: dict[str, list[tuple[str, str]]] = {
         ("policy_run_results", "Per-device results for a policy execution"),
         ("policy_compliance_stats", "Per-policy compliance statistics"),
         ("apply_policy_changes", "Create or update policies"),
-        ("clone_policy", "Clone an existing policy"),
+        ("clone_policy", "Clone a policy (in-org, or multi-zone for patch policies)"),
         ("delete_policy", "Delete a policy permanently"),
         ("execute_policy_now", "Execute a policy immediately"),
     ],

@@ -510,6 +510,28 @@ class ClonePolicyParams(OrgIdContextMixin, ForbidExtraModel):
         None, description="Name for the cloned policy (defaults to '<source> (Clone)')"
     )
     server_groups: list[int] | None = Field(None, description="Server group IDs for the clone")
+    target_zone_ids: list[str] | None = Field(
+        None,
+        description=(
+            "Target zone UUIDs for a multi-zone clone (patch policies only). When set, "
+            "clones the source patch policy into each zone in one server-side call; "
+            "cannot be combined with name or server_groups."
+        ),
+        min_length=1,
+        max_length=500,
+    )
+
+    @model_validator(mode="after")
+    def _validate_clone_mode(self) -> ClonePolicyParams:
+        if self.target_zone_ids is not None:
+            if self.name is not None or self.server_groups is not None:
+                raise ValueError(
+                    "target_zone_ids (multi-zone clone) cannot be combined with "
+                    "name or server_groups"
+                )
+            for zone_id in self.target_zone_ids:
+                UUID(zone_id)  # reject malformed zone UUIDs
+        return self
 
 
 class DeletePolicyToolParams(OrgIdContextMixin, ForbidExtraModel):

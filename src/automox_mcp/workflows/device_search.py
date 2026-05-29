@@ -7,7 +7,7 @@ from typing import Any
 
 from ..client import AutomoxClient
 from ..utils import resolve_org_uuid
-from ..utils.response import build_pagination_metadata
+from ..utils.response import build_pagination_metadata, require_org_id
 from ..utils.response import extract_list as _extract_list
 
 
@@ -236,12 +236,18 @@ async def get_device_by_uuid(
     org_id: int | None = None,
     device_uuid: str,
 ) -> dict[str, Any]:
-    """Get device details by UUID via the Server Groups API v2."""
-    org_uuid = await _resolve_org(client, org_id)
+    """Get device details by UUID via the canonical `/servers/{id}` endpoint.
 
-    response = await client.get(
-        f"/server-groups-api/v1/organizations/{org_uuid}/server/{device_uuid}",
-    )
+    The upstream OpenAPI spec types `id` as `integer/int64`, but the live tenant
+    accepts UUIDs and returns the same device-detail payload (issue #92, #86).
+    The previously-used `/server-groups-api/v1/organizations/{X}/server/{uuid}`
+    path does not exist; it returned an empty Spring Page wrapper from a
+    catch-all route, masking the bug behind a `200` response.
+    """
+    resolved_org_id = require_org_id(client, org_id)
+
+    params = {"o": resolved_org_id, "includeDetails": 1}
+    response = await client.get(f"/servers/{device_uuid}", params=params)
 
     if isinstance(response, Mapping):
         detail = dict(response)

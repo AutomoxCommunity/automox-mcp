@@ -1049,13 +1049,49 @@ async def clone_policy(
     policy_id: int,
     name: str | None = None,
     server_groups: list[int] | None = None,
+    target_zone_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     """Clone an existing Automox policy.
 
-    Fetches the source policy, strips read-only fields, optionally overrides
-    name and server_groups, then creates a new policy via POST.
+    Two modes:
+
+    - **Multi-zone** (``target_zone_ids`` set): clone a *patch* policy into one
+      or more zones/orgs in a single server-side call via
+      ``POST /policies/{id}/clone``. The upstream endpoint only supports patch
+      policies.
+    - **In-org** (default): fetch the source policy, strip read-only fields,
+      optionally override name/server_groups, then create a new policy via POST.
+      Works for all policy types but stays within the source org.
     """
     resolved_org_id = require_org_id(client, org_id)
+
+    if target_zone_ids:
+        response = await client.post(
+            f"/policies/{policy_id}/clone",
+            json_data={"target_zone_ids": list(target_zone_ids)},
+            params={"o": resolved_org_id},
+        )
+        clones = response.get("data") if isinstance(response, Mapping) else None
+        clones = clones if isinstance(clones, list) else []
+        return {
+            "data": {
+                "source_policy_id": policy_id,
+                "multi_zone": True,
+                "policy_name": response.get("policy_name")
+                if isinstance(response, Mapping)
+                else None,
+                "policy_type_name": response.get("policy_type_name")
+                if isinstance(response, Mapping)
+                else None,
+                "total_clones": len(clones),
+                "clones": clones,
+                "response": response,
+            },
+            "metadata": {
+                "deprecated_endpoint": False,
+                "org_id": resolved_org_id,
+            },
+        }
 
     params = {"o": resolved_org_id}
     source = await client.get(f"/policies/{policy_id}", params=params)

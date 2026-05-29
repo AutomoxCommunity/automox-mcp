@@ -77,7 +77,7 @@ Uses the Server Groups API v2 for structured device queries, saved searches, and
 - **`patch_approvals_summary`** - Summarize pending patch approvals and their severity.
 - **`decide_patch_approval`** - Approve or reject an Automox patch approval request.
 - **`execute_policy_now`** - Execute a policy immediately for remediation (all devices or specific device).
-- **`clone_policy`** - Clone an existing policy with optional name and server group overrides.
+- **`clone_policy`** - Clone an existing policy. By default an in-org copy with optional name and server-group overrides (all policy types). Pass `target_zone_ids` to clone a **patch** policy into one or more zones/orgs in a single server-side call (`POST /policies/{id}/clone`); mutually exclusive with name/server_groups.
 - **`delete_policy`** - Permanently delete a policy by ID.
 
 ## Policy History v2 (7 tools)

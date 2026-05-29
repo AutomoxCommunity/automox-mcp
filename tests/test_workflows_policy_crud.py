@@ -280,6 +280,86 @@ async def test_clone_policy_raises_on_non_mapping_source() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Multi-zone clone (issue #91 category E)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_clone_policy_multi_zone_uses_clone_endpoint() -> None:
+    clone_response = {
+        "policy_name": "Clone of Patch All Policy",
+        "policy_type_name": "patch",
+        "data": [
+            {
+                "policy_id": 38421,
+                "zone_id": "59f574fe-04ec-4a38-ad96-1854fc95db20",
+                "org_id": 100343,
+            },
+            {
+                "policy_id": 38422,
+                "zone_id": "6a1b2c3d-04ec-4a38-ad96-1854fc95db21",
+                "org_id": 100344,
+            },
+        ],
+    }
+    client = StubClient(post_responses={"/policies/901/clone": [clone_response]})
+
+    result = await clone_policy(
+        cast(AutomoxClient, client),
+        org_id=555,
+        policy_id=901,
+        target_zone_ids=[
+            "59f574fe-04ec-4a38-ad96-1854fc95db20",
+            "6a1b2c3d-04ec-4a38-ad96-1854fc95db21",
+        ],
+    )
+
+    data = result["data"]
+    assert data["multi_zone"] is True
+    assert data["source_policy_id"] == 901
+    assert data["total_clones"] == 2
+    assert data["policy_type_name"] == "patch"
+    assert data["clones"][0]["zone_id"] == "59f574fe-04ec-4a38-ad96-1854fc95db20"
+
+    # It must NOT do the client-side GET-then-POST; only the clone endpoint is hit.
+    post_calls = [c for c in client.calls if c[0] == "POST"]
+    assert len(post_calls) == 1
+    _, path, params, body = post_calls[0]
+    assert path == "/policies/901/clone"
+    assert params == {"o": 555}
+    assert body == {
+        "target_zone_ids": [
+            "59f574fe-04ec-4a38-ad96-1854fc95db20",
+            "6a1b2c3d-04ec-4a38-ad96-1854fc95db21",
+        ]
+    }
+    assert not any(c[0] == "GET" for c in client.calls)
+
+
+def test_clone_policy_params_rejects_zone_ids_with_overrides() -> None:
+    from pydantic import ValidationError
+
+    from automox_mcp.schemas import ClonePolicyParams
+
+    with pytest.raises(ValidationError, match="cannot be combined"):
+        ClonePolicyParams(
+            org_id=555,
+            policy_id=901,
+            name="Nope",
+            target_zone_ids=["59f574fe-04ec-4a38-ad96-1854fc95db20"],
+        )
+
+
+def test_clone_policy_params_rejects_malformed_zone_uuid() -> None:
+    from pydantic import ValidationError
+
+    from automox_mcp.schemas import ClonePolicyParams
+
+    with pytest.raises(ValidationError):
+        ClonePolicyParams(org_id=555, policy_id=901, target_zone_ids=["not-a-uuid"])
+
+
+# ---------------------------------------------------------------------------
 # Tests: get_policy_compliance_stats
 # ---------------------------------------------------------------------------
 

@@ -11,6 +11,7 @@ from automox_mcp.client import AutomoxClient
 from automox_mcp.workflows.account import (
     invite_user_to_account,
     list_org_api_keys,
+    list_organizations,
     remove_user_from_account,
 )
 
@@ -145,3 +146,70 @@ async def test_list_api_keys_handles_non_list():
     client = StubClient(get_responses={"/orgs/42/api_keys": ["unexpected"]})
     result = await list_org_api_keys(cast(AutomoxClient, client), org_id=42)
     assert result["data"]["total_keys"] == 0
+
+
+# ---------------------------------------------------------------------------
+# list_organizations (issue #91 category H)
+# ---------------------------------------------------------------------------
+
+
+_ORGS = [
+    {
+        "id": 42,
+        "uuid": "org-uuid-42",
+        "name": "Acme Prod",
+        "tier": "enterprise",
+        "device_count": 1200,
+        "device_limit": 2000,
+        "soft_device_limit": 1800,
+        "parent_id": None,
+        "trial_end_time": None,
+        "create_time": "2024-01-01T00:00:00Z",
+        "access_key": "should-not-be-surfaced",
+    },
+    {
+        "id": 43,
+        "uuid": "org-uuid-43",
+        "name": "Acme Child",
+        "tier": "patch",
+        "device_count": 50,
+        "parent_id": 42,
+    },
+]
+
+
+@pytest.mark.asyncio
+async def test_list_organizations_projects_expected_fields():
+    client = StubClient(get_responses={"/orgs": [_ORGS]})
+    result = await list_organizations(cast(AutomoxClient, client))
+
+    data = result["data"]
+    assert data["total_organizations"] == 2
+
+    parent = next(o for o in data["organizations"] if o["id"] == 42)
+    assert parent["tier"] == "enterprise"
+    assert parent["device_count"] == 1200
+    assert parent["device_limit"] == 2000
+    # access_key is not part of the projection -> never surfaced
+    assert "access_key" not in parent
+
+    child = next(o for o in data["organizations"] if o["id"] == 43)
+    assert child["parent_id"] == 42
+    # None-valued fields are omitted, not echoed as null
+    assert "trial_end_time" not in child
+
+
+@pytest.mark.asyncio
+async def test_list_organizations_forwards_pagination():
+    client = StubClient(get_responses={"/orgs": [_ORGS]})
+    await list_organizations(cast(AutomoxClient, client), page=1, limit=50)
+    _, path, params = client.calls[0]
+    assert path == "/orgs"
+    assert params == {"page": 1, "limit": 50}
+
+
+@pytest.mark.asyncio
+async def test_list_organizations_handles_non_list():
+    client = StubClient(get_responses={"/orgs": ["unexpected"]})
+    result = await list_organizations(cast(AutomoxClient, client))
+    assert result["data"]["total_organizations"] == 0

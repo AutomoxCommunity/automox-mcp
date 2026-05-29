@@ -55,6 +55,7 @@ _DOMAIN_CATALOG: dict[str, list[tuple[str, str]]] = {
         ("policy_history_detail", "Policy history details by UUID"),
         ("policy_runs_for_policy", "Execution runs for a specific policy"),
         ("policy_run_detail_v2", "Per-device results for a run (UUID-based)"),
+        ("policy_execution_counts", "Fleet-wide run counts per policy over a window"),
     ],
     "patches": [
         ("list_device_packages", "Software packages on a specific device"),
@@ -114,6 +115,7 @@ _DOMAIN_CATALOG: dict[str, list[tuple[str, str]]] = {
         ("invite_user_to_account", "Invite a user with zone assignments"),
         ("remove_user_from_account", "Remove a user by UUID"),
         ("list_org_api_keys", "List organization API keys (names only)"),
+        ("list_organizations", "List orgs with tier, device count/limit, parent, trial"),
     ],
     "compound": [
         ("get_patch_tuesday_readiness", "Patch Tuesday readiness view"),

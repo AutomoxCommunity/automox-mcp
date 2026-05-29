@@ -13,6 +13,7 @@ from .. import workflows
 from ..client import AutomoxClient
 from ..schemas import (
     InviteUserParams,
+    ListOrganizationsParams,
     ListOrgApiKeysParams,
     RemoveUserFromAccountParams,
     ZoneAssignment,
@@ -133,6 +134,33 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             workflows.list_org_api_keys,
             {"org_id": org_id},
             params_model=ListOrgApiKeysParams,
+        )
+        return maybe_format_markdown(result, output_format)
+
+    @server.tool(
+        name="list_organizations",
+        description=(
+            "List organizations visible to the API key, with tier, device count, "
+            "device limit, parent org, and trial end time. Useful for MSP/multi-org "
+            "navigation, feature-tier checks, capacity posture, and trial warnings."
+        ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
+    )
+    async def list_organizations(
+        page: int | None = None,
+        limit: int | None = None,
+        output_format: str | None = "json",
+    ) -> dict[str, Any]:
+        result = await call_tool_workflow(
+            client,
+            workflows.list_organizations,
+            {"page": page, "limit": limit},
+            params_model=ListOrganizationsParams,
         )
         return maybe_format_markdown(result, output_format)
 

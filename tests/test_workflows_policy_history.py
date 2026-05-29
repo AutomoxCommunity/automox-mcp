@@ -10,6 +10,7 @@ from automox_mcp.workflows.policy_history import (
     get_policy_history_detail,
     get_policy_run_detail_v2,
     get_policy_runs_for_policy,
+    list_policy_execution_counts,
     list_policy_runs_v2,
     policy_run_count,
     policy_runs_by_policy,
@@ -436,4 +437,111 @@ async def test_run_detail_passes_filters() -> None:
     assert params["limit"] == 5
     # The policy-report-api requires the org UUID as a query param;
     # without it the API rejects the request with `org=null`.
+    assert params["org"] == _ORG_UUID
+
+
+# ---------------------------------------------------------------------------
+# get_policy_runs_for_policy: summary_only (issue #91 category J)
+# ---------------------------------------------------------------------------
+
+
+_RUNS_WITH_STATS = {
+    "data": {
+        "runs": _POLICY_RUNS,
+        "banner_stats": {"success": 12, "failed": 1},
+    },
+    "metadata": {},
+}
+
+
+@pytest.mark.asyncio
+async def test_runs_for_policy_full_includes_stats_and_banner() -> None:
+    client = _make_client(get_responses={"/policy-history/policy-runs": [_RUNS_WITH_STATS]})
+    result = await get_policy_runs_for_policy(
+        cast(AutomoxClient, client), org_id=42, policy_uuid="pol-001"
+    )
+    data = result["data"]
+    assert "banner_stats" in data
+    assert data["banner_stats"] == {"success": 12, "failed": 1}
+    # full mode keeps the rich per-run fields
+    assert data["runs"][0]["success"] == 9
+    assert data["runs"][0]["policy_type"] == "patch"
+
+
+@pytest.mark.asyncio
+async def test_runs_for_policy_summary_only_projects_and_drops_banner() -> None:
+    client = _make_client(get_responses={"/policy-history/policy-runs": [_RUNS_WITH_STATS]})
+    result = await get_policy_runs_for_policy(
+        cast(AutomoxClient, client),
+        org_id=42,
+        policy_uuid="pol-001",
+        summary_only=True,
+    )
+    data = result["data"]
+    assert "banner_stats" not in data
+    assert data["total_runs"] == 2
+    first = data["runs"][0]
+    assert set(first.keys()) <= {"policy_uuid", "run_time", "execution_token", "run_count"}
+    assert first["policy_uuid"] == "pol-001"
+    assert first["execution_token"] == "exec-001"
+    # second run had no run_count upstream -> omitted, not None
+    assert "run_count" not in data["runs"][1]
+
+
+# ---------------------------------------------------------------------------
+# list_policy_execution_counts (issue #91 category I)
+# ---------------------------------------------------------------------------
+
+
+_EXEC_COUNTS = {
+    "data": [
+        {
+            "org_uuid": _ORG_UUID,
+            "policy_id": 101,
+            "policy_name": "Patch Tuesday",
+            "policy_uuid": "pol-001",
+            "exec_time": "2026-03-01T00:00:00Z",
+            "run_count": 100,
+        },
+        {
+            "org_uuid": _ORG_UUID,
+            "policy_id": 102,
+            "policy_name": "Weekly Worklet",
+            "policy_uuid": "pol-002",
+            "exec_time": "2026-03-02T00:00:00Z",
+            "run_count": 12,
+        },
+    ]
+}
+
+
+@pytest.mark.asyncio
+async def test_execution_counts_projects_rows_and_forwards_window() -> None:
+    client = _make_client(get_responses={"/policy-history/policies": [_EXEC_COUNTS]})
+    result = await list_policy_execution_counts(
+        cast(AutomoxClient, client),
+        org_id=42,
+        start_time="2026-01-01T00:00:00Z",
+        end_time="2026-04-01T00:00:00Z",
+    )
+    data = result["data"]
+    assert data["total_policies"] == 2
+    assert data["policies"][0]["policy_name"] == "Patch Tuesday"
+    assert data["policies"][0]["run_count"] == 100
+
+    _, path, params = client.calls[0]
+    assert path == "/policy-history/policies"
+    assert params["org"] == _ORG_UUID
+    assert params["start_time"] == "2026-01-01T00:00:00Z"
+    assert params["end_time"] == "2026-04-01T00:00:00Z"
+
+
+@pytest.mark.asyncio
+async def test_execution_counts_window_optional() -> None:
+    client = _make_client(get_responses={"/policy-history/policies": [{"data": []}]})
+    result = await list_policy_execution_counts(cast(AutomoxClient, client), org_id=42)
+    assert result["data"]["total_policies"] == 0
+    _, _path, params = client.calls[0]
+    assert "start_time" not in params
+    assert "end_time" not in params
     assert params["org"] == _ORG_UUID

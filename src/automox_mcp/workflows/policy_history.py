@@ -429,8 +429,15 @@ async def get_policy_runs_for_policy(
     org_uuid: str | UUID | None = None,
     report_days: int | None = None,
     sort: str | None = None,
+    summary_only: bool = False,
 ) -> dict[str, Any]:
-    """Get execution runs for a specific policy by UUID."""
+    """Get execution runs for a specific policy by UUID.
+
+    When ``summary_only`` is true, each run is projected down to
+    ``{policy_uuid, run_time, execution_token, run_count}`` and ``banner_stats`` is
+    omitted — a token-efficient way to enumerate execution tokens for a policy
+    with many runs.
+    """
     resolved_uuid = await resolve_org_uuid(
         client,
         explicit_uuid=org_uuid,
@@ -464,15 +471,79 @@ async def get_policy_runs_for_policy(
 
     summaries = [_summarize_run(r) for r in raw_runs]
 
-    return {
-        "data": {
+    if summary_only:
+        lean_keys = ("policy_uuid", "run_time", "execution_token", "run_count")
+        summaries = [{k: run[k] for k in lean_keys if k in run} for run in summaries]
+        data: dict[str, Any] = {
+            "org_uuid": resolved_uuid,
+            "policy_uuid": policy_uuid,
+            "total_runs": len(summaries),
+            "runs": summaries,
+        }
+    else:
+        data = {
             "org_uuid": resolved_uuid,
             "policy_uuid": policy_uuid,
             "total_runs": len(summaries),
             "runs": summaries,
             "banner_stats": banner_stats,
-        },
+        }
+
+    return {
+        "data": data,
         "metadata": metadata,
+    }
+
+
+async def list_policy_execution_counts(
+    client: AutomoxClient,
+    *,
+    org_id: int,
+    org_uuid: str | UUID | None = None,
+    start_time: str | None = None,
+    end_time: str | None = None,
+) -> dict[str, Any]:
+    """Fleet-wide policy execution counts over a time window.
+
+    Wraps ``GET /policy-history/policies`` (the policy index): one row per policy
+    with its run count in the window, in a single round-trip. Distinct from
+    ``policy_run_count`` (a single aggregate) and ``policy_runs_for_policy``
+    (per-run records for one policy).
+    """
+    resolved_uuid = await resolve_org_uuid(
+        client,
+        explicit_uuid=org_uuid,
+        org_id=org_id,
+    )
+
+    params: dict[str, Any] = {"org": resolved_uuid}
+    if start_time:
+        params["start_time"] = start_time
+    if end_time:
+        params["end_time"] = end_time
+
+    response = await client.get("/policy-history/policies", params=params)
+
+    # Response shape: { data: [ {org_uuid, policy_id, policy_name, policy_uuid,
+    # exec_time, run_count}, ... ] }
+    if isinstance(response, Mapping):
+        rows = response.get("data", [])
+        metadata = response.get("metadata", {})
+    else:
+        rows = _extract_list(response)
+        metadata = {}
+
+    policies = [dict(row) for row in rows if isinstance(row, Mapping)]
+
+    return {
+        "data": {
+            "org_uuid": resolved_uuid,
+            "start_time": start_time,
+            "end_time": end_time,
+            "total_policies": len(policies),
+            "policies": policies,
+        },
+        "metadata": metadata if isinstance(metadata, Mapping) else {},
     }
 
 

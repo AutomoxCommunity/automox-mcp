@@ -307,6 +307,6 @@ MIT License. See [LICENSE](LICENSE).
 
 ## Support
 
-The official Automox MCP server. Support is community-driven: for questions, bugs, or feature requests, [open a GitHub Issue](https://github.com/AutomoxCommunity/automox-mcp/issues) or post in the Automox Community. This project is not covered by Automox commercial support contracts.
+The official Automox MCP server. Due to the fast moving nature of this project, support is provided via [GitHub issues](https://github.com/AutomoxCommunity/automox-mcp/issues) and the Automox Community Slack. Please use those avenues for questions, bugs, or feature requests.
 
 To report a security vulnerability, see [SECURITY.md](SECURITY.md) — please do not open a public issue.

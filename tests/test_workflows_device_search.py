@@ -19,7 +19,11 @@ from automox_mcp.workflows.device_search import (
     get_saved_search,
     get_saved_search_results,
     get_search_scopes,
+    get_searchable_fields,
     list_saved_searches,
+    list_searches_for_device,
+    refresh_saved_search_cache,
+    run_saved_search,
     update_saved_search,
 )
 
@@ -480,3 +484,92 @@ async def test_get_search_scopes_returns_metadata() -> None:
 
     assert result["data"]["total_scopes"] == 3
     assert result["data"]["scopes"] == scopes
+
+
+# ---------------------------------------------------------------------------
+# Search & metadata enrichment (issue #91 category D)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_searchable_fields_passes_grouped_object_through() -> None:
+    path = "/server-groups-api/device/metadata/fields"
+    grouped = {
+        "device": [{"name": "hostname", "type": "string"}],
+        "patch": [{"name": "severity", "type": "enum"}],
+    }
+    client = _make_client(get_responses={path: [grouped]})
+    result = await get_searchable_fields(cast(AutomoxClient, client))
+    assert result["data"] == grouped
+    # distinct endpoint from the flat device-fields metadata
+    _, called_path, _ = client.calls[0]
+    assert called_path.endswith("/metadata/fields")
+    assert not called_path.endswith("device-fields")
+
+
+@pytest.mark.asyncio
+async def test_list_searches_for_device_forwards_type_filter() -> None:
+    device = "dev-uuid-9"
+    path = f"/server-groups-api/v1/organizations/{_ORG_UUID}/device/saved-search/server/{device}"
+    client = _make_client(get_responses={path: [["ss-1", "ss-2"]]})
+    result = await list_searches_for_device(
+        cast(AutomoxClient, client), device_uuid=device, search_type="dynamic"
+    )
+    assert result["data"]["device_uuid"] == device
+    assert result["data"]["total_searches"] == 2
+    _, _path, params = client.calls[0]
+    assert params == {"type": "dynamic"}
+
+
+@pytest.mark.asyncio
+async def test_list_searches_for_device_omits_type_when_unset() -> None:
+    device = "dev-uuid-9"
+    path = f"/server-groups-api/v1/organizations/{_ORG_UUID}/device/saved-search/server/{device}"
+    client = _make_client(get_responses={path: [[]]})
+    await list_searches_for_device(cast(AutomoxClient, client), device_uuid=device)
+    _, _path, params = client.calls[0]
+    assert params is None
+
+
+@pytest.mark.asyncio
+async def test_run_saved_search_extracts_page_envelope_and_pagination() -> None:
+    search_id = "ss-007"
+    path = f"/server-groups-api/v1/organizations/{_ORG_UUID}/device/search/{search_id}"
+    page_obj = {
+        "content": [{"id": 1, "hostname": "host-a"}, {"id": 2, "hostname": "host-b"}],
+        "number": 0,
+        "size": 50,
+        "totalElements": 2,
+        "totalPages": 1,
+        "first": True,
+        "last": True,
+    }
+    client = _make_client(get_responses={path: [page_obj]})
+    result = await run_saved_search(
+        cast(AutomoxClient, client),
+        search_id=search_id,
+        page=0,
+        size=50,
+        fields=["hostname"],
+    )
+    assert result["data"]["total_devices"] == 2
+    assert result["data"]["devices"][0]["hostname"] == "host-a"
+    assert result["metadata"]["pagination"]["has_more"] is False
+
+    _, _path, params = client.calls[0]
+    assert params["page"] == 0
+    assert params["size"] == 50
+    assert params["fields"] == ["hostname"]
+
+
+@pytest.mark.asyncio
+async def test_refresh_saved_search_cache_posts_and_flags_refreshed() -> None:
+    search_id = "ss-007"
+    path = f"/server-groups-api/v1/organizations/{_ORG_UUID}/device/search/{search_id}/refresh"
+    client = _make_client(post_responses={path: [{}]})
+    result = await refresh_saved_search_cache(cast(AutomoxClient, client), search_id=search_id)
+    assert result["data"]["search_id"] == search_id
+    assert result["data"]["refreshed"] is True
+    method, called_path, _ = client.calls[0]
+    assert method == "POST"
+    assert called_path.endswith("/refresh")

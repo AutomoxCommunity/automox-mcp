@@ -493,3 +493,153 @@ async def get_search_scopes(client: AutomoxClient) -> dict[str, Any]:
         },
         "metadata": {"deprecated_endpoint": False},
     }
+
+
+# ---------------------------------------------------------------------------
+# Search & metadata enrichment (issue #91 category D)
+# ---------------------------------------------------------------------------
+
+
+async def get_searchable_fields(client: AutomoxClient) -> dict[str, Any]:
+    """List searchable device fields grouped by scope, with type metadata.
+
+    Org-independent metadata. Richer than `get_device_metadata_fields`, which
+    returns the flat `device-fields` string array: this endpoint groups fields
+    by scope and carries per-field type info, so an LLM can construct typed
+    queries.
+    """
+    response = await client.get("/server-groups-api/device/metadata/fields")
+
+    data: dict[str, Any] = dict(response) if isinstance(response, Mapping) else {"fields": response}
+
+    return {
+        "data": data,
+        "metadata": {"deprecated_endpoint": False},
+    }
+
+
+async def list_searches_for_device(
+    client: AutomoxClient,
+    *,
+    org_id: int | None = None,
+    device_uuid: str,
+    search_type: str | None = None,
+) -> dict[str, Any]:
+    """List saved searches whose result set currently contains a device."""
+    org_uuid = await _resolve_org(client, org_id)
+
+    params: dict[str, Any] = {}
+    if search_type:
+        params["type"] = search_type
+
+    response = await client.get(
+        f"/server-groups-api/v1/organizations/{org_uuid}/device/saved-search/server/{device_uuid}",
+        params=params or None,
+    )
+
+    # The endpoint returns a bare array of saved-search identifiers (strings),
+    # so extract_list (which keeps only mappings) would drop them — handle the
+    # sequence directly.
+    if isinstance(response, Sequence) and not isinstance(response, (str, bytes)):
+        searches: list[Any] = list(response)
+    elif isinstance(response, Mapping):
+        searches = _extract_list(response)
+    else:
+        searches = []
+
+    return {
+        "data": {
+            "device_uuid": device_uuid,
+            "total_searches": len(searches),
+            "saved_searches": searches,
+        },
+        "metadata": {"deprecated_endpoint": False},
+    }
+
+
+async def run_saved_search(
+    client: AutomoxClient,
+    *,
+    org_id: int | None = None,
+    search_id: str,
+    page: int | None = None,
+    size: int | None = None,
+    fields: list[str] | None = None,
+) -> dict[str, Any]:
+    """Execute a saved search by UUID with paging and optional field projection.
+
+    Lighter-weight than `get_saved_search_results`: returns the Spring
+    `PageObject` envelope, supports a `fields` projection, and pages with
+    `page`/`size`. The Spring pagination fields are re-emitted under
+    `metadata.pagination` in the project's canonical shape.
+    """
+    org_uuid = await _resolve_org(client, org_id)
+
+    params: dict[str, Any] = {}
+    if page is not None:
+        params["page"] = page
+    if size is not None:
+        params["size"] = size
+    if fields:
+        params["fields"] = fields
+
+    response = await client.get(
+        f"/server-groups-api/v1/organizations/{org_uuid}/device/search/{search_id}",
+        params=params or None,
+    )
+
+    devices: list[Any]
+    pagination: dict[str, Any] | None = None
+    if isinstance(response, Mapping) and "content" in response:
+        content = response.get("content")
+        devices = list(content) if isinstance(content, Sequence) else []
+        is_last = response.get("last")
+        pagination = (
+            build_pagination_metadata(
+                page=response.get("number"),
+                page_size=response.get("size"),
+                total_elements=response.get("totalElements"),
+                total_pages=response.get("totalPages"),
+                has_more=(not is_last) if is_last is not None else None,
+                extra={"first": response.get("first"), "last": is_last},
+            )
+            or None
+        )
+    else:
+        devices = _extract_list(response)
+
+    metadata: dict[str, Any] = {"deprecated_endpoint": False}
+    if pagination:
+        metadata["pagination"] = pagination
+
+    return {
+        "data": {
+            "search_id": search_id,
+            "total_devices": len(devices),
+            "devices": devices,
+        },
+        "metadata": metadata,
+    }
+
+
+async def refresh_saved_search_cache(
+    client: AutomoxClient,
+    *,
+    org_id: int | None = None,
+    search_id: str,
+) -> dict[str, Any]:
+    """Force a re-cache of a saved search's results when they may be stale."""
+    org_uuid = await _resolve_org(client, org_id)
+
+    response = await client.post(
+        f"/server-groups-api/v1/organizations/{org_uuid}/device/search/{search_id}/refresh",
+    )
+
+    data: dict[str, Any] = dict(response) if isinstance(response, Mapping) else {}
+    data["search_id"] = search_id
+    data["refreshed"] = True
+
+    return {
+        "data": data,
+        "metadata": {"deprecated_endpoint": False},
+    }

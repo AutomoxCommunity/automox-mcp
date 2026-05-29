@@ -1,6 +1,6 @@
 # Tool Reference
 
-Complete reference for all 103 tools, 6 workflow prompts, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
+Complete reference for all 112 tools, 6 workflow prompts, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
 
 > **Tip:** You don't need to memorize this. Call `discover_capabilities` from your AI assistant to get a live summary of available tools organized by domain.
 
@@ -19,7 +19,7 @@ Complete reference for all 103 tools, 6 workflow prompts, MCP resources, paramet
 - [Compound Workflows (3 tools)](#compound-workflows-3-tools)
 - [Events (1 tool)](#events-1-tool)
 - [Reports (2 tools)](#reports-2-tools)
-- [Account Management (4 tools)](#account-management-4-tools)
+- [Account Management (13 tools)](#account-management-13-tools)
 - [Audit Trail (2 tools)](#audit-trail-2-tools)
 - [Policy Windows (9 tools)](#policy-windows-9-tools)
 - [Splashtop Remote Control (10 tools)](#splashtop-remote-control-10-tools)
@@ -153,12 +153,21 @@ Manage vulnerability remediation workflows via the Vuln Sync API. Supports CSV-b
 - **`prepatch_report`** - Retrieve the pre-patch readiness report showing devices with pending patches before the next scheduled patch window.
 - **`noncompliant_report`** - Retrieve the non-compliant devices report showing devices that need attention due to policy failures or missing patches.
 
-## Account Management (4 tools)
+## Account Management (13 tools)
 
-- **`invite_user_to_account`** - Invite a user to the Automox account with optional zone assignments.
-- **`remove_user_from_account`** - Remove a user from the Automox account by UUID.
+- **`invite_user_to_account`** *(write)* - Invite a user to the Automox account with optional zone assignments.
+- **`remove_user_from_account`** *(write)* - Remove a user from the Automox account by UUID.
 - **`list_org_api_keys`** - List API keys for the organization. Returns key names and IDs only — secrets are never exposed.
 - **`list_organizations`** - List organizations visible to the API key, with tier, device count, device limit, parent org, and trial end time. Useful for MSP/multi-org navigation, feature-tier checks, capacity posture, and trial warnings.
+- **`list_users`** - List users in the organization with name, email, and RBAC roles (lean projection). Secrets such as `intercom_hmac` are never surfaced.
+- **`get_user`** - Get a single user by numeric ID, including org/server-group membership and RBAC roles. Secrets are never surfaced.
+- **`get_account`** - Get account detail (id, name, type, timestamps).
+- **`list_account_rbac_roles`** - List the RBAC roles available in the account.
+- **`get_account_user`** - Get an account-scoped user record by UUID: status, account RBAC role, verification, and 2FA state.
+- **`list_zones_for_user`** - List the zones (organizations) a given user belongs to.
+- **`list_zones`** - List the zones (organizations) in the account (paginated).
+- **`get_zone`** - Get a single zone by UUID. The zone `access_key` is never surfaced.
+- **`list_zone_users`** - List the users assigned to a given zone (by zone UUID).
 
 ## Audit Trail (2 tools)
 

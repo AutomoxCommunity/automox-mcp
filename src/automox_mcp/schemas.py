@@ -618,6 +618,56 @@ class RemoveUserFromAccountParams(ForbidExtraModel):
     user_id: UUID = Field(description="User UUID to remove from account")
 
 
+# ------------------------------------------------------------------------
+# Identity inspection — read-only (issue #91 category A)
+# ------------------------------------------------------------------------
+
+
+class ListUsersParams(OrgIdRequiredMixin, ForbidExtraModel):
+    page: int | None = Field(None, ge=0, description="Page number")
+    limit: int | None = Field(None, ge=1, le=500, description="Results per page")
+
+
+class GetUserParams(OrgIdRequiredMixin, ForbidExtraModel):
+    user_id: int = Field(description="User ID")
+
+
+class GetAccountParams(ForbidExtraModel):
+    account_id: UUID = Field(description="Account ID (UUID)")
+
+
+class ListAccountRbacRolesParams(ForbidExtraModel):
+    account_id: UUID = Field(description="Account ID (UUID)")
+
+
+class GetAccountUserParams(ForbidExtraModel):
+    account_id: UUID = Field(description="Account ID (UUID)")
+    user_id: UUID = Field(description="User UUID")
+
+
+class ListZonesForUserParams(ForbidExtraModel):
+    account_id: UUID = Field(description="Account ID (UUID)")
+    user_id: UUID = Field(description="User UUID")
+
+
+class ListZonesParams(ForbidExtraModel):
+    account_id: UUID = Field(description="Account ID (UUID)")
+    page: int | None = Field(None, ge=0, description="Page number")
+    limit: int | None = Field(None, ge=1, le=500, description="Results per page")
+
+
+class GetZoneParams(ForbidExtraModel):
+    account_id: UUID = Field(description="Account ID (UUID)")
+    zone_id: UUID = Field(description="Zone (organization) UUID")
+
+
+class ListZoneUsersParams(ForbidExtraModel):
+    account_id: UUID = Field(description="Account ID (UUID)")
+    zone_id: UUID = Field(description="Zone (organization) UUID")
+    page: int | None = Field(None, ge=0, description="Page number")
+    limit: int | None = Field(None, ge=1, le=500, description="Results per page")
+
+
 class ListDataExtractsParams(OrgIdRequiredMixin, ForbidExtraModel):
     pass
 

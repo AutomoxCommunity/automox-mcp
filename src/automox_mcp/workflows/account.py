@@ -163,3 +163,234 @@ async def list_organizations(
             "deprecated_endpoint": False,
         },
     }
+
+
+# ---------------------------------------------------------------------------
+# Identity inspection — read-only (issue #91 category A)
+#
+# SECURITY: the User DTO carries `intercom_hmac` (a chat-auth HMAC) and the
+# zone DTO carries `access_key`. Both are secrets and are deliberately excluded
+# from every projection below — never surface them to the model.
+# ---------------------------------------------------------------------------
+
+# Lean projection for the user *list* (avoids per-user org/group blobs).
+_USER_LIST_FIELDS = (
+    "id",
+    "firstname",
+    "lastname",
+    "email",
+    "account_id",
+    "account_name",
+    "account_rbac_roles",
+    "rbac_roles",
+    "tfa_type",
+)
+# Fuller projection for a single-user detail view.
+_USER_DETAIL_FIELDS = (
+    *_USER_LIST_FIELDS,
+    "orgs",
+    "server_groups",
+    "tags",
+    "saml_enabled",
+    "sso_enabled",
+    "account_created_at",
+)
+_ZONE_FIELDS = (
+    "id",
+    "organization_id",
+    "account_id",
+    "parent_id",
+    "name",
+    "created_by",
+    "created_at",
+    "updated_at",
+)
+
+
+def _project(item: Mapping[str, Any], fields: tuple[str, ...]) -> dict[str, Any]:
+    return {key: item.get(key) for key in fields if item.get(key) is not None}
+
+
+def _envelope(response: Any) -> tuple[list[Any], dict[str, Any]]:
+    """Split an Automox ``{data: [...], metadata: {...}}`` envelope."""
+    if isinstance(response, Mapping):
+        raw = response.get("data")
+        data = list(raw) if isinstance(raw, list) else []
+        meta = response.get("metadata")
+        return data, dict(meta) if isinstance(meta, Mapping) else {}
+    if isinstance(response, list):
+        return list(response), {}
+    return [], {}
+
+
+async def list_users(
+    client: AutomoxClient,
+    *,
+    org_id: int,
+    page: int | None = None,
+    limit: int | None = None,
+) -> dict[str, Any]:
+    """List users in the organization (lean projection; secrets redacted)."""
+    params: dict[str, Any] = {"o": org_id}
+    if page is not None:
+        params["page"] = page
+    if limit is not None:
+        params["limit"] = limit
+    response = await client.get("/users", params=params)
+
+    raw = response if isinstance(response, list) else []
+    users = [_project(u, _USER_LIST_FIELDS) for u in raw if isinstance(u, Mapping)]
+
+    return {
+        "data": {"total_users": len(users), "users": users},
+        "metadata": {"deprecated_endpoint": False},
+    }
+
+
+async def get_user(
+    client: AutomoxClient,
+    *,
+    org_id: int,
+    user_id: int,
+) -> dict[str, Any]:
+    """Get a single user by numeric ID (detail projection; secrets redacted)."""
+    response = await client.get(f"/users/{user_id}", params={"o": org_id})
+    detail = _project(response, _USER_DETAIL_FIELDS) if isinstance(response, Mapping) else {}
+
+    return {
+        "data": detail,
+        "metadata": {"deprecated_endpoint": False},
+    }
+
+
+async def get_account(
+    client: AutomoxClient,
+    *,
+    account_id: str | UUID,
+) -> dict[str, Any]:
+    """Get account detail (id, name, type, timestamps)."""
+    response = await client.get(f"/accounts/{account_id}")
+    detail: dict[str, Any] = dict(response) if isinstance(response, Mapping) else {}
+
+    return {
+        "data": detail,
+        "metadata": {"deprecated_endpoint": False, "account_id": str(account_id)},
+    }
+
+
+async def list_account_rbac_roles(
+    client: AutomoxClient,
+    *,
+    account_id: str | UUID,
+) -> dict[str, Any]:
+    """List the RBAC roles available in the account."""
+    response = await client.get(f"/accounts/{account_id}/rbac-roles")
+    roles, meta = _envelope(response)
+    meta["deprecated_endpoint"] = False
+    meta["account_id"] = str(account_id)
+
+    return {
+        "data": {"total_roles": len(roles), "rbac_roles": roles},
+        "metadata": meta,
+    }
+
+
+async def get_account_user(
+    client: AutomoxClient,
+    *,
+    account_id: str | UUID,
+    user_id: str | UUID,
+) -> dict[str, Any]:
+    """Get an account-scoped user record (status, RBAC role, verification)."""
+    response = await client.get(f"/accounts/{account_id}/users/{user_id}")
+    detail: dict[str, Any] = dict(response) if isinstance(response, Mapping) else {}
+
+    return {
+        "data": detail,
+        "metadata": {"deprecated_endpoint": False, "account_id": str(account_id)},
+    }
+
+
+async def list_zones_for_user(
+    client: AutomoxClient,
+    *,
+    account_id: str | UUID,
+    user_id: str | UUID,
+) -> dict[str, Any]:
+    """List the zones a given user belongs to."""
+    response = await client.get(f"/accounts/{account_id}/users/{user_id}/zones")
+    zones, meta = _envelope(response)
+    meta["deprecated_endpoint"] = False
+    meta["account_id"] = str(account_id)
+
+    return {
+        "data": {"user_id": str(user_id), "total_zones": len(zones), "zones": zones},
+        "metadata": meta,
+    }
+
+
+async def list_zones(
+    client: AutomoxClient,
+    *,
+    account_id: str | UUID,
+    page: int | None = None,
+    limit: int | None = None,
+) -> dict[str, Any]:
+    """List the zones (organizations) in the account."""
+    params: dict[str, Any] = {}
+    if page is not None:
+        params["page"] = page
+    if limit is not None:
+        params["limit"] = limit
+    response = await client.get(f"/accounts/{account_id}/zones", params=params or None)
+    zones, meta = _envelope(response)
+    meta["deprecated_endpoint"] = False
+    meta["account_id"] = str(account_id)
+
+    return {
+        "data": {"total_zones": len(zones), "zones": zones},
+        "metadata": meta,
+    }
+
+
+async def get_zone(
+    client: AutomoxClient,
+    *,
+    account_id: str | UUID,
+    zone_id: str | UUID,
+) -> dict[str, Any]:
+    """Get a single zone by UUID (access_key redacted)."""
+    response = await client.get(f"/accounts/{account_id}/zones/{zone_id}")
+    detail = _project(response, _ZONE_FIELDS) if isinstance(response, Mapping) else {}
+
+    return {
+        "data": detail,
+        "metadata": {"deprecated_endpoint": False, "account_id": str(account_id)},
+    }
+
+
+async def list_zone_users(
+    client: AutomoxClient,
+    *,
+    account_id: str | UUID,
+    zone_id: str | UUID,
+    page: int | None = None,
+    limit: int | None = None,
+) -> dict[str, Any]:
+    """List the users assigned to a given zone."""
+    params: dict[str, Any] = {}
+    if page is not None:
+        params["page"] = page
+    if limit is not None:
+        params["limit"] = limit
+    response = await client.get(
+        f"/accounts/{account_id}/zones/{zone_id}/users", params=params or None
+    )
+    users, meta = _envelope(response)
+    meta["deprecated_endpoint"] = False
+    meta["account_id"] = str(account_id)
+
+    return {
+        "data": {"zone_id": str(zone_id), "total_users": len(users), "users": users},
+        "metadata": meta,
+    }

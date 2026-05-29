@@ -12,9 +12,18 @@ from fastmcp.exceptions import ToolError
 from .. import workflows
 from ..client import AutomoxClient
 from ..schemas import (
+    GetAccountParams,
+    GetAccountUserParams,
+    GetUserParams,
+    GetZoneParams,
     InviteUserParams,
+    ListAccountRbacRolesParams,
     ListOrganizationsParams,
     ListOrgApiKeysParams,
+    ListUsersParams,
+    ListZonesForUserParams,
+    ListZonesParams,
+    ListZoneUsersParams,
     RemoveUserFromAccountParams,
     ZoneAssignment,
 )
@@ -161,6 +170,188 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             workflows.list_organizations,
             {"page": page, "limit": limit},
             params_model=ListOrganizationsParams,
+        )
+        return maybe_format_markdown(result, output_format)
+
+    # ------------------------------------------------------------------
+    # Identity inspection — read-only (issue #91 category A)
+    # ------------------------------------------------------------------
+
+    _READ_ANNOTATIONS = {
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": True,
+    }
+
+    @server.tool(
+        name="list_users",
+        description=(
+            "List users in the organization with name, email, and RBAC roles. "
+            "Secrets (e.g. intercom_hmac) are never surfaced."
+        ),
+        annotations=_READ_ANNOTATIONS,
+    )
+    async def list_users(
+        page: int | None = None,
+        limit: int | None = None,
+        output_format: str | None = "json",
+    ) -> dict[str, Any]:
+        result = await call_tool_workflow(
+            client,
+            workflows.list_users,
+            {"page": page, "limit": limit},
+            params_model=ListUsersParams,
+        )
+        return maybe_format_markdown(result, output_format)
+
+    @server.tool(
+        name="get_user",
+        description=(
+            "Get a single user by numeric ID, including org/server-group "
+            "membership and RBAC roles. Secrets are never surfaced."
+        ),
+        annotations=_READ_ANNOTATIONS,
+    )
+    async def get_user(
+        user_id: int,
+        output_format: str | None = "json",
+    ) -> dict[str, Any]:
+        result = await call_tool_workflow(
+            client,
+            workflows.get_user,
+            {"user_id": user_id},
+            params_model=GetUserParams,
+        )
+        return maybe_format_markdown(result, output_format)
+
+    @server.tool(
+        name="get_account",
+        description="Get Automox account detail (id, name, type, timestamps).",
+        annotations=_READ_ANNOTATIONS,
+    )
+    async def get_account(
+        output_format: str | None = "json",
+    ) -> dict[str, Any]:
+        result = await call_tool_workflow(
+            client,
+            workflows.get_account,
+            {"account_id": _resolve_account_id(None)},
+            params_model=GetAccountParams,
+        )
+        return maybe_format_markdown(result, output_format)
+
+    @server.tool(
+        name="list_account_rbac_roles",
+        description="List the RBAC roles available in the Automox account.",
+        annotations=_READ_ANNOTATIONS,
+    )
+    async def list_account_rbac_roles(
+        output_format: str | None = "json",
+    ) -> dict[str, Any]:
+        result = await call_tool_workflow(
+            client,
+            workflows.list_account_rbac_roles,
+            {"account_id": _resolve_account_id(None)},
+            params_model=ListAccountRbacRolesParams,
+        )
+        return maybe_format_markdown(result, output_format)
+
+    @server.tool(
+        name="get_account_user",
+        description=(
+            "Get an account-scoped user record by UUID: status, account RBAC "
+            "role, verification, and 2FA state."
+        ),
+        annotations=_READ_ANNOTATIONS,
+    )
+    async def get_account_user(
+        user_id: str,
+        output_format: str | None = "json",
+    ) -> dict[str, Any]:
+        result = await call_tool_workflow(
+            client,
+            workflows.get_account_user,
+            {"account_id": _resolve_account_id(None), "user_id": user_id},
+            params_model=GetAccountUserParams,
+        )
+        return maybe_format_markdown(result, output_format)
+
+    @server.tool(
+        name="list_zones_for_user",
+        description="List the zones (organizations) a given user belongs to.",
+        annotations=_READ_ANNOTATIONS,
+    )
+    async def list_zones_for_user(
+        user_id: str,
+        output_format: str | None = "json",
+    ) -> dict[str, Any]:
+        result = await call_tool_workflow(
+            client,
+            workflows.list_zones_for_user,
+            {"account_id": _resolve_account_id(None), "user_id": user_id},
+            params_model=ListZonesForUserParams,
+        )
+        return maybe_format_markdown(result, output_format)
+
+    @server.tool(
+        name="list_zones",
+        description="List the zones (organizations) in the Automox account.",
+        annotations=_READ_ANNOTATIONS,
+    )
+    async def list_zones(
+        page: int | None = None,
+        limit: int | None = None,
+        output_format: str | None = "json",
+    ) -> dict[str, Any]:
+        result = await call_tool_workflow(
+            client,
+            workflows.list_zones,
+            {"account_id": _resolve_account_id(None), "page": page, "limit": limit},
+            params_model=ListZonesParams,
+        )
+        return maybe_format_markdown(result, output_format)
+
+    @server.tool(
+        name="get_zone",
+        description=(
+            "Get a single zone (organization) by UUID. The zone access_key is never surfaced."
+        ),
+        annotations=_READ_ANNOTATIONS,
+    )
+    async def get_zone(
+        zone_id: str,
+        output_format: str | None = "json",
+    ) -> dict[str, Any]:
+        result = await call_tool_workflow(
+            client,
+            workflows.get_zone,
+            {"account_id": _resolve_account_id(None), "zone_id": zone_id},
+            params_model=GetZoneParams,
+        )
+        return maybe_format_markdown(result, output_format)
+
+    @server.tool(
+        name="list_zone_users",
+        description="List the users assigned to a given zone (by zone UUID).",
+        annotations=_READ_ANNOTATIONS,
+    )
+    async def list_zone_users(
+        zone_id: str,
+        page: int | None = None,
+        limit: int | None = None,
+        output_format: str | None = "json",
+    ) -> dict[str, Any]:
+        result = await call_tool_workflow(
+            client,
+            workflows.list_zone_users,
+            {
+                "account_id": _resolve_account_id(None),
+                "zone_id": zone_id,
+                "page": page,
+                "limit": limit,
+            },
+            params_model=ListZoneUsersParams,
         )
         return maybe_format_markdown(result, output_format)
 

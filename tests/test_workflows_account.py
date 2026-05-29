@@ -9,9 +9,18 @@ from conftest import StubClient
 
 from automox_mcp.client import AutomoxClient
 from automox_mcp.workflows.account import (
+    get_account,
+    get_account_user,
+    get_user,
+    get_zone,
     invite_user_to_account,
+    list_account_rbac_roles,
     list_org_api_keys,
     list_organizations,
+    list_users,
+    list_zone_users,
+    list_zones,
+    list_zones_for_user,
     remove_user_from_account,
 )
 
@@ -213,3 +222,128 @@ async def test_list_organizations_handles_non_list():
     client = StubClient(get_responses={"/orgs": ["unexpected"]})
     result = await list_organizations(cast(AutomoxClient, client))
     assert result["data"]["total_organizations"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Identity inspection — read-only (issue #91 category A)
+# ---------------------------------------------------------------------------
+
+_ACCT = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+_USER_RECORD = {
+    "id": 7,
+    "firstname": "Ada",
+    "lastname": "Lovelace",
+    "email": "ada@example.com",
+    "account_id": 42,
+    "account_name": "Acme",
+    "account_rbac_roles": ["global-admin"],
+    "rbac_roles": ["admin"],
+    "tfa_type": "totp",
+    "orgs": [42, 43],
+    "server_groups": [1, 2],
+    "intercom_hmac": "SECRET-HMAC-DO-NOT-LEAK",
+    "prefs": {"theme": "dark"},
+}
+
+
+@pytest.mark.asyncio
+async def test_list_users_projects_and_redacts_secret():
+    client = StubClient(get_responses={"/users": [[_USER_RECORD]]})
+    result = await list_users(cast(AutomoxClient, client), org_id=42)
+
+    assert result["data"]["total_users"] == 1
+    user = result["data"]["users"][0]
+    assert user["email"] == "ada@example.com"
+    assert user["rbac_roles"] == ["admin"]
+    # secret + noise never surfaced; list view stays lean
+    assert "intercom_hmac" not in user
+    assert "prefs" not in user
+    assert "orgs" not in user  # lean list projection
+
+    _, path, params = client.calls[0]
+    assert path == "/users"
+    assert params["o"] == 42
+
+
+@pytest.mark.asyncio
+async def test_get_user_detail_projection_redacts_secret():
+    client = StubClient(get_responses={"/users/7": [_USER_RECORD]})
+    result = await get_user(cast(AutomoxClient, client), org_id=42, user_id=7)
+    data = result["data"]
+    assert data["email"] == "ada@example.com"
+    assert data["orgs"] == [42, 43]  # detail view includes membership
+    assert "intercom_hmac" not in data
+    _, _path, params = client.calls[0]
+    assert params == {"o": 42}
+
+
+@pytest.mark.asyncio
+async def test_get_account_passthrough():
+    account = {"id": 1, "name": "Acme", "type": "msp", "created_at": "2024-01-01T00:00:00Z"}
+    client = StubClient(get_responses={f"/accounts/{_ACCT}": [account]})
+    result = await get_account(cast(AutomoxClient, client), account_id=_ACCT)
+    assert result["data"]["name"] == "Acme"
+    assert result["metadata"]["account_id"] == _ACCT
+
+
+@pytest.mark.asyncio
+async def test_list_account_rbac_roles_unwraps_envelope():
+    envelope = {"metadata": {"total": 2}, "data": [{"name": "global-admin"}, {"name": "read-only"}]}
+    client = StubClient(get_responses={f"/accounts/{_ACCT}/rbac-roles": [envelope]})
+    result = await list_account_rbac_roles(cast(AutomoxClient, client), account_id=_ACCT)
+    assert result["data"]["total_roles"] == 2
+    assert result["data"]["rbac_roles"][0]["name"] == "global-admin"
+
+
+@pytest.mark.asyncio
+async def test_get_account_user_passthrough():
+    user = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+    record = {"user_id": user, "email": "x@y.z", "status": "active", "account_rbac_role": "admin"}
+    client = StubClient(get_responses={f"/accounts/{_ACCT}/users/{user}": [record]})
+    result = await get_account_user(cast(AutomoxClient, client), account_id=_ACCT, user_id=user)
+    assert result["data"]["status"] == "active"
+
+
+@pytest.mark.asyncio
+async def test_list_zones_for_user_unwraps_envelope():
+    user = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+    envelope = {"data": [{"id": "z1"}, {"id": "z2"}], "metadata": {}}
+    client = StubClient(get_responses={f"/accounts/{_ACCT}/users/{user}/zones": [envelope]})
+    result = await list_zones_for_user(cast(AutomoxClient, client), account_id=_ACCT, user_id=user)
+    assert result["data"]["total_zones"] == 2
+    assert result["data"]["user_id"] == user
+
+
+@pytest.mark.asyncio
+async def test_list_zones_forwards_pagination():
+    envelope = {"data": [{"id": "z1"}], "metadata": {}}
+    client = StubClient(get_responses={f"/accounts/{_ACCT}/zones": [envelope]})
+    await list_zones(cast(AutomoxClient, client), account_id=_ACCT, page=1, limit=25)
+    _, _path, params = client.calls[0]
+    assert params == {"page": 1, "limit": 25}
+
+
+@pytest.mark.asyncio
+async def test_get_zone_redacts_access_key():
+    zone = {
+        "id": "z1",
+        "organization_id": 99,
+        "account_id": 1,
+        "name": "EU Zone",
+        "access_key": "SECRET-ZONE-KEY",
+    }
+    zid = "cccccccc-cccc-cccc-cccc-cccccccccccc"
+    client = StubClient(get_responses={f"/accounts/{_ACCT}/zones/{zid}": [zone]})
+    result = await get_zone(cast(AutomoxClient, client), account_id=_ACCT, zone_id=zid)
+    assert result["data"]["name"] == "EU Zone"
+    assert "access_key" not in result["data"]
+
+
+@pytest.mark.asyncio
+async def test_list_zone_users_unwraps_envelope():
+    zid = "cccccccc-cccc-cccc-cccc-cccccccccccc"
+    envelope = {"data": [{"user_id": "u1"}], "metadata": {}}
+    client = StubClient(get_responses={f"/accounts/{_ACCT}/zones/{zid}/users": [envelope]})
+    result = await list_zone_users(cast(AutomoxClient, client), account_id=_ACCT, zone_id=zid)
+    assert result["data"]["total_users"] == 1
+    assert result["data"]["zone_id"] == zid

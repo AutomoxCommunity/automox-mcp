@@ -1033,3 +1033,87 @@ async def test_describe_policy_exception_wrapped() -> None:
             org_id=42,
             policy_id=999,
         )
+
+
+# ---------------------------------------------------------------------------
+# Do Not Disturb honoring surfaced (issue #91 category F)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_summarize_policies_surfaces_dnd_fields() -> None:
+    policy = {
+        "id": 7,
+        "name": "Patch + DND",
+        "policy_type_name": "patch",
+        "status": "active",
+        "installation_do_not_disturb_honored": True,
+        "reboot_do_not_disturb_honored": False,
+    }
+    stub = StubClient(
+        get_responses={
+            "/policies": [[policy], []],
+            "/policystats": [[]],
+        }
+    )
+
+    result = await summarize_policies(cast(AutomoxClient, stub), org_id=42, limit=20)
+
+    preview = result["data"]["policies"][0]
+    assert preview["installation_do_not_disturb_honored"] is True
+    assert preview["reboot_do_not_disturb_honored"] is False
+
+
+@pytest.mark.asyncio
+async def test_describe_policy_surfaces_dnd_honored_block() -> None:
+    policy = {
+        "id": 11,
+        "name": "Reboot Policy",
+        "policy_type_name": "patch",
+        "org_uuid": None,
+        "installation_do_not_disturb_honored": True,
+        "reboot_do_not_disturb_honored": True,
+    }
+    stub = StubClient(
+        get_responses={
+            "/policies/11": [policy],
+            "/orgs": [[{"id": 42, "org_uuid": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}]],
+        }
+    )
+
+    result = await describe_policy(
+        cast(AutomoxClient, stub),
+        org_id=42,
+        policy_id=11,
+        include_recent_runs=0,
+    )
+
+    assert result["data"]["dnd_honored"] == {
+        "installation_do_not_disturb_honored": True,
+        "reboot_do_not_disturb_honored": True,
+    }
+
+
+@pytest.mark.asyncio
+async def test_describe_policy_omits_dnd_block_when_absent() -> None:
+    policy = {
+        "id": 12,
+        "name": "No DND Fields",
+        "policy_type_name": "patch",
+        "org_uuid": None,
+    }
+    stub = StubClient(
+        get_responses={
+            "/policies/12": [policy],
+            "/orgs": [[{"id": 42, "org_uuid": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"}]],
+        }
+    )
+
+    result = await describe_policy(
+        cast(AutomoxClient, stub),
+        org_id=42,
+        policy_id=12,
+        include_recent_runs=0,
+    )
+
+    assert "dnd_honored" not in result["data"]

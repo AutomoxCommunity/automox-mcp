@@ -1,6 +1,6 @@
 # Tool Reference
 
-Complete reference for all 97 tools, 6 workflow prompts, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
+Complete reference for all 99 tools, 6 workflow prompts, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
 
 > **Tip:** You don't need to memorize this. Call `discover_capabilities` from your AI assistant to get a live summary of available tools organized by domain.
 
@@ -9,7 +9,7 @@ Complete reference for all 97 tools, 6 workflow prompts, MCP resources, paramete
 - [Device Management (8 tools)](#device-management-8-tools)
 - [Advanced Device Search (14 tools)](#advanced-device-search-14-tools)
 - [Policy Management (12 tools)](#policy-management-12-tools)
-- [Policy History v2 (6 tools)](#policy-history-v2-6-tools)
+- [Policy History v2 (7 tools)](#policy-history-v2-7-tools)
 - [Package Management (2 tools)](#package-management-2-tools)
 - [Group Management (5 tools)](#group-management-5-tools)
 - [Webhook Management (8 tools)](#webhook-management-8-tools)
@@ -19,7 +19,7 @@ Complete reference for all 97 tools, 6 workflow prompts, MCP resources, paramete
 - [Compound Workflows (3 tools)](#compound-workflows-3-tools)
 - [Events (1 tool)](#events-1-tool)
 - [Reports (2 tools)](#reports-2-tools)
-- [Account Management (3 tools)](#account-management-3-tools)
+- [Account Management (4 tools)](#account-management-4-tools)
 - [Audit Trail (2 tools)](#audit-trail-2-tools)
 - [Policy Windows (9 tools)](#policy-windows-9-tools)
 - [Splashtop Remote Control (10 tools)](#splashtop-remote-control-10-tools)
@@ -76,7 +76,7 @@ Uses the Server Groups API v2 for structured device queries, saved searches, and
 - **`clone_policy`** - Clone an existing policy with optional name and server group overrides.
 - **`delete_policy`** - Permanently delete a policy by ID.
 
-## Policy History v2 (6 tools)
+## Policy History v2 (7 tools)
 
 Richer policy execution reporting via the `/policy-history` API with UUID-based queries, time-range filtering, and aggregate views.
 
@@ -84,8 +84,9 @@ Richer policy execution reporting via the `/policy-history` API with UUID-based 
 - **`policy_run_count`** - Get aggregate policy execution counts. Optionally filter by number of days to look back.
 - **`policy_runs_by_policy`** - Get policy runs grouped by policy for cross-policy comparison.
 - **`policy_history_detail`** - Get policy history details by UUID, including run history and status.
-- **`policy_runs_for_policy`** - Get execution runs for a specific policy by UUID with optional day range and sort order.
+- **`policy_runs_for_policy`** - Get execution runs for a specific policy by UUID with optional day range and sort order. Set `summary_only=true` to project each run to `{policy_uuid, run_time, execution_token, run_count}` and drop `banner_stats` — a token-efficient way to enumerate execution tokens for a policy with many runs.
 - **`policy_run_detail_v2`** - Get detailed per-device results for a specific policy run. Supports device name filtering and pagination.
+- **`policy_execution_counts`** - List fleet-wide policy execution counts over a time window: one row per policy with its run count, in a single round-trip. Answers "which policies ran most last quarter?" without per-policy calls. Distinct from `policy_run_count` (single aggregate) and `policy_runs_for_policy` (per-run records for one policy).
 
 ## Package Management (2 tools)
 
@@ -148,11 +149,12 @@ Manage vulnerability remediation workflows via the Vuln Sync API. Supports CSV-b
 - **`prepatch_report`** - Retrieve the pre-patch readiness report showing devices with pending patches before the next scheduled patch window.
 - **`noncompliant_report`** - Retrieve the non-compliant devices report showing devices that need attention due to policy failures or missing patches.
 
-## Account Management (3 tools)
+## Account Management (4 tools)
 
 - **`invite_user_to_account`** - Invite a user to the Automox account with optional zone assignments.
 - **`remove_user_from_account`** - Remove a user from the Automox account by UUID.
 - **`list_org_api_keys`** - List API keys for the organization. Returns key names and IDs only — secrets are never exposed.
+- **`list_organizations`** - List organizations visible to the API key, with tier, device count, device limit, parent org, and trial end time. Useful for MSP/multi-org navigation, feature-tier checks, capacity posture, and trial warnings.
 
 ## Audit Trail (2 tools)
 

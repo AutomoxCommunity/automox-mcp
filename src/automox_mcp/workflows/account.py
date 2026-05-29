@@ -113,3 +113,53 @@ async def list_org_api_keys(
             "deprecated_endpoint": False,
         },
     }
+
+
+# Fields projected from the Organization DTO. Surfacing tier/capacity/parent so an
+# LLM can navigate MSP org trees, check feature tiers, and flag trial/limit posture.
+_ORG_FIELDS = (
+    "id",
+    "uuid",
+    "name",
+    "tier",
+    "device_count",
+    "device_limit",
+    "soft_device_limit",
+    "parent_id",
+    "trial_end_time",
+    "create_time",
+)
+
+
+async def list_organizations(
+    client: AutomoxClient,
+    *,
+    page: int | None = None,
+    limit: int | None = None,
+) -> dict[str, Any]:
+    """List organizations visible to the API key with tier/capacity/parent detail."""
+    params: dict[str, Any] = {}
+    if page is not None:
+        params["page"] = page
+    if limit is not None:
+        params["limit"] = limit
+    results = await client.get("/orgs", params=params or None)
+
+    if not isinstance(results, list):
+        results = []
+
+    orgs: list[dict[str, Any]] = []
+    for item in results:
+        if not isinstance(item, Mapping):
+            continue
+        orgs.append({key: item.get(key) for key in _ORG_FIELDS if item.get(key) is not None})
+
+    return {
+        "data": {
+            "total_organizations": len(orgs),
+            "organizations": orgs,
+        },
+        "metadata": {
+            "deprecated_endpoint": False,
+        },
+    }

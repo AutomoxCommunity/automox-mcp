@@ -348,6 +348,12 @@ async def summarize_policies(
                 "schedule_days": policy_item.get("schedule_days"),
                 "schedule_time": policy_item.get("schedule_time"),
                 "next_run": policy_item.get("next_run"),
+                "installation_do_not_disturb_honored": policy_item.get(
+                    "installation_do_not_disturb_honored"
+                ),
+                "reboot_do_not_disturb_honored": policy_item.get(
+                    "reboot_do_not_disturb_honored"
+                ),
             }
         )
 
@@ -605,6 +611,17 @@ async def describe_policy(
         "policy": policy_data,
         "recent_activity": recent_activity,
     }
+
+    # Surface Do Not Disturb honoring at top level. These determine whether a patch
+    # policy's install/reboot defers to macOS Do Not Disturb / Windows Focus, which
+    # answers "did the policy act, or did DND block it?" without raw-dumping the policy.
+    dnd_honored = {
+        key: policy_data.get(key)
+        for key in ("installation_do_not_disturb_honored", "reboot_do_not_disturb_honored")
+        if policy_data.get(key) is not None
+    }
+    if dnd_honored:
+        data["dnd_honored"] = dnd_honored
 
     # Add schedule interpretation at top level for prominence
     if schedule_interpretation:

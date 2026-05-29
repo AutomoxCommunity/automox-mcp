@@ -9,6 +9,7 @@ from fastmcp import FastMCP
 
 from ..client import AutomoxClient
 from ..schemas import (
+    PolicyExecutionCountsParams,
     PolicyHistoryDetailParams,
     PolicyRunCountParams,
     PolicyRunDetailV2Params,
@@ -28,6 +29,9 @@ from ..workflows.policy_history import (
 )
 from ..workflows.policy_history import (
     get_policy_runs_for_policy as _get_policy_runs_for_policy,
+)
+from ..workflows.policy_history import (
+    list_policy_execution_counts as _list_policy_execution_counts,
 )
 from ..workflows.policy_history import (
     list_policy_runs_v2 as _list_policy_runs_v2,
@@ -173,15 +177,50 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         policy_uuid: str,
         report_days: int | None = None,
         sort: str | None = None,
+        summary_only: bool = False,
         output_format: str | None = "json",
     ) -> dict[str, Any]:
         kwargs: dict[str, Any] = {
             "policy_uuid": policy_uuid,
             "report_days": report_days,
             "sort": sort,
+            "summary_only": summary_only,
         }
         result = await call_tool_workflow(
             client, _get_policy_runs_for_policy, kwargs, params_model=PolicyRunsForPolicyParams
+        )
+        return maybe_format_markdown(result, output_format)
+
+    @server.tool(
+        name="policy_execution_counts",
+        description=(
+            "List fleet-wide policy execution counts over a time window: one row per "
+            "policy with its run count, in a single round-trip. Answers 'which policies "
+            "ran most last quarter?' without per-policy calls or client-side aggregation. "
+            "Distinct from policy_run_count (single aggregate) and policy_runs_for_policy "
+            "(per-run records for one policy)."
+        ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
+    )
+    async def policy_execution_counts(
+        start_time: str | None = None,
+        end_time: str | None = None,
+        output_format: str | None = "json",
+    ) -> dict[str, Any]:
+        kwargs: dict[str, Any] = {
+            "start_time": start_time,
+            "end_time": end_time,
+        }
+        result = await call_tool_workflow(
+            client,
+            _list_policy_execution_counts,
+            kwargs,
+            params_model=PolicyExecutionCountsParams,
         )
         return maybe_format_markdown(result, output_format)
 

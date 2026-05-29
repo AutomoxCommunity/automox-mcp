@@ -612,6 +612,13 @@ class ListOrgApiKeysParams(OrgIdRequiredMixin, ForbidExtraModel):
     pass
 
 
+class ListOrganizationsParams(ForbidExtraModel):
+    """List organizations visible to the API key (account-wide, not org-scoped)."""
+
+    page: int | None = Field(None, ge=0, description="Page number")
+    limit: int | None = Field(None, ge=1, le=500, description="Results per page")
+
+
 class ListActionSetsParams(OrgIdRequiredMixin, ForbidExtraModel):
     pass
 
@@ -717,6 +724,19 @@ class PolicyRunsForPolicyParams(OrgIdRequiredMixin, ForbidExtraModel):
     policy_uuid: UUID = Field(description="Policy UUID")
     report_days: int | None = Field(None, ge=1, le=365, description="Days to look back")
     sort: str | None = Field(None, description="Sort order", max_length=100)
+    summary_only: bool = Field(
+        False,
+        description=(
+            "When true, project each run to {policy_uuid, run_time, execution_token, "
+            "run_count} and drop banner_stats. Use this to enumerate execution tokens "
+            "for a policy with many runs without pulling per-run stats."
+        ),
+    )
+
+
+class PolicyExecutionCountsParams(OrgIdRequiredMixin, ForbidExtraModel):
+    start_time: str | None = Field(None, description="Start of the window (ISO 8601)")
+    end_time: str | None = Field(None, description="End of the window (ISO 8601)")
 
 
 class PolicyRunDetailV2Params(OrgIdRequiredMixin, ForbidExtraModel):

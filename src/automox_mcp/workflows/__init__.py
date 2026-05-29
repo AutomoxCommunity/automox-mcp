@@ -24,7 +24,12 @@ from . import (
     webhooks,
     worklets,
 )
-from .account import invite_user_to_account, list_org_api_keys, remove_user_from_account
+from .account import (
+    invite_user_to_account,
+    list_org_api_keys,
+    list_organizations,
+    remove_user_from_account,
+)
 from .audit import audit_trail_user_activity
 from .audit_v2 import audit_events_ocsf
 from .compound import get_compliance_snapshot, get_device_full_profile, get_patch_tuesday_readiness
@@ -84,6 +89,7 @@ from .policy_history import (
     get_policy_history_detail,
     get_policy_run_detail_v2,
     get_policy_runs_for_policy,
+    list_policy_execution_counts,
     list_policy_runs_v2,
     policy_run_count,
     policy_runs_by_policy,
@@ -224,6 +230,8 @@ __all__ = [
     "list_devices_needing_attention",
     "list_events",
     "list_org_api_keys",
+    "list_organizations",
+    "list_policy_execution_counts",
     "list_policy_runs_v2",
     "list_remediation_action_sets",
     "list_saved_searches",

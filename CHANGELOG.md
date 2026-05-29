@@ -5,6 +5,18 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-05-28
+
+### Fixed
+
+- **`get_device_by_uuid` was calling a non-existent path and silently returning empty results (#92).** The tool previously hit `GET /server-groups-api/v1/organizations/{org_uuid}/server/{device_uuid}`, which is not documented in any upstream OpenAPI spec revision (verified against `ax-console-bundle.yaml` and the 2026-05-08 `console-api.yaml`). The live tenant returned `200` from a Spring catch-all route with an empty Page wrapper (`{"content": [], "pageable": {…}, "total_elements": 0}`) regardless of the device UUID, so the tool appeared to succeed while never returning a real device. Existing unit tests passed only because the stubbed fixture was a hand-authored device dict that bypassed the wire response shape. Switched to the canonical `GET /servers/{device_uuid}?o={org_id}` endpoint — the upstream spec types `id` as `integer/int64` but the live tenant accepts UUIDs and returns the real device detail (`agent_version`, `compliant`, `last_refresh_time`, etc.). The unit-test fixture has been replaced with the real `/servers/{uuid}` response shape so future drift will fail loudly.
+
+### Changed
+
+- **Version-strategy realignment to strict SemVer.** Going forward, releases that add new tools, workflows, modules, or endpoint wrappers bump the MINOR version; bug fixes, performance work, internal refactors, and documentation updates bump PATCH. Several recent releases that added new capability surface (notably #80/#84 saved-search CRUD + bulk policy assignment, and #81 Splashtop Remote Control module) shipped as PATCH bumps under the previous cadence; this `1.1.0` realigns the version with the actual capability footprint ahead of broader directory distribution. The `get_device_by_uuid` bug fix above ships alongside the realignment.
+- **In-tree version alignment.** `server.json`, `mcpb/manifest.json`, and `mcpb/pyproject.toml` (including the `automox-mcp>=` dependency floor) had drifted to `1.0.19` while `pyproject.toml` was at `1.0.36`. The release workflow overrides these at build time, so the drift never reached published artifacts — but reading the repo was misleading. All in-tree versions are now `1.1.0`.
+- **MCPB manifest copy refreshed.** `mcpb/manifest.json` `long_description` was stale (claimed 80 tools across 18 domains; actual is 97 tools across 18 domains, with the Splashtop Remote Control module now included). The `read_only` user-config description has been corrected from "Disable all 22 write operations. 58 read tools remain available." to "Disable all 32 write operations. 65 read tools remain available." Pre-directory-submission copy hygiene.
+
 ## [1.0.36] - 2026-05-28
 
 ### Added

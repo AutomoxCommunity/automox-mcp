@@ -17,6 +17,9 @@ build/
 dist/
 automox-mcp-design-guide.md
 
+# Upstream OpenAPI spec — local reference only, never commit
+console-api.yaml
+
 # MCP Registry tooling — local only, never commit
 mcp-publisher
 mcp-registry-key.pem

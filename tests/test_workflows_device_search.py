@@ -44,10 +44,19 @@ _SEARCH_RESULTS = {
 }
 
 _DEVICE_DETAIL = {
+    "id": 123456,
     "uuid": "dev-001",
+    "server_group_id": 9876,
+    "organization_id": 42,
     "hostname": "host-1",
     "os_family": "Windows",
+    "os_name": "Microsoft Windows 11 Pro",
+    "os_version": "10.0.26100",
+    "agent_version": "1.45.48",
+    "compliant": True,
     "ip_addrs": ["10.0.0.1"],
+    "ip_addrs_private": ["10.0.0.1"],
+    "last_refresh_time": "2026-05-28T12:00:00Z",
 }
 
 _METADATA_FIELDS = [
@@ -269,7 +278,9 @@ async def test_assignments_handles_empty_spring_page() -> None:
 
 @pytest.mark.asyncio
 async def test_device_by_uuid_returns_detail() -> None:
-    path = f"/server-groups-api/v1/organizations/{_ORG_UUID}/server/dev-001"
+    # Fix for #92: canonical `/servers/{id}` endpoint, with the live tenant
+    # accepting a UUID where the spec types `id` as int.
+    path = "/servers/dev-001"
     client = _make_client(get_responses={path: [_DEVICE_DETAIL]})
     result = await get_device_by_uuid(
         cast(AutomoxClient, client),
@@ -278,11 +289,18 @@ async def test_device_by_uuid_returns_detail() -> None:
 
     assert result["data"]["hostname"] == "host-1"
     assert result["data"]["uuid"] == "dev-001"
+    assert result["data"]["agent_version"] == "1.45.48"
+    assert result["data"]["compliant"] is True
+    # Verify the org_id was passed as the `o` query param (required by /servers/{id}).
+    method, called_path, params = client.calls[-1]
+    assert method == "GET"
+    assert called_path == "/servers/dev-001"
+    assert params == {"o": 42, "includeDetails": 1}
 
 
 @pytest.mark.asyncio
 async def test_device_by_uuid_handles_non_mapping() -> None:
-    path = f"/server-groups-api/v1/organizations/{_ORG_UUID}/server/bad"
+    path = "/servers/bad"
     client = _make_client(get_responses={path: ["unexpected"]})
     result = await get_device_by_uuid(
         cast(AutomoxClient, client),

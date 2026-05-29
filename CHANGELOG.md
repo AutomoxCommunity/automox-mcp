@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Search & metadata enrichment — 4 device-search tools (#91, category D).**
+  - `get_searchable_fields` — `GET /server-groups-api/device/metadata/fields`: searchable fields grouped by scope with per-field type metadata, richer than the existing flat `get_device_metadata_fields` (`device-fields`). Read-only.
+  - `list_searches_for_device` — `GET …/device/saved-search/server/{deviceUUID}`: which saved searches currently contain a given device, with optional `type` filter. Read-only.
+  - `run_saved_search` — `GET …/device/search/{searchUUID}`: execute a saved search by UUID with `page`/`size` paging and an optional `fields` projection (Spring `PageObject` envelope re-emitted under `metadata.pagination`). Lighter-weight than `get_saved_search_results`. Read-only.
+  - `refresh_saved_search_cache` — `POST …/device/search/{searchUUID}/refresh`: force a re-cache of stale results. Write (gated by `read_only=False`, idempotency-keyed); `destructiveHint=false` (recompute, not delete).
 - **`list_organizations` tool (account domain).** Surfaces the `GET /orgs` Organization DTO — `tier`, `device_count`, `device_limit`, `soft_device_limit`, `parent_id`, `trial_end_time`, `uuid`, `create_time` — which the server previously fetched only internally inside `resolve_org_uuid` and never exposed to the model. Unlocks MSP/multi-org navigation, feature-tier checks, capacity posture, and trial-expiry warnings. Read-only. (#91, category H)
 - **`policy_execution_counts` tool (policy_history domain).** Wraps `GET /policy-history/policies` (the policy index) for fleet-wide per-policy run counts over a `start_time`/`end_time` window in one round-trip — the "which policies ran most last quarter?" view. Distinct from `policy_run_count` (single aggregate) and `policy_runs_for_policy` (per-run records for one policy). Read-only. (#91, category I)
 - **`summary_only` argument on `policy_runs_for_policy`.** When `true`, each run is projected to `{policy_uuid, run_time, execution_token, run_count}` and `banner_stats` is dropped — a token-efficient way to enumerate execution tokens for a policy with many runs. Defaults to `false`, so existing callers and stats-driven workflows are unaffected. (#91, category J)

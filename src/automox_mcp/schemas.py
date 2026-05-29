@@ -856,6 +856,28 @@ class AssignPoliciesToSavedSearchParams(ForbidExtraModel):
     )
 
 
+class SearchesByDeviceParams(ForbidExtraModel):
+    device_uuid: UUID = Field(description="Device UUID")
+    search_type: str | None = Field(
+        None, description="Optional saved-search type filter", max_length=100
+    )
+
+
+class RunSavedSearchParams(ForbidExtraModel):
+    search_id: str = Field(description="Saved-search UUID", min_length=1, max_length=200)
+    page: int | None = Field(None, ge=0, description="Page number")
+    size: int | None = Field(None, ge=1, le=500, description="Results per page")
+    fields: list[str] | None = Field(
+        None,
+        description="Optional list of fields to project into each result row",
+        max_length=200,
+    )
+
+
+class RefreshSearchCacheParams(ForbidExtraModel):
+    search_id: str = Field(description="Saved-search UUID", min_length=1, max_length=200)
+
+
 # ============================================================================
 # SPLASHTOP REMOTE CONTROL SCHEMAS (2026-01-14)
 # ============================================================================

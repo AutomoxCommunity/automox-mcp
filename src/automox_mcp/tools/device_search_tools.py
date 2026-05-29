@@ -17,7 +17,10 @@ from ..schemas import (
     DeviceByUuidParams,
     DeviceSearchTypeaheadParams,
     GetSavedSearchParams,
+    RefreshSearchCacheParams,
+    RunSavedSearchParams,
     SavedSearchResultsParams,
+    SearchesByDeviceParams,
     UpdateSavedSearchParams,
 )
 from ..utils.tooling import (
@@ -64,7 +67,19 @@ from ..workflows.device_search import (
     get_search_scopes as _get_search_scopes,
 )
 from ..workflows.device_search import (
+    get_searchable_fields as _get_searchable_fields,
+)
+from ..workflows.device_search import (
     list_saved_searches as _list_saved_searches,
+)
+from ..workflows.device_search import (
+    list_searches_for_device as _list_searches_for_device,
+)
+from ..workflows.device_search import (
+    refresh_saved_search_cache as _refresh_saved_search_cache,
+)
+from ..workflows.device_search import (
+    run_saved_search as _run_saved_search,
 )
 from ..workflows.device_search import (
     update_saved_search as _update_saved_search,
@@ -314,6 +329,83 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         result = await call_tool_workflow(client, _get_search_scopes, {})
         return maybe_format_markdown(result, output_format)
 
+    @server.tool(
+        name="get_searchable_fields",
+        description=(
+            "List searchable device fields grouped by scope, with per-field type "
+            "metadata. Richer than get_device_metadata_fields (a flat field-name "
+            "array) — use this to construct typed advanced-search queries."
+        ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
+    )
+    async def get_searchable_fields(
+        output_format: str | None = "json",
+    ) -> dict[str, Any]:
+        result = await call_tool_workflow(client, _get_searchable_fields, {})
+        return maybe_format_markdown(result, output_format)
+
+    @server.tool(
+        name="list_searches_for_device",
+        description=(
+            "List the saved device searches whose result set currently contains a "
+            "given device (by UUID). Triage primitive: 'which saved searches does "
+            "this device match?' Optionally filter by saved-search type."
+        ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
+    )
+    async def list_searches_for_device(
+        device_uuid: str,
+        search_type: str | None = None,
+        output_format: str | None = "json",
+    ) -> dict[str, Any]:
+        result = await call_tool_workflow(
+            client,
+            _list_searches_for_device,
+            {"device_uuid": device_uuid, "search_type": search_type},
+            params_model=SearchesByDeviceParams,
+        )
+        return maybe_format_markdown(result, output_format)
+
+    @server.tool(
+        name="run_saved_search",
+        description=(
+            "Execute a saved device search by UUID and return its device results, "
+            "with paging (page/size) and an optional `fields` projection. "
+            "Lighter-weight than get_saved_search_results when you only need a "
+            "subset of fields."
+        ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
+    )
+    async def run_saved_search(
+        search_id: str,
+        page: int | None = None,
+        size: int | None = None,
+        fields: list[str] | None = None,
+        output_format: str | None = "json",
+    ) -> dict[str, Any]:
+        result = await call_tool_workflow(
+            client,
+            _run_saved_search,
+            {"search_id": search_id, "page": page, "size": size, "fields": fields},
+            params_model=RunSavedSearchParams,
+        )
+        return maybe_format_markdown(result, output_format)
+
     if not read_only:
 
         @server.tool(
@@ -467,6 +559,40 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 await release_idempotency(request_id, "assign_policies_to_saved_search")
                 raise
             await store_idempotency(request_id, "assign_policies_to_saved_search", result)
+            return result
+
+        @server.tool(
+            name="refresh_saved_search_cache",
+            description=(
+                "Force a re-cache of a saved device search's results when they may "
+                "be stale. Triggers server-side recomputation; returns once queued."
+            ),
+            annotations={
+                "readOnlyHint": False,
+                "destructiveHint": False,
+                "idempotentHint": True,
+                "openWorldHint": True,
+            },
+        )
+        async def refresh_saved_search_cache(
+            search_id: str,
+            request_id: str | None = None,
+        ) -> dict[str, Any]:
+            cached = await check_idempotency(request_id, "refresh_saved_search_cache")
+            if cached is not None:
+                return cached
+
+            try:
+                result = await call_tool_workflow(
+                    client,
+                    _refresh_saved_search_cache,
+                    {"search_id": search_id},
+                    params_model=RefreshSearchCacheParams,
+                )
+            except BaseException:
+                await release_idempotency(request_id, "refresh_saved_search_cache")
+                raise
+            await store_idempotency(request_id, "refresh_saved_search_cache", result)
             return result
 
 

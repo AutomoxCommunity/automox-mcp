@@ -1,13 +1,13 @@
 # Tool Reference
 
-Complete reference for all 99 tools, 6 workflow prompts, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
+Complete reference for all 103 tools, 6 workflow prompts, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
 
 > **Tip:** You don't need to memorize this. Call `discover_capabilities` from your AI assistant to get a live summary of available tools organized by domain.
 
 ## Table of Contents
 
 - [Device Management (8 tools)](#device-management-8-tools)
-- [Advanced Device Search (14 tools)](#advanced-device-search-14-tools)
+- [Advanced Device Search (18 tools)](#advanced-device-search-18-tools)
 - [Policy Management (12 tools)](#policy-management-12-tools)
 - [Policy History v2 (7 tools)](#policy-history-v2-7-tools)
 - [Package Management (2 tools)](#package-management-2-tools)
@@ -42,7 +42,7 @@ Complete reference for all 99 tools, 6 workflow prompts, MCP resources, paramete
 - **`get_device_inventory_categories`** - List available inventory categories for a device. Categories are dynamic per device.
 - **`execute_device_command`** - Issue an immediate command to a device (scan, patch_all, patch_specific, reboot).
 
-## Advanced Device Search (14 tools)
+## Advanced Device Search (18 tools)
 
 Uses the Server Groups API v2 for structured device queries, saved searches, and UUID-based lookups. Read-only tools are always registered; write tools (create/update/delete/assign) are gated by `read_only=False`.
 
@@ -56,10 +56,14 @@ Uses the Server Groups API v2 for structured device queries, saved searches, and
 - **`get_saved_search_results`** - Execute a saved search and return its current device result set (supports pagination).
 - **`get_cached_search_results`** - Retrieve cached server-side results for a previously-executed device search, keyed by search execution ID.
 - **`get_search_scopes`** - List available device-search scope options (org-independent metadata).
+- **`get_searchable_fields`** - List searchable device fields grouped by scope, with per-field type metadata. Richer than `get_device_metadata_fields` (a flat field-name array) — use it to construct typed queries.
+- **`list_searches_for_device`** - List the saved searches whose result set currently contains a given device (by UUID). Optional saved-search type filter.
+- **`run_saved_search`** - Execute a saved search by UUID and return device results, with paging (`page`/`size`) and an optional `fields` projection. Lighter-weight than `get_saved_search_results`.
 - **`create_saved_search`** *(write)* - Create a new saved device search from a name + structured query.
 - **`update_saved_search`** *(write)* - Update an existing saved search (partial update: name, query, and/or description).
 - **`delete_saved_search`** *(write)* - Permanently delete a saved device search by ID.
 - **`assign_policies_to_saved_search`** *(write)* - Bulk-assign one or more policies to the result set of a saved search.
+- **`refresh_saved_search_cache`** *(write)* - Force a re-cache of a saved search's results when they may be stale.
 
 ## Policy Management (12 tools)
 

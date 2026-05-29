@@ -5,6 +5,18 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Anthropic Software Directory submission collateral.** Standalone `PRIVACY.md`, `CONTRIBUTING.md`, and `CODE_OF_CONDUCT.md` at the repo root, promoted from inline README content / Contributor Covenant by reference, ahead of the MCPB Desktop Extension listing.
+- **CI manifest-consistency gate.** New `manifests` job in `.github/workflows/ci.yml` asserts that `pyproject.toml`, `server.json` (both `.version` and `.packages[].version`), `mcpb/manifest.json`, and `mcpb/pyproject.toml` (including the `automox-mcp>=` dependency floor) all carry the same version on `main`. The release workflow already rewrites these at publish time; this gate prevents drift from reaching `main` between releases.
+- **MCPB schema validation in CI.** The new `manifests` job also runs `mcpb validate mcpb/manifest.json` and a smoke `mcpb pack mcpb /tmp/automox-mcp-ci.mcpb` so manifest-schema or pack-time regressions fail PR review instead of release.
+
+### Fixed
+
+- **`docs/tool-reference.md` table-of-contents drift.** TOC link claimed "Vulnerability Sync (7 tools)" while the section header and actual `@server.tool` count are 6. Realigned to 6.
+
 ## [1.1.0] - 2026-05-28
 
 ### Fixed

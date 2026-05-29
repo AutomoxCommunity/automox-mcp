@@ -351,9 +351,7 @@ async def summarize_policies(
                 "installation_do_not_disturb_honored": policy_item.get(
                     "installation_do_not_disturb_honored"
                 ),
-                "reboot_do_not_disturb_honored": policy_item.get(
-                    "reboot_do_not_disturb_honored"
-                ),
+                "reboot_do_not_disturb_honored": policy_item.get("reboot_do_not_disturb_honored"),
             }
         )
 

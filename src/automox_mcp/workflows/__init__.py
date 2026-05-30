@@ -151,6 +151,7 @@ from .splashtop import (
     set_bulk_attended_access as splashtop_set_bulk_attended_access,
 )
 from .vuln_sync import (
+    apply_remediation_actions,
     get_action_set_detail,
     get_action_set_issues,
     get_action_set_solutions,
@@ -195,6 +196,7 @@ __all__ = [
     "advanced_device_search",
     "apply_policy_changes",
     "assign_policies_to_saved_search",
+    "apply_remediation_actions",
     "audit_events_ocsf",
     "audit_trail_user_activity",
     "batch_update_devices",

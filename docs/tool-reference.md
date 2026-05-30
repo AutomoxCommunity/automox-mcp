@@ -1,6 +1,6 @@
 # Tool Reference
 
-Complete reference for all 115 tools, 6 workflow prompts, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
+Complete reference for all 116 tools, 6 workflow prompts, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
 
 > **Tip:** You don't need to memorize this. Call `discover_capabilities` from your AI assistant to get a live summary of available tools organized by domain.
 
@@ -15,7 +15,7 @@ Complete reference for all 115 tools, 6 workflow prompts, MCP resources, paramet
 - [Webhook Management (8 tools)](#webhook-management-8-tools)
 - [Worklet Catalog (2 tools)](#worklet-catalog-2-tools)
 - [Data Extracts (3 tools)](#data-extracts-3-tools)
-- [Vulnerability Sync (6 tools)](#vulnerability-sync-6-tools)
+- [Vulnerability Sync (7 tools)](#vulnerability-sync-7-tools)
 - [Compound Workflows (3 tools)](#compound-workflows-3-tools)
 - [Events (1 tool)](#events-1-tool)
 - [Reports (2 tools)](#reports-2-tools)
@@ -130,7 +130,7 @@ Richer policy execution reporting via the `/policy-history` API with UUID-based 
 - **`get_data_extract`** - Get details and download information for a specific data extract.
 - **`create_data_extract`** - Request a new data extract for bulk reporting. Returns the extract ID and initial status.
 
-## Vulnerability Sync (6 tools)
+## Vulnerability Sync (7 tools)
 
 Manage vulnerability remediation workflows via the Vuln Sync API. Supports CSV-based import from vulnerability scanners (Qualys, Tenable, etc.).
 
@@ -139,7 +139,8 @@ Manage vulnerability remediation workflows via the Vuln Sync API. Supports CSV-b
 - **`get_action_set_issues`** - Get vulnerability issues (CVEs) associated with an action set.
 - **`get_action_set_solutions`** - Get solutions for an action set. Shows recommended patches or configurations.
 - **`get_upload_formats`** - Get supported CSV upload formats for vulnerability remediation action sets.
-- **`upload_action_set`** - Upload a CSV-based vulnerability remediation action set.
+- **`upload_action_set`** *(write)* - Upload a CSV-based vulnerability remediation action set.
+- **`apply_remediation_actions`** *(write, gated)* - Execute remediations now (`patch-now` / `patch-with-worklet`) on explicit devices for an action set. Immediately changes endpoint state (async, returns 202). **Registered only when `AUTOMOX_MCP_ALLOW_REMEDIATION=true`** and write mode is enabled.
 
 ## Compound Workflows (3 tools)
 

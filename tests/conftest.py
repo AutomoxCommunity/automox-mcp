@@ -1,7 +1,44 @@
 import copy
+import os
+import sys
 from typing import Any
 
 import pytest
+
+
+def _automox_modules(modules: dict) -> set[str]:
+    return {k for k in modules if k == "automox_mcp" or k.startswith("automox_mcp.")}
+
+
+@pytest.fixture(autouse=True)
+def _isolate_global_state():
+    """Contain per-test mutations of process-global state.
+
+    Some tests reimport the package (pop ``automox_mcp.*`` from ``sys.modules``
+    and ``import`` again) or mutate ``os.environ``. ``monkeypatch`` restores
+    ``sys.path``/env but NOT ``sys.modules`` — so a reimport leaves duplicate
+    class objects behind, and an ``issubclass(..., OrgIdRequiredMixin)`` check
+    later compares classes from different module copies and silently returns
+    False (org_id stops being injected). That is invisible in the fixed CI
+    order but breaks ~100 tests under randomized order. Snapshot + restore both
+    here so any such surgery is contained to the test that does it.
+    """
+    env_snapshot = dict(os.environ)
+    module_snapshot = {k: sys.modules[k] for k in _automox_modules(sys.modules)}
+
+    yield
+
+    if os.environ != env_snapshot:
+        os.environ.clear()
+        os.environ.update(env_snapshot)
+
+    current = _automox_modules(sys.modules)
+    if current != set(module_snapshot) or any(
+        sys.modules[k] is not module_snapshot[k] for k in module_snapshot
+    ):
+        for name in current - set(module_snapshot):
+            del sys.modules[name]
+        sys.modules.update(module_snapshot)
 
 
 @pytest.fixture(autouse=True)

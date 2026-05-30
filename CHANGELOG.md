@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Test-suite order-dependence (latent, pre-existing).** A test reimported the package (`sys.modules` pop + re-`import`), leaving duplicate class objects behind; later `issubclass(..., OrgIdRequiredMixin)` checks then compared classes across module copies and silently stopped injecting `org_id` — invisible in the fixed CI order, but failing up to ~100 tests under randomized order. Added a `conftest` autouse fixture that snapshots/restores `sys.modules` (and `os.environ`) per test, and added `pytest-randomly` (dev) so the suite now runs in randomized order and regressions surface immediately. Suite is green across 26 seeds.
+
 ### Added
 
 - **Global (account-scoped) API keys — 4 tools (#91, category B).** `list_global_api_keys` (metadata only), `create_global_api_key`, `update_global_api_key` (enable/disable), `delete_global_api_key`. Same secret-handling as the per-user keys: list/create return metadata only (verified against the DTOs — no secret), and the `decrypt` endpoint is deliberately not wrapped. Writes are `read_only`-gated and idempotency-keyed. Tool count 123 → 127 (read-only 83 → 84).

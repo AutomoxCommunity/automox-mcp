@@ -34,6 +34,7 @@ dev = [
   "pytest>=9.0.3",
   "pytest-asyncio>=0.23",
   "pytest-cov>=6.0",
+  "pytest-randomly>=3.15",
   "ruff>=0.4",
   "mypy>=1.9",
   "build>=1.2.2",

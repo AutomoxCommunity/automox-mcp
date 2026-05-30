@@ -136,6 +136,13 @@ _DOMAIN_CATALOG: dict[str, list[tuple[str, str]]] = {
         ("list_zones", "Zones (organizations) in the account"),
         ("get_zone", "Single zone by UUID (access_key redacted)"),
         ("list_zone_users", "Users assigned to a given zone"),
+        ("list_user_api_keys", "A user's API keys (metadata only)"),
+        ("get_user_api_key", "One user API key by ID (metadata only)"),
+        ("create_zone", "Create a new zone (access_key redacted)"),
+        ("update_user", "Update user profile fields (no password)"),
+        ("create_user_api_key", "Create a user API key (secret not returned)"),
+        ("update_user_api_key", "Enable/disable a user API key"),
+        ("delete_user_api_key", "Delete a user API key"),
     ],
     "compound": [
         ("get_patch_tuesday_readiness", "Patch Tuesday readiness view"),

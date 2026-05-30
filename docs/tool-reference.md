@@ -1,6 +1,6 @@
 # Tool Reference
 
-Complete reference for all 116 tools, 6 workflow prompts, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
+Complete reference for all 123 tools, 6 workflow prompts, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
 
 > **Tip:** You don't need to memorize this. Call `discover_capabilities` from your AI assistant to get a live summary of available tools organized by domain.
 
@@ -19,7 +19,7 @@ Complete reference for all 116 tools, 6 workflow prompts, MCP resources, paramet
 - [Compound Workflows (3 tools)](#compound-workflows-3-tools)
 - [Events (1 tool)](#events-1-tool)
 - [Reports (2 tools)](#reports-2-tools)
-- [Account Management (13 tools)](#account-management-13-tools)
+- [Account Management (20 tools)](#account-management-20-tools)
 - [Audit Trail (2 tools)](#audit-trail-2-tools)
 - [Policy Windows (9 tools)](#policy-windows-9-tools)
 - [Splashtop Remote Control (10 tools)](#splashtop-remote-control-10-tools)
@@ -157,7 +157,7 @@ Manage vulnerability remediation workflows via the Vuln Sync API. Supports CSV-b
 - **`prepatch_report`** - Retrieve the pre-patch readiness report showing devices with pending patches before the next scheduled patch window.
 - **`noncompliant_report`** - Retrieve the non-compliant devices report showing devices that need attention due to policy failures or missing patches.
 
-## Account Management (13 tools)
+## Account Management (20 tools)
 
 - **`invite_user_to_account`** *(write)* - Invite a user to the Automox account with optional zone assignments.
 - **`remove_user_from_account`** *(write)* - Remove a user from the Automox account by UUID.
@@ -172,6 +172,13 @@ Manage vulnerability remediation workflows via the Vuln Sync API. Supports CSV-b
 - **`list_zones`** - List the zones (organizations) in the account (paginated).
 - **`get_zone`** - Get a single zone by UUID. The zone `access_key` is never surfaced.
 - **`list_zone_users`** - List the users assigned to a given zone (by zone UUID).
+- **`list_user_api_keys`** - List a user's API keys by user ID. Returns key metadata (name, enabled, expiry) only — secrets are never exposed.
+- **`get_user_api_key`** - Get one user API key by user ID and key ID (metadata only).
+- **`create_zone`** *(write)* - Create a new zone (organization) in the account. The zone `access_key` is never surfaced.
+- **`update_user`** *(write)* - Update a user's profile fields (firstname, lastname, email, tfa_type) by user ID. **Passwords cannot be set through this tool** (account-takeover guard).
+- **`create_user_api_key`** *(write)* - Create an API key for a user. Returns metadata only — the key secret is never surfaced and cannot be retrieved via MCP.
+- **`update_user_api_key`** *(write)* - Enable or disable a user API key by user ID and key ID.
+- **`delete_user_api_key`** *(write)* - Permanently delete a user API key by user ID and key ID.
 
 ## Audit Trail (2 tools)
 

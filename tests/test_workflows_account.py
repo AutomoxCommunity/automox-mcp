@@ -9,19 +9,26 @@ from conftest import StubClient
 
 from automox_mcp.client import AutomoxClient
 from automox_mcp.workflows.account import (
+    create_user_api_key,
+    create_zone,
+    delete_user_api_key,
     get_account,
     get_account_user,
     get_user,
+    get_user_api_key,
     get_zone,
     invite_user_to_account,
     list_account_rbac_roles,
     list_org_api_keys,
     list_organizations,
+    list_user_api_keys,
     list_users,
     list_zone_users,
     list_zones,
     list_zones_for_user,
     remove_user_from_account,
+    update_user,
+    update_user_api_key,
 )
 
 ACCOUNT_ID = "acct-uuid-1234"
@@ -347,3 +354,167 @@ async def test_list_zone_users_unwraps_envelope():
     result = await list_zone_users(cast(AutomoxClient, client), account_id=_ACCT, zone_id=zid)
     assert result["data"]["total_users"] == 1
     assert result["data"]["zone_id"] == zid
+
+
+# ---------------------------------------------------------------------------
+# Identity / zone / key writes (issue #91 category A, write slice)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_create_zone_redacts_access_key():
+    zone = {"id": "z9", "organization_id": 5, "name": "EU", "access_key": "SECRET"}
+    client = StubClient(post_responses={f"/accounts/{_ACCT}/zones": [zone]})
+    result = await create_zone(cast(AutomoxClient, client), account_id=_ACCT, name="EU")
+    assert result["data"]["name"] == "EU"
+    assert result["data"]["created"] is True
+    assert "access_key" not in result["data"]
+    # conftest StubClient records POST as (method, path, json_data)
+    _, path, body = client.calls[0]
+    assert path == f"/accounts/{_ACCT}/zones"
+    assert body == {"name": "EU"}
+
+
+@pytest.mark.asyncio
+async def test_update_user_builds_partial_body_no_password():
+    client = StubClient(patch_responses={"/users/7": [{}]})
+    result = await update_user(
+        cast(AutomoxClient, client), user_id=7, email="a@b.c", firstname="Ada"
+    )
+    assert result["data"]["updated"] is True
+    assert result["data"]["fields_updated"] == ["email", "firstname"]
+    method, path, body = client.calls[0]
+    assert method == "PATCH"
+    assert path == "/users/7"
+    assert body == {"email": "a@b.c", "firstname": "Ada"}
+    assert "password" not in body
+
+
+def test_update_user_params_requires_a_field():
+    from pydantic import ValidationError
+
+    from automox_mcp.schemas import UpdateUserParams
+
+    with pytest.raises(ValidationError, match="at least one"):
+        UpdateUserParams(user_id=7)
+
+
+def test_update_user_params_forbids_password():
+    from pydantic import ValidationError
+
+    from automox_mcp.schemas import UpdateUserParams
+
+    # password is not a declared field -> ForbidExtraModel rejects it
+    with pytest.raises(ValidationError):
+        UpdateUserParams(user_id=7, password="hunter2")
+
+
+@pytest.mark.asyncio
+async def test_list_user_api_keys_projects_metadata():
+    payload = {
+        "size": 1,
+        "results": [
+            {
+                "id": 3,
+                "name": "CI",
+                "is_enabled": True,
+                "expires_at": None,
+                "created_at": "2026-01-01T00:00:00Z",
+                "user": {"id": 7, "email": "a@b.c"},
+            }
+        ],
+    }
+    client = StubClient(get_responses={"/users/7/api_keys": [payload]})
+    result = await list_user_api_keys(cast(AutomoxClient, client), org_id=42, user_id=7)
+    assert result["data"]["total_keys"] == 1
+    key = result["data"]["api_keys"][0]
+    assert key["name"] == "CI"
+    assert "user" not in key  # lean projection drops the nested user blob
+    _, _path, params = client.calls[0]
+    assert params["o"] == 42
+
+
+@pytest.mark.asyncio
+async def test_get_user_api_key_metadata_only():
+    rec = {"id": 3, "name": "CI", "is_enabled": True, "user": {"id": 7}}
+    client = StubClient(get_responses={"/users/7/api_keys/3": [rec]})
+    result = await get_user_api_key(cast(AutomoxClient, client), org_id=42, user_id=7, key_id=3)
+    assert result["data"]["name"] == "CI"
+    assert "user" not in result["data"]
+
+
+@pytest.mark.asyncio
+async def test_create_user_api_key_returns_metadata_no_secret():
+    created = {"id": 9, "name": "new", "is_enabled": True, "api_key": "SHOULD-NOT-APPEAR"}
+    client = StubClient(post_responses={"/users/7/api_keys": [created]})
+    result = await create_user_api_key(
+        cast(AutomoxClient, client), org_id=42, user_id=7, name="new", expires_at="2027-01-01"
+    )
+    assert result["data"]["id"] == 9
+    assert result["data"]["created"] is True
+    # secret is never surfaced even if the API echoes one
+    assert "api_key" not in result["data"]
+    assert "not be retrieved" in result["metadata"]["note"]
+    _, path, body = client.calls[0]
+    assert path == "/users/7/api_keys"
+    assert body == {"name": "new", "expires_at": "2027-01-01"}
+
+
+@pytest.mark.asyncio
+async def test_update_user_api_key_toggles_enabled():
+    rec = {"id": 3, "name": "CI", "is_enabled": False}
+    client = StubClient(put_responses={"/users/7/api_keys/3": [rec]})
+    result = await update_user_api_key(
+        cast(AutomoxClient, client), org_id=42, user_id=7, key_id=3, is_enabled=False
+    )
+    assert result["data"]["updated"] is True
+    assert result["data"]["is_enabled"] is False
+    _, _path, body = client.calls[0]
+    assert body == {"is_enabled": False}
+
+
+@pytest.mark.asyncio
+async def test_delete_user_api_key():
+    client = StubClient(delete_responses={"/users/7/api_keys/3": [None]})
+    result = await delete_user_api_key(cast(AutomoxClient, client), org_id=42, user_id=7, key_id=3)
+    assert result["data"]["deleted"] is True
+    assert result["data"]["key_id"] == 3
+    # DELETE records params in the conftest stub -> verify org scoping
+    _, _path, params = client.calls[0]
+    assert params == {"o": 42}
+
+
+@pytest.mark.asyncio
+async def test_list_user_api_keys_pagination_and_non_mapping():
+    # forwards page/limit; tolerates a non-mapping/non-list response
+    client = StubClient(get_responses={"/users/7/api_keys": ["unexpected"]})
+    result = await list_user_api_keys(
+        cast(AutomoxClient, client), org_id=42, user_id=7, page=1, limit=5
+    )
+    assert result["data"]["total_keys"] == 0
+    _, _path, params = client.calls[0]
+    assert params == {"o": 42, "page": 1, "limit": 5}
+
+
+@pytest.mark.asyncio
+async def test_list_account_rbac_roles_accepts_bare_list():
+    # _envelope plain-list branch (no {data,metadata} wrapper)
+    client = StubClient(get_responses={f"/accounts/{_ACCT}/rbac-roles": [[{"name": "admin"}]]})
+    result = await list_account_rbac_roles(cast(AutomoxClient, client), account_id=_ACCT)
+    assert result["data"]["total_roles"] == 1
+
+
+@pytest.mark.asyncio
+async def test_create_user_api_key_without_expiry_and_non_mapping():
+    client = StubClient(post_responses={"/users/7/api_keys": ["unexpected"]})
+    result = await create_user_api_key(cast(AutomoxClient, client), org_id=42, user_id=7, name="k")
+    assert result["data"]["created"] is True
+    _, _path, body = client.calls[0]
+    assert body == {"name": "k"}  # no expires_at key when omitted
+
+
+@pytest.mark.asyncio
+async def test_get_user_non_mapping_returns_empty():
+    client = StubClient(get_responses={"/users/7": ["unexpected"]})
+    result = await get_user(cast(AutomoxClient, client), org_id=42, user_id=7)
+    assert result["data"] == {}

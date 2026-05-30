@@ -7,7 +7,12 @@ import pytest
 
 from automox_mcp.client import AutomoxClient
 from automox_mcp.workflows.policy import get_policy_compliance_stats
-from automox_mcp.workflows.policy_crud import clone_policy, delete_policy
+from automox_mcp.workflows.policy_crud import (
+    clone_policy,
+    delete_policy,
+    list_devices_for_policies,
+    preview_policy_device_filters,
+)
 
 
 class StubClient:
@@ -460,3 +465,58 @@ async def test_policy_compliance_stats_sends_correct_request() -> None:
     assert method == "GET"
     assert path == "/policystats"
     assert params == {"o": 555}
+
+
+# ---------------------------------------------------------------------------
+# Policy → device assessment (issue #91 category C, reads)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_preview_policy_device_filters_returns_devices() -> None:
+    devices = [{"id": 1, "name": "host-a"}, {"id": 2, "name": "host-b"}]
+    client = StubClient(post_responses={"/policies/device-filters-preview": [devices]})
+    result = await preview_policy_device_filters(
+        cast(AutomoxClient, client),
+        org_id=555,
+        device_filters=[{"field": "tag", "op": "in", "value": ["prod"]}],
+        server_groups=[10],
+    )
+    assert result["data"]["total_devices"] == 2
+    method, path, params, body = client.calls[0]
+    assert method == "POST"
+    assert path == "/policies/device-filters-preview"
+    assert params == {"o": 555}
+    assert body["device_filters"][0]["field"] == "tag"
+    assert body["server_groups"] == [10]
+
+
+@pytest.mark.asyncio
+async def test_list_devices_for_policies_posts_uuids() -> None:
+    pols = ["11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222"]
+    devices = [{"id": 1}, {"id": 2}, {"id": 3}]
+    client = StubClient(post_responses={"/server-groups-api/policies/servers": [devices]})
+    result = await list_devices_for_policies(cast(AutomoxClient, client), policies=pols)
+    assert result["data"]["total_devices"] == 3
+    assert result["data"]["policies"] == pols
+    _, path, _params, body = client.calls[0]
+    assert path == "/server-groups-api/policies/servers"
+    assert body == {"policies": pols}
+
+
+def test_list_devices_for_policies_params_rejects_bad_uuid() -> None:
+    from pydantic import ValidationError
+
+    from automox_mcp.schemas import ListDevicesForPoliciesParams
+
+    with pytest.raises(ValidationError):
+        ListDevicesForPoliciesParams(policies=["not-a-uuid"])
+
+
+def test_batch_update_devices_params_requires_action_keys() -> None:
+    from pydantic import ValidationError
+
+    from automox_mcp.schemas import BatchUpdateDevicesParams
+
+    with pytest.raises(ValidationError, match="attribute"):
+        BatchUpdateDevicesParams(org_id=555, devices=[1, 2], actions=[{"value": ["x"]}])

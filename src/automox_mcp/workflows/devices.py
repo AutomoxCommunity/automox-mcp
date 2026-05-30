@@ -1250,3 +1250,36 @@ async def summarize_device_health(
         metadata["approx_response_bytes"] = response_size
 
     return response
+
+
+async def batch_update_devices(
+    client: AutomoxClient,
+    *,
+    org_id: int | None = None,
+    devices: list[int],
+    actions: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Apply bulk attribute actions (e.g. tag apply/remove) to many devices.
+
+    Wraps ``POST /servers/batch``. The upstream `actions` contract currently
+    supports the ``tags`` attribute (apply/remove); the action list is passed
+    through so it stays forward-compatible if the API adds attributes.
+    """
+    resolved_org_id = require_org_id(client, org_id)
+
+    response = await client.post(
+        "/servers/batch",
+        json_data={"devices": list(devices), "actions": list(actions)},
+        params={"o": resolved_org_id},
+    )
+
+    data: dict[str, Any] = (
+        dict(response) if isinstance(response, Mapping) else {"response": response}
+    )
+    data["device_count"] = len(devices)
+    data["updated"] = True
+
+    return {
+        "data": data,
+        "metadata": {"deprecated_endpoint": False, "org_id": resolved_org_id},
+    }

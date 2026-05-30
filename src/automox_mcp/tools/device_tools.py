@@ -10,6 +10,7 @@ from fastmcp import FastMCP
 from .. import workflows
 from ..client import AutomoxClient
 from ..schemas import (
+    BatchUpdateDevicesParams,
     DeviceDetailParams,
     DeviceHealthSummaryParams,
     DeviceIdOnlyParams,
@@ -295,6 +296,42 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 await release_idempotency(request_id, "execute_device_command")
                 raise
             await store_idempotency(request_id, "execute_device_command", result)
+            return result
+
+        @server.tool(
+            name="batch_update_devices",
+            description=(
+                "Apply bulk attribute actions to many devices at once (up to 500). "
+                "Currently supports tag apply/remove via actions like "
+                "{'attribute': 'tags', 'action': 'apply', 'value': ['env:prod']}."
+            ),
+            annotations={
+                "readOnlyHint": False,
+                "destructiveHint": True,
+                "idempotentHint": False,
+                "openWorldHint": True,
+            },
+        )
+        async def batch_update_devices(
+            devices: list[int],
+            actions: list[dict[str, Any]],
+            request_id: str | None = None,
+        ) -> dict[str, Any]:
+            cached = await check_idempotency(request_id, "batch_update_devices")
+            if cached is not None:
+                return cached
+
+            try:
+                result = await call_tool_workflow(
+                    client,
+                    workflows.batch_update_devices,
+                    {"devices": devices, "actions": actions},
+                    params_model=BatchUpdateDevicesParams,
+                )
+            except BaseException:
+                await release_idempotency(request_id, "batch_update_devices")
+                raise
+            await store_idempotency(request_id, "batch_update_devices", result)
             return result
 
 

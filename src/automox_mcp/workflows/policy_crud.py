@@ -11,6 +11,7 @@ from typing import Any
 from fastmcp.exceptions import ToolError
 
 from ..client import AutomoxAPIError, AutomoxClient
+from ..utils.response import extract_list as _extract_list
 from ..utils.response import require_org_id
 
 logger = logging.getLogger(__name__)
@@ -1149,11 +1150,76 @@ async def clone_policy(
     }
 
 
+async def preview_policy_device_filters(
+    client: AutomoxClient,
+    *,
+    org_id: int | None = None,
+    device_filters: list[dict[str, Any]] | None = None,
+    server_groups: list[int] | None = None,
+    page: int | None = None,
+    limit: int | None = None,
+) -> dict[str, Any]:
+    """Dry-run: preview which devices a policy's filters/server-groups would target.
+
+    Read-only assessment (no policy is created or changed). Use before
+    apply_policy_changes to confirm targeting.
+    """
+    resolved_org_id = require_org_id(client, org_id)
+
+    params: dict[str, Any] = {"o": resolved_org_id}
+    if page is not None:
+        params["page"] = page
+    if limit is not None:
+        params["limit"] = limit
+
+    body: dict[str, Any] = {}
+    if device_filters is not None:
+        body["device_filters"] = device_filters
+    if server_groups is not None:
+        body["server_groups"] = server_groups
+
+    response = await client.post("/policies/device-filters-preview", json_data=body, params=params)
+    devices = _extract_list(response)
+
+    return {
+        "data": {"total_devices": len(devices), "devices": devices},
+        "metadata": {"deprecated_endpoint": False, "org_id": resolved_org_id},
+    }
+
+
+async def list_devices_for_policies(
+    client: AutomoxClient,
+    *,
+    policies: list[str],
+) -> dict[str, Any]:
+    """List the devices currently targeted by one or more policies (blast radius).
+
+    Read-only assessment keyed by policy UUID — answers "which devices would
+    this policy act on?" before executing anything.
+    """
+    response = await client.post(
+        "/server-groups-api/policies/servers",
+        json_data={"policies": list(policies)},
+    )
+    devices = _extract_list(response)
+
+    return {
+        "data": {
+            "policies": list(policies),
+            "total_devices": len(devices),
+            "devices": devices,
+        },
+        "metadata": {"deprecated_endpoint": False},
+    }
+
+
 __all__ = [
     "apply_policy_changes",
     "clone_policy",
     "delete_policy",
     "execute_policy",
+    "list_devices_for_policies",
     "normalize_policy_operations_input",
+    "preview_policy_device_filters",
     "resolve_patch_approval",
 ]

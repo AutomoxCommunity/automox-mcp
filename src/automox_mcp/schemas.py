@@ -504,6 +504,52 @@ class IssueDeviceCommandParams(OrgIdContextMixin, ForbidExtraModel):
     )
 
 
+class PolicyDeviceFilterPreviewParams(OrgIdRequiredMixin, ForbidExtraModel):
+    device_filters: list[dict[str, Any]] | None = Field(
+        None, description="Device-filter clauses ({field, op, value}) to preview"
+    )
+    server_groups: list[int] | None = Field(None, description="Server-group IDs to include")
+    page: int | None = Field(None, ge=0, description="Page number")
+    limit: int | None = Field(None, ge=1, le=500, description="Results per page")
+
+
+class ListDevicesForPoliciesParams(ForbidExtraModel):
+    policies: list[str] = Field(
+        description="Policy UUIDs to list affected devices for",
+        min_length=1,
+        max_length=200,
+    )
+
+    @model_validator(mode="after")
+    def _validate_policy_uuids(self) -> ListDevicesForPoliciesParams:
+        for policy_uuid in self.policies:
+            UUID(policy_uuid)  # reject malformed policy UUIDs
+        return self
+
+
+class BatchUpdateDevicesParams(OrgIdRequiredMixin, ForbidExtraModel):
+    devices: list[int] = Field(
+        description="Device (server) IDs to update",
+        min_length=1,
+        max_length=500,
+    )
+    actions: list[dict[str, Any]] = Field(
+        description=(
+            "Actions to apply to each device, e.g. "
+            "{'attribute': 'tags', 'action': 'apply'|'remove', 'value': [...]}"
+        ),
+        min_length=1,
+        max_length=50,
+    )
+
+    @model_validator(mode="after")
+    def _validate_actions(self) -> BatchUpdateDevicesParams:
+        for action in self.actions:
+            if "attribute" not in action or "action" not in action:
+                raise ValueError("each action requires 'attribute' and 'action'")
+        return self
+
+
 class ClonePolicyParams(OrgIdContextMixin, ForbidExtraModel):
     policy_id: int = Field(description="Policy ID to clone")
     name: str | None = Field(

@@ -21,6 +21,7 @@ from automox_mcp.workflows.devices import (
     _summarize_device_common_fields,
     _summarize_policy_assignments,
     _summarize_policy_status,
+    batch_update_devices,
     list_device_inventory,
     list_devices_needing_attention,
     search_devices,
@@ -1556,3 +1557,30 @@ async def test_list_device_inventory_uses_client_org_id() -> None:
     client.org_id = 7
     result = await list_device_inventory(cast(AutomoxClient, client))
     assert result["metadata"]["org_id"] == 7
+
+
+# ---------------------------------------------------------------------------
+# batch_update_devices (issue #91 category C, bulk tag write)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_batch_update_devices_posts_devices_and_actions() -> None:
+    client = StubClient(post_responses={"/servers/batch": [{"ok": True}]})
+    client.org_id = 555
+    actions = [{"attribute": "tags", "action": "apply", "value": ["env:prod"]}]
+    result = await batch_update_devices(
+        cast(AutomoxClient, client),
+        org_id=555,
+        devices=[1, 2, 3],
+        actions=actions,
+    )
+    assert result["data"]["device_count"] == 3
+    assert result["data"]["updated"] is True
+    assert result["metadata"]["org_id"] == 555
+
+    # conftest StubClient records POST as (method, path, json_data)
+    method, path, body = client.calls[0]
+    assert method == "POST"
+    assert path == "/servers/batch"
+    assert body == {"devices": [1, 2, 3], "actions": actions}

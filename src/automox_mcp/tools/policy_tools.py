@@ -14,10 +14,12 @@ from ..schemas import (
     DeletePolicyToolParams,
     ExecutePolicyParams,
     GetPolicyStatsParams,
+    ListDevicesForPoliciesParams,
     PatchApprovalDecisionParams,
     PatchApprovalSummaryParams,
     PolicyChangeRequestParams,
     PolicyDetailParams,
+    PolicyDeviceFilterPreviewParams,
     PolicyExecutionTimelineParams,
     PolicyHealthSummaryParams,
     PolicySummaryParams,
@@ -244,6 +246,66 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             params_model=PatchApprovalSummaryParams,
         )
 
+        return maybe_format_markdown(result, output_format)
+
+    @server.tool(
+        name="preview_policy_device_filters",
+        description=(
+            "Dry-run: preview which devices a policy's device filters and/or "
+            "server groups would target, before creating or updating the policy. "
+            "Read-only — nothing is created or changed."
+        ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
+    )
+    async def preview_policy_device_filters(
+        device_filters: list[dict[str, Any]] | None = None,
+        server_groups: list[int] | None = None,
+        page: int | None = None,
+        limit: int | None = None,
+        output_format: str | None = "json",
+    ) -> dict[str, Any]:
+        result = await call_tool_workflow(
+            client,
+            workflows.preview_policy_device_filters,
+            {
+                "device_filters": device_filters,
+                "server_groups": server_groups,
+                "page": page,
+                "limit": limit,
+            },
+            params_model=PolicyDeviceFilterPreviewParams,
+        )
+        return maybe_format_markdown(result, output_format)
+
+    @server.tool(
+        name="list_devices_for_policies",
+        description=(
+            "List the devices currently targeted by one or more policies (by "
+            "policy UUID) — blast-radius assessment before executing or changing "
+            "a policy. Read-only."
+        ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
+    )
+    async def list_devices_for_policies(
+        policies: list[str],
+        output_format: str | None = "json",
+    ) -> dict[str, Any]:
+        result = await call_tool_workflow(
+            client,
+            workflows.list_devices_for_policies,
+            {"policies": policies},
+            params_model=ListDevicesForPoliciesParams,
+        )
         return maybe_format_markdown(result, output_format)
 
     if not read_only:

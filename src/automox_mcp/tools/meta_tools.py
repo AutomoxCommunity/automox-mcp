@@ -18,6 +18,7 @@ _DOMAIN_CATALOG: dict[str, list[tuple[str, str]]] = {
         ("get_device_inventory", "Detailed device inventory data"),
         ("get_device_inventory_categories", "Available inventory categories"),
         ("execute_device_command", "Issue scan/patch/reboot command"),
+        ("batch_update_devices", "Bulk attribute actions (e.g. tags) on many devices"),
         ("get_device_full_profile", "Complete profile: detail + inventory + packages"),
     ],
     "device_search": [
@@ -48,6 +49,8 @@ _DOMAIN_CATALOG: dict[str, list[tuple[str, str]]] = {
         ("policy_run_results", "Per-device results for a policy execution"),
         ("policy_compliance_stats", "Per-policy compliance statistics"),
         ("apply_policy_changes", "Create or update policies"),
+        ("preview_policy_device_filters", "Dry-run: which devices a policy's filters target"),
+        ("list_devices_for_policies", "Devices targeted by given policy UUIDs (blast radius)"),
         ("clone_policy", "Clone a policy (in-org, or multi-zone for patch policies)"),
         ("delete_policy", "Delete a policy permanently"),
         ("execute_policy_now", "Execute a policy immediately"),

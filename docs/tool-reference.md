@@ -1,14 +1,14 @@
 # Tool Reference
 
-Complete reference for all 112 tools, 6 workflow prompts, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
+Complete reference for all 115 tools, 6 workflow prompts, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
 
 > **Tip:** You don't need to memorize this. Call `discover_capabilities` from your AI assistant to get a live summary of available tools organized by domain.
 
 ## Table of Contents
 
-- [Device Management (8 tools)](#device-management-8-tools)
+- [Device Management (9 tools)](#device-management-9-tools)
 - [Advanced Device Search (18 tools)](#advanced-device-search-18-tools)
-- [Policy Management (12 tools)](#policy-management-12-tools)
+- [Policy Management (14 tools)](#policy-management-14-tools)
 - [Policy History v2 (7 tools)](#policy-history-v2-7-tools)
 - [Package Management (2 tools)](#package-management-2-tools)
 - [Group Management (5 tools)](#group-management-5-tools)
@@ -31,7 +31,7 @@ Complete reference for all 112 tools, 6 workflow prompts, MCP resources, paramet
 
 ---
 
-## Device Management (8 tools)
+## Device Management (9 tools)
 
 - **`list_devices`** - Summarize device inventory and policy status across the organization. Returns each device's `uuid` (needed by policy windows tools). Includes unmanaged devices by default and supports `policy_status`/`managed` filters so you can zero in on, for example, non-compliant managed endpoints.
 - **`device_detail`** - Return curated device context (recent policy status, assignments, queued commands, key facts). Pass `include_raw_details=true` only when you explicitly need a sanitized slice of the raw Automox payload.
@@ -41,6 +41,7 @@ Complete reference for all 112 tools, 6 workflow prompts, MCP resources, paramet
 - **`get_device_inventory`** - Retrieve detailed device inventory data (hardware, network, security, services, system, users) via the Console API device-details endpoint. Optionally filter by category.
 - **`get_device_inventory_categories`** - List available inventory categories for a device. Categories are dynamic per device.
 - **`execute_device_command`** - Issue an immediate command to a device (scan, patch_all, patch_specific, reboot).
+- **`batch_update_devices`** *(write)* - Apply bulk attribute actions to up to 500 devices at once (currently tag apply/remove, e.g. `{"attribute": "tags", "action": "apply", "value": ["env:prod"]}`).
 
 ## Advanced Device Search (18 tools)
 
@@ -65,7 +66,7 @@ Uses the Server Groups API v2 for structured device queries, saved searches, and
 - **`assign_policies_to_saved_search`** *(write)* - Bulk-assign one or more policies to the result set of a saved search.
 - **`refresh_saved_search_cache`** *(write)* - Force a re-cache of a saved search's results when they may be stale.
 
-## Policy Management (12 tools)
+## Policy Management (14 tools)
 
 - **`policy_health_overview`** - Summarize recent Automox policy activity. Omit `org_uuid` to let the server resolve it from `AUTOMOX_ORG_ID` / `AUTOMOX_ORG_UUID`.
 - **`policy_execution_timeline`** - Review recent executions for a policy.
@@ -74,6 +75,8 @@ Uses the Server Groups API v2 for structured device queries, saved searches, and
 - **`policy_detail`** - Retrieve configuration and recent history for a policy.
 - **`policy_compliance_stats`** - Retrieve per-policy compliance statistics showing compliant vs. non-compliant device counts and compliance rates.
 - **`apply_policy_changes`** - Preview or submit structured policy create/update operations. Automatically normalizes helper fields (`filter_name`, `filter_names`) and friendly schedule blocks into Automox's expected payloads, ensuring required fields (e.g., `schedule_days`, `schedule_time`) are present before submission.
+- **`preview_policy_device_filters`** - Dry-run: preview which devices a policy's device filters and/or server groups would target, before creating or updating the policy. Read-only — nothing is created or changed.
+- **`list_devices_for_policies`** - List the devices currently targeted by one or more policies (by policy UUID) — blast-radius assessment before executing or changing a policy. Read-only.
 - **`patch_approvals_summary`** - Summarize pending patch approvals and their severity.
 - **`decide_patch_approval`** - Approve or reject an Automox patch approval request.
 - **`execute_policy_now`** - Execute a policy immediately for remediation (all devices or specific device).

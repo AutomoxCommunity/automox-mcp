@@ -66,6 +66,7 @@ from .device_search import (
     update_saved_search,
 )
 from .devices import (
+    batch_update_devices,
     describe_device,
     list_device_inventory,
     list_devices_needing_attention,
@@ -95,7 +96,9 @@ from .policy_crud import (
     clone_policy,
     delete_policy,
     execute_policy,
+    list_devices_for_policies,
     normalize_policy_operations_input,
+    preview_policy_device_filters,
     resolve_patch_approval,
 )
 from .policy_history import (
@@ -194,6 +197,7 @@ __all__ = [
     "assign_policies_to_saved_search",
     "audit_events_ocsf",
     "audit_trail_user_activity",
+    "batch_update_devices",
     "clone_policy",
     "create_data_extract",
     "create_saved_search",
@@ -243,6 +247,7 @@ __all__ = [
     "invite_user_to_account",
     "issue_device_command",
     "list_data_extracts",
+    "list_devices_for_policies",
     "list_device_inventory",
     "list_device_packages",
     "list_devices_needing_attention",
@@ -263,6 +268,7 @@ __all__ = [
     "list_webhook_event_types",
     "list_webhooks",
     "normalize_policy_operations_input",
+    "preview_policy_device_filters",
     "refresh_saved_search_cache",
     "run_saved_search",
     "policy_run_count",

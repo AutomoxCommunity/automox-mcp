@@ -504,6 +504,34 @@ class IssueDeviceCommandParams(OrgIdContextMixin, ForbidExtraModel):
     )
 
 
+class RunRemediationActionsParams(OrgIdRequiredMixin, ForbidExtraModel):
+    action_set_id: int = Field(description="Action set ID", ge=1)
+    actions: list[dict[str, Any]] = Field(
+        description=(
+            "Remediation actions to execute. Each: "
+            "{'action': 'patch-now'|'patch-with-worklet', 'solution_id': int, "
+            "'devices': [int, ...], 'worklet_id': int (required for patch-with-worklet)}"
+        ),
+        min_length=1,
+        max_length=50,
+    )
+
+    @model_validator(mode="after")
+    def _validate_actions(self) -> RunRemediationActionsParams:
+        for action in self.actions:
+            kind = action.get("action")
+            if kind not in {"patch-now", "patch-with-worklet"}:
+                raise ValueError("action must be 'patch-now' or 'patch-with-worklet'")
+            if "solution_id" not in action:
+                raise ValueError("each action requires 'solution_id'")
+            devices = action.get("devices")
+            if not isinstance(devices, list) or not devices:
+                raise ValueError("each action requires a non-empty 'devices' list")
+            if kind == "patch-with-worklet" and "worklet_id" not in action:
+                raise ValueError("'patch-with-worklet' requires 'worklet_id'")
+        return self
+
+
 class PolicyDeviceFilterPreviewParams(OrgIdRequiredMixin, ForbidExtraModel):
     device_filters: list[dict[str, Any]] | None = Field(
         None, description="Device-filter clauses ({field, op, value}) to preview"

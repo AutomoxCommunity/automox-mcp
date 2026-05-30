@@ -7,6 +7,7 @@ from conftest import StubClient
 
 from automox_mcp.client import AutomoxClient
 from automox_mcp.workflows.vuln_sync import (
+    apply_remediation_actions,
     get_action_set_detail,
     get_action_set_issues,
     get_action_set_solutions,
@@ -199,3 +200,88 @@ async def test_upload_submits_request() -> None:
     assert result["data"]["id"] == 3
     assert result["data"]["status"] == "pending"
     assert client.calls[0][0] == "POST"
+
+
+# ---------------------------------------------------------------------------
+# apply_remediation_actions (issue #91 category C, gated execution)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_apply_remediation_actions_maps_to_camelcase_body() -> None:
+    path = "/orgs/42/remediations/action-sets/7/actions"
+    client = StubClient(post_responses={path: [{}]})
+    result = await apply_remediation_actions(
+        cast(AutomoxClient, client),
+        org_id=42,
+        action_set_id=7,
+        actions=[
+            {"action": "patch-now", "solution_id": 555, "devices": [1, 2]},
+            {
+                "action": "patch-with-worklet",
+                "solution_id": 556,
+                "devices": [3],
+                "worklet_id": 99,
+            },
+        ],
+    )
+    assert result["data"]["actions_submitted"] == 2
+    assert result["data"]["total_device_targets"] == 3
+    assert result["data"]["status"] == "accepted"
+
+    method, called_path, body = client.calls[0]
+    assert method == "POST"
+    assert called_path == path
+    # snake_case -> camelCase mapping for the API body
+    assert body["actions"][0] == {"action": "patch-now", "solutionId": 555, "devices": [1, 2]}
+    assert body["actions"][1]["workletId"] == 99
+
+
+def test_run_remediation_params_validation() -> None:
+    from pydantic import ValidationError
+
+    from automox_mcp.schemas import RunRemediationActionsParams
+
+    base = {"org_id": 42, "action_set_id": 7}
+    # bad action verb
+    with pytest.raises(ValidationError, match="patch-now"):
+        RunRemediationActionsParams(
+            **base, actions=[{"action": "nope", "solution_id": 1, "devices": [1]}]
+        )
+    # missing solution_id
+    with pytest.raises(ValidationError, match="solution_id"):
+        RunRemediationActionsParams(**base, actions=[{"action": "patch-now", "devices": [1]}])
+    # empty devices
+    with pytest.raises(ValidationError, match="devices"):
+        RunRemediationActionsParams(
+            **base, actions=[{"action": "patch-now", "solution_id": 1, "devices": []}]
+        )
+    # patch-with-worklet requires worklet_id
+    with pytest.raises(ValidationError, match="worklet_id"):
+        RunRemediationActionsParams(
+            **base,
+            actions=[{"action": "patch-with-worklet", "solution_id": 1, "devices": [1]}],
+        )
+
+
+def test_apply_remediation_tool_gated_by_env(monkeypatch) -> None:
+    from conftest import FakeClient, StubServer
+
+    from automox_mcp.tools import vuln_sync_tools
+
+    # default off -> not registered
+    monkeypatch.delenv("AUTOMOX_MCP_ALLOW_REMEDIATION", raising=False)
+    off = StubServer()
+    vuln_sync_tools.register(off, read_only=False, client=FakeClient())
+    assert "apply_remediation_actions" not in off.tools
+
+    # explicit opt-in -> registered
+    monkeypatch.setenv("AUTOMOX_MCP_ALLOW_REMEDIATION", "true")
+    on = StubServer()
+    vuln_sync_tools.register(on, read_only=False, client=FakeClient())
+    assert "apply_remediation_actions" in on.tools
+
+    # read-only mode never registers it, even with the env flag on
+    ro = StubServer()
+    vuln_sync_tools.register(ro, read_only=True, client=FakeClient())
+    assert "apply_remediation_actions" not in ro.tools

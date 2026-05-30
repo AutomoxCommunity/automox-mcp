@@ -117,6 +117,10 @@ _DOMAIN_CATALOG: dict[str, list[tuple[str, str]]] = {
         ("get_action_set_solutions", "Solutions for an action set"),
         ("get_upload_formats", "Supported CSV upload formats"),
         ("upload_action_set", "Upload CSV remediation data"),
+        (
+            "apply_remediation_actions",
+            "Execute remediations now (requires AUTOMOX_MCP_ALLOW_REMEDIATION)",
+        ),
     ],
     "account": [
         ("invite_user_to_account", "Invite a user with zone assignments"),

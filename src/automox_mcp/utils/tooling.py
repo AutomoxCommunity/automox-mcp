@@ -67,6 +67,17 @@ def is_read_only() -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def is_remediation_allowed() -> bool:
+    """Return True when remediation execution is explicitly enabled.
+
+    Gated by ``AUTOMOX_MCP_ALLOW_REMEDIATION`` (default off). Controls the
+    ``apply_remediation_actions`` tool, which immediately patches/runs worklets
+    on endpoints — opt-in even when write mode is enabled.
+    """
+    value = os.environ.get("AUTOMOX_MCP_ALLOW_REMEDIATION", "")
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def get_tool_prefix() -> str:
     """Return the configured tool name prefix, or empty string if none."""
     return os.environ.get("AUTOMOX_MCP_TOOL_PREFIX", "").strip()

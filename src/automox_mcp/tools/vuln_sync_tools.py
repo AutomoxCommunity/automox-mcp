@@ -14,13 +14,19 @@ from ..schemas import (
     GetActionSetSolutionsParams,
     GetActionSetUploadFormatsParams,
     ListActionSetsParams,
+    RunRemediationActionsParams,
     UploadActionSetParams,
 )
 from ..utils.tooling import (
     call_tool_workflow,
     check_idempotency,
+    is_remediation_allowed,
     maybe_format_markdown,
+    release_idempotency,
     store_idempotency,
+)
+from ..workflows.vuln_sync import (
+    apply_remediation_actions as _apply_remediation_actions,
 )
 from ..workflows.vuln_sync import (
     get_action_set_detail as _get_action_set_detail,
@@ -194,6 +200,47 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             )
             await store_idempotency(request_id, "upload_action_set", result)
             return result
+
+        # Remediation EXECUTION is opt-in beyond write mode: it immediately
+        # patches/runs worklets on endpoints. Gated by AUTOMOX_MCP_ALLOW_REMEDIATION.
+        if is_remediation_allowed():
+
+            @server.tool(
+                name="apply_remediation_actions",
+                description=(
+                    "Execute remediation actions on devices NOW — patch-now or "
+                    "patch-with-worklet — for a remediation action set. This immediately "
+                    "changes endpoint state (async, returns 202). Requires "
+                    "AUTOMOX_MCP_ALLOW_REMEDIATION=true. Provide explicit solution_id and "
+                    "device IDs per action; there is no 'all devices' shortcut."
+                ),
+                annotations={
+                    "readOnlyHint": False,
+                    "destructiveHint": True,
+                    "idempotentHint": False,
+                    "openWorldHint": True,
+                },
+            )
+            async def apply_remediation_actions(
+                action_set_id: int,
+                actions: list[dict[str, Any]],
+                request_id: str | None = None,
+            ) -> dict[str, Any]:
+                cached = await check_idempotency(request_id, "apply_remediation_actions")
+                if cached is not None:
+                    return cached
+                try:
+                    result = await call_tool_workflow(
+                        client,
+                        _apply_remediation_actions,
+                        {"action_set_id": action_set_id, "actions": actions},
+                        params_model=RunRemediationActionsParams,
+                    )
+                except BaseException:
+                    await release_idempotency(request_id, "apply_remediation_actions")
+                    raise
+                await store_idempotency(request_id, "apply_remediation_actions", result)
+                return result
 
 
 __all__ = ["register"]

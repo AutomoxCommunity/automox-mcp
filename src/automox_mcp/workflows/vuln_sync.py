@@ -251,3 +251,48 @@ async def upload_action_set(
         },
         "metadata": {"deprecated_endpoint": False},
     }
+
+
+async def apply_remediation_actions(
+    client: AutomoxClient,
+    *,
+    org_id: int,
+    action_set_id: int,
+    actions: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Execute remediation actions (patch-now / patch-with-worklet) on devices.
+
+    Wraps ``POST /orgs/{orgID}/remediations/action-sets/{actionSetID}/actions``.
+    This immediately patches or runs worklets on the specified devices — the
+    upstream endpoint returns ``202 Accepted`` and the work runs asynchronously.
+    Maps snake_case inputs (``solution_id``/``worklet_id``) to the API's
+    camelCase body.
+    """
+    api_actions: list[dict[str, Any]] = []
+    for action in actions:
+        item: dict[str, Any] = {
+            "action": action["action"],
+            "solutionId": action["solution_id"],
+            "devices": action["devices"],
+        }
+        if action.get("worklet_id") is not None:
+            item["workletId"] = action["worklet_id"]
+        api_actions.append(item)
+
+    response = await client.post(
+        f"/orgs/{org_id}/remediations/action-sets/{action_set_id}/actions",
+        json_data={"actions": api_actions},
+    )
+
+    total_devices = sum(len(action.get("devices") or []) for action in actions)
+
+    return {
+        "data": {
+            "action_set_id": action_set_id,
+            "actions_submitted": len(api_actions),
+            "total_device_targets": total_devices,
+            "status": "accepted",
+            "response": response if isinstance(response, Mapping) else None,
+        },
+        "metadata": {"deprecated_endpoint": False, "org_id": org_id},
+    }

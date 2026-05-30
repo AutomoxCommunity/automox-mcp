@@ -394,3 +394,174 @@ async def list_zone_users(
         "data": {"zone_id": str(zone_id), "total_users": len(users), "users": users},
         "metadata": meta,
     }
+
+
+# ---------------------------------------------------------------------------
+# Identity / zone / per-user-key writes (issue #91 category A, write slice)
+#
+# SECURITY: API-key endpoints never return the secret value (verified against
+# the DTOs — create/get/update return metadata only), and create_zone's
+# access_key is redacted via _ZONE_FIELDS. update_user deliberately cannot set
+# passwords.
+# ---------------------------------------------------------------------------
+
+# Safe per-key metadata projection (the `user` blob is dropped to stay lean).
+_API_KEY_FIELDS = ("id", "name", "is_enabled", "expires_at", "created_at")
+
+
+def _project_key(item: Mapping[str, Any]) -> dict[str, Any]:
+    return {key: item.get(key) for key in _API_KEY_FIELDS if item.get(key) is not None}
+
+
+async def create_zone(
+    client: AutomoxClient,
+    *,
+    account_id: str | UUID,
+    name: str,
+) -> dict[str, Any]:
+    """Create a new zone (organization) in the account. access_key is redacted."""
+    response = await client.post(f"/accounts/{account_id}/zones", json_data={"name": name})
+    detail = _project(response, _ZONE_FIELDS) if isinstance(response, Mapping) else {}
+    detail["created"] = True
+
+    return {
+        "data": detail,
+        "metadata": {"deprecated_endpoint": False, "account_id": str(account_id)},
+    }
+
+
+async def update_user(
+    client: AutomoxClient,
+    *,
+    user_id: int,
+    firstname: str | None = None,
+    lastname: str | None = None,
+    email: str | None = None,
+    tfa_type: str | None = None,
+) -> dict[str, Any]:
+    """Partially update a user's profile fields (never passwords)."""
+    body: dict[str, Any] = {}
+    for key, value in (
+        ("firstname", firstname),
+        ("lastname", lastname),
+        ("email", email),
+        ("tfa_type", tfa_type),
+    ):
+        if value is not None:
+            body[key] = value
+
+    await client.patch(f"/users/{user_id}", json_data=body)
+
+    return {
+        "data": {"user_id": user_id, "updated": True, "fields_updated": sorted(body)},
+        "metadata": {"deprecated_endpoint": False},
+    }
+
+
+async def list_user_api_keys(
+    client: AutomoxClient,
+    *,
+    org_id: int,
+    user_id: int,
+    page: int | None = None,
+    limit: int | None = None,
+) -> dict[str, Any]:
+    """List a user's API keys (metadata only — secrets are never returned)."""
+    params: dict[str, Any] = {"o": org_id}
+    if page is not None:
+        params["page"] = page
+    if limit is not None:
+        params["limit"] = limit
+    response = await client.get(f"/users/{user_id}/api_keys", params=params)
+
+    raw = response.get("results") if isinstance(response, Mapping) else response
+    items = raw if isinstance(raw, list) else []
+    keys = [_project_key(k) for k in items if isinstance(k, Mapping)]
+
+    return {
+        "data": {"user_id": user_id, "total_keys": len(keys), "api_keys": keys},
+        "metadata": {"deprecated_endpoint": False},
+    }
+
+
+async def get_user_api_key(
+    client: AutomoxClient,
+    *,
+    org_id: int,
+    user_id: int,
+    key_id: int,
+) -> dict[str, Any]:
+    """Get one user API key by ID (metadata only — secret never returned)."""
+    response = await client.get(f"/users/{user_id}/api_keys/{key_id}", params={"o": org_id})
+    detail = _project_key(response) if isinstance(response, Mapping) else {}
+
+    return {
+        "data": detail,
+        "metadata": {"deprecated_endpoint": False},
+    }
+
+
+async def create_user_api_key(
+    client: AutomoxClient,
+    *,
+    org_id: int,
+    user_id: int,
+    name: str,
+    expires_at: str | None = None,
+) -> dict[str, Any]:
+    """Create a user API key. Returns metadata only — the secret is never
+    surfaced (and is not retrievable via MCP, by design)."""
+    body: dict[str, Any] = {"name": name}
+    if expires_at is not None:
+        body["expires_at"] = expires_at
+
+    response = await client.post(f"/users/{user_id}/api_keys", json_data=body, params={"o": org_id})
+    detail = _project_key(response) if isinstance(response, Mapping) else {}
+    detail["created"] = True
+
+    return {
+        "data": detail,
+        "metadata": {
+            "deprecated_endpoint": False,
+            "note": "The API key secret is not returned and cannot be retrieved via MCP.",
+        },
+    }
+
+
+async def update_user_api_key(
+    client: AutomoxClient,
+    *,
+    org_id: int,
+    user_id: int,
+    key_id: int,
+    is_enabled: bool,
+) -> dict[str, Any]:
+    """Enable or disable a user API key (metadata only)."""
+    response = await client.put(
+        f"/users/{user_id}/api_keys/{key_id}",
+        json_data={"is_enabled": is_enabled},
+        params={"o": org_id},
+    )
+    detail = _project_key(response) if isinstance(response, Mapping) else {}
+    detail["updated"] = True
+
+    return {
+        "data": detail,
+        "metadata": {"deprecated_endpoint": False},
+    }
+
+
+async def delete_user_api_key(
+    client: AutomoxClient,
+    *,
+    org_id: int,
+    user_id: int,
+    key_id: int,
+) -> dict[str, Any]:
+    """Delete a user API key by ID."""
+    await client.delete(f"/users/{user_id}/api_keys/{key_id}", params={"o": org_id})
+
+    return {
+        "data": {"user_id": user_id, "key_id": key_id, "deleted": True},
+        "metadata": {"deprecated_endpoint": False},
+    }

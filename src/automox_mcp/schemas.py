@@ -742,6 +742,60 @@ class ListZoneUsersParams(ForbidExtraModel):
     limit: int | None = Field(None, ge=1, le=500, description="Results per page")
 
 
+# ------------------------------------------------------------------------
+# Identity / zone / per-user-key writes (issue #91 category A, write slice)
+# ------------------------------------------------------------------------
+
+
+class CreateZoneParams(ForbidExtraModel):
+    account_id: UUID = Field(description="Account ID (UUID)")
+    name: str = Field(description="Zone name", min_length=1, max_length=200)
+
+
+class UpdateUserParams(ForbidExtraModel):
+    # NOTE: password fields are intentionally NOT accepted — exposing a
+    # password-set path through an MCP tool is an account-takeover vector.
+    user_id: int = Field(description="User ID")
+    firstname: str | None = Field(None, description="First name", max_length=200)
+    lastname: str | None = Field(None, description="Last name", max_length=200)
+    email: str | None = Field(None, description="Email address", max_length=320)
+    tfa_type: str | None = Field(None, description="Two-factor auth type", max_length=50)
+
+    @model_validator(mode="after")
+    def _require_a_field(self) -> UpdateUserParams:
+        if not any((self.firstname, self.lastname, self.email, self.tfa_type)):
+            raise ValueError("at least one of firstname/lastname/email/tfa_type must be provided")
+        return self
+
+
+class ListUserApiKeysParams(OrgIdRequiredMixin, ForbidExtraModel):
+    user_id: int = Field(description="User ID")
+    page: int | None = Field(None, ge=0, description="Page number")
+    limit: int | None = Field(None, ge=1, le=500, description="Results per page")
+
+
+class GetUserApiKeyParams(OrgIdRequiredMixin, ForbidExtraModel):
+    user_id: int = Field(description="User ID")
+    key_id: int = Field(description="API key ID")
+
+
+class CreateUserApiKeyParams(OrgIdRequiredMixin, ForbidExtraModel):
+    user_id: int = Field(description="User ID")
+    name: str = Field(description="API key name", min_length=1, max_length=200)
+    expires_at: str | None = Field(None, description="Expiry timestamp (ISO 8601)")
+
+
+class UpdateUserApiKeyParams(OrgIdRequiredMixin, ForbidExtraModel):
+    user_id: int = Field(description="User ID")
+    key_id: int = Field(description="API key ID")
+    is_enabled: bool = Field(description="Whether the key is enabled")
+
+
+class DeleteUserApiKeyParams(OrgIdRequiredMixin, ForbidExtraModel):
+    user_id: int = Field(description="User ID")
+    key_id: int = Field(description="API key ID")
+
+
 class ListDataExtractsParams(OrgIdRequiredMixin, ForbidExtraModel):
     pass
 

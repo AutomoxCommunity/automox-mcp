@@ -14,13 +14,16 @@ import pytest
 from conftest import FakeClient, StubServer
 
 from automox_mcp.tools import (
+    account_tools,
     audit_tools,
     device_tools,
     event_tools,
     group_tools,
     package_tools,
+    policy_tools,
     report_tools,
     splashtop_tools,
+    vuln_sync_tools,
     webhook_tools,
 )
 from automox_mcp.utils import tooling as _utils_tooling
@@ -1972,3 +1975,238 @@ class TestSplashtopIdempotencyAndExceptionPaths:
             await server.tools[tool_name](request_id="req-2", **kwargs)
 
         assert released == [tool_name]
+
+
+# ---------------------------------------------------------------------------
+# account_tools — identity/zone/key writes (issue #91 category A, write slice)
+# ---------------------------------------------------------------------------
+
+_ACCT_UUID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+
+
+class TestAccountWriteToolsDispatch:
+    def _wire(self, monkeypatch: pytest.MonkeyPatch, name: str) -> dict[str, Any]:
+        recorded: dict[str, Any] = {}
+
+        async def fake(client, **kwargs):
+            recorded.update(kwargs)
+            return _success()
+
+        monkeypatch.setattr(account_tools.workflows, name, fake)
+        return recorded
+
+    @pytest.mark.asyncio
+    async def test_list_user_api_keys(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        recorded = self._wire(monkeypatch, "list_user_api_keys")
+        server = StubServer()
+        account_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+        await server.tools["list_user_api_keys"](user_id=7)
+        assert recorded["user_id"] == 7
+        assert recorded["org_id"] == 42
+
+    @pytest.mark.asyncio
+    async def test_get_user_api_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        recorded = self._wire(monkeypatch, "get_user_api_key")
+        server = StubServer()
+        account_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+        await server.tools["get_user_api_key"](user_id=7, key_id=3)
+        assert recorded["key_id"] == 3
+
+    @pytest.mark.asyncio
+    async def test_create_zone(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("AUTOMOX_ACCOUNT_UUID", _ACCT_UUID)
+        recorded = self._wire(monkeypatch, "create_zone")
+        server = StubServer()
+        account_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+        await server.tools["create_zone"](name="EU Zone")
+        assert recorded["name"] == "EU Zone"
+        assert str(recorded["account_id"]) == _ACCT_UUID
+
+    @pytest.mark.asyncio
+    async def test_update_user(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        recorded = self._wire(monkeypatch, "update_user")
+        server = StubServer()
+        account_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+        await server.tools["update_user"](user_id=7, email="a@b.c")
+        assert recorded["user_id"] == 7
+        assert recorded["email"] == "a@b.c"
+        assert "password" not in recorded
+
+    @pytest.mark.asyncio
+    async def test_create_user_api_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        recorded = self._wire(monkeypatch, "create_user_api_key")
+        server = StubServer()
+        account_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+        await server.tools["create_user_api_key"](user_id=7, name="k", expires_at="2027-01-01")
+        assert recorded["name"] == "k"
+        assert recorded["expires_at"] == "2027-01-01"
+
+    @pytest.mark.asyncio
+    async def test_update_user_api_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        recorded = self._wire(monkeypatch, "update_user_api_key")
+        server = StubServer()
+        account_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+        await server.tools["update_user_api_key"](user_id=7, key_id=3, is_enabled=False)
+        assert recorded["is_enabled"] is False
+
+    @pytest.mark.asyncio
+    async def test_delete_user_api_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        recorded = self._wire(monkeypatch, "delete_user_api_key")
+        server = StubServer()
+        account_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+        await server.tools["delete_user_api_key"](user_id=7, key_id=3)
+        assert recorded["key_id"] == 3
+
+    @pytest.mark.asyncio
+    async def test_write_tools_absent_in_read_only(self) -> None:
+        server = StubServer()
+        account_tools.register(server, read_only=True, client=FakeClient(org_id=42))
+        for name in (
+            "create_zone",
+            "update_user",
+            "create_user_api_key",
+            "update_user_api_key",
+            "delete_user_api_key",
+        ):
+            assert name not in server.tools
+
+
+class TestAccountReadToolsDispatch:
+    def _wire(self, monkeypatch: pytest.MonkeyPatch, name: str) -> dict[str, Any]:
+        recorded: dict[str, Any] = {}
+
+        async def fake(client, **kwargs):
+            recorded.update(kwargs)
+            return _success()
+
+        monkeypatch.setattr(account_tools.workflows, name, fake)
+        return recorded
+
+    @pytest.mark.asyncio
+    async def test_list_organizations(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._wire(monkeypatch, "list_organizations")
+        server = StubServer()
+        account_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+        result = await server.tools["list_organizations"](page=1, limit=10)
+        assert result["metadata"]["deprecated_endpoint"] is False
+
+    @pytest.mark.asyncio
+    async def test_list_users_and_get_user(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        lu = self._wire(monkeypatch, "list_users")
+        gu = self._wire(monkeypatch, "get_user")
+        server = StubServer()
+        account_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+        await server.tools["list_users"](limit=5)
+        await server.tools["get_user"](user_id=7)
+        assert lu["org_id"] == 42
+        assert gu["user_id"] == 7
+
+    @pytest.mark.asyncio
+    async def test_account_scoped_reads(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("AUTOMOX_ACCOUNT_UUID", _ACCT_UUID)
+        for name in (
+            "get_account",
+            "list_account_rbac_roles",
+            "list_zones",
+        ):
+            self._wire(monkeypatch, name)
+        uid = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+        zid = "cccccccc-cccc-cccc-cccc-cccccccccccc"
+        for name in ("get_account_user", "list_zones_for_user"):
+            self._wire(monkeypatch, name)
+        for name in ("get_zone", "list_zone_users"):
+            self._wire(monkeypatch, name)
+
+        server = StubServer()
+        account_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+        await server.tools["get_account"]()
+        await server.tools["list_account_rbac_roles"]()
+        await server.tools["list_zones"](page=0, limit=10)
+        await server.tools["get_account_user"](user_id=uid)
+        await server.tools["list_zones_for_user"](user_id=uid)
+        await server.tools["get_zone"](zone_id=zid)
+        await server.tools["list_zone_users"](zone_id=zid)
+        # all dispatched without error
+        assert "get_zone" in server.tools
+
+
+class TestVulnSyncRemediationDispatch:
+    @pytest.mark.asyncio
+    async def test_apply_remediation_actions_dispatch(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("AUTOMOX_MCP_ALLOW_REMEDIATION", "true")
+        recorded: dict[str, Any] = {}
+
+        async def fake(client, **kwargs):
+            recorded.update(kwargs)
+            return _success()
+
+        monkeypatch.setattr(vuln_sync_tools, "_apply_remediation_actions", fake)
+
+        server = StubServer()
+        vuln_sync_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+        await server.tools["apply_remediation_actions"](
+            action_set_id=7,
+            actions=[{"action": "patch-now", "solution_id": 5, "devices": [1, 2]}],
+        )
+        assert recorded["action_set_id"] == 7
+        assert recorded["org_id"] == 42
+
+
+class TestCategoryCAssessmentDispatch:
+    @pytest.mark.asyncio
+    async def test_preview_policy_device_filters(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        recorded: dict[str, Any] = {}
+
+        async def fake(client, **kwargs):
+            recorded.update(kwargs)
+            return _success()
+
+        monkeypatch.setattr(policy_tools.workflows, "preview_policy_device_filters", fake)
+        server = StubServer()
+        policy_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+        await server.tools["preview_policy_device_filters"](
+            device_filters=[{"field": "tag", "op": "in", "value": ["prod"]}],
+            server_groups=[10],
+        )
+        assert recorded["server_groups"] == [10]
+        assert recorded["org_id"] == 42
+
+    @pytest.mark.asyncio
+    async def test_list_devices_for_policies(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        recorded: dict[str, Any] = {}
+
+        async def fake(client, **kwargs):
+            recorded.update(kwargs)
+            return _success()
+
+        monkeypatch.setattr(policy_tools.workflows, "list_devices_for_policies", fake)
+        server = StubServer()
+        policy_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+        pol = ["11111111-1111-1111-1111-111111111111"]
+        await server.tools["list_devices_for_policies"](policies=pol)
+        assert recorded["policies"] == pol
+
+    @pytest.mark.asyncio
+    async def test_batch_update_devices(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        recorded: dict[str, Any] = {}
+
+        async def fake(client, **kwargs):
+            recorded.update(kwargs)
+            return _success()
+
+        monkeypatch.setattr(device_tools.workflows, "batch_update_devices", fake)
+        server = StubServer()
+        device_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+        await server.tools["batch_update_devices"](
+            devices=[1, 2],
+            actions=[{"attribute": "tags", "action": "apply", "value": ["x"]}],
+        )
+        assert recorded["devices"] == [1, 2]
+
+    @pytest.mark.asyncio
+    async def test_batch_update_devices_absent_in_read_only(self) -> None:
+        server = StubServer()
+        device_tools.register(server, read_only=True, client=FakeClient(org_id=42))
+        assert "batch_update_devices" not in server.tools

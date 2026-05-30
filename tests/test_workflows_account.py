@@ -482,3 +482,39 @@ async def test_delete_user_api_key():
     # DELETE records params in the conftest stub -> verify org scoping
     _, _path, params = client.calls[0]
     assert params == {"o": 42}
+
+
+@pytest.mark.asyncio
+async def test_list_user_api_keys_pagination_and_non_mapping():
+    # forwards page/limit; tolerates a non-mapping/non-list response
+    client = StubClient(get_responses={"/users/7/api_keys": ["unexpected"]})
+    result = await list_user_api_keys(
+        cast(AutomoxClient, client), org_id=42, user_id=7, page=1, limit=5
+    )
+    assert result["data"]["total_keys"] == 0
+    _, _path, params = client.calls[0]
+    assert params == {"o": 42, "page": 1, "limit": 5}
+
+
+@pytest.mark.asyncio
+async def test_list_account_rbac_roles_accepts_bare_list():
+    # _envelope plain-list branch (no {data,metadata} wrapper)
+    client = StubClient(get_responses={f"/accounts/{_ACCT}/rbac-roles": [[{"name": "admin"}]]})
+    result = await list_account_rbac_roles(cast(AutomoxClient, client), account_id=_ACCT)
+    assert result["data"]["total_roles"] == 1
+
+
+@pytest.mark.asyncio
+async def test_create_user_api_key_without_expiry_and_non_mapping():
+    client = StubClient(post_responses={"/users/7/api_keys": ["unexpected"]})
+    result = await create_user_api_key(cast(AutomoxClient, client), org_id=42, user_id=7, name="k")
+    assert result["data"]["created"] is True
+    _, _path, body = client.calls[0]
+    assert body == {"name": "k"}  # no expires_at key when omitted
+
+
+@pytest.mark.asyncio
+async def test_get_user_non_mapping_returns_empty():
+    client = StubClient(get_responses={"/users/7": ["unexpected"]})
+    result = await get_user(cast(AutomoxClient, client), org_id=42, user_id=7)
+    assert result["data"] == {}

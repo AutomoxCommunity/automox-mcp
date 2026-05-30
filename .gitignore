@@ -20,6 +20,9 @@ automox-mcp-design-guide.md
 # Upstream OpenAPI spec — local reference only, never commit
 console-api.yaml
 
+# Live-tenant probe harnesses — manual debugging, never commit (not in CI)
+tests/probe_*.py
+
 # MCP Registry tooling — local only, never commit
 mcp-publisher
 mcp-registry-key.pem

@@ -1,6 +1,6 @@
 # Tool Reference
 
-Complete reference for all 123 tools, 6 workflow prompts, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
+Complete reference for all 127 tools, 6 workflow prompts, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
 
 > **Tip:** You don't need to memorize this. Call `discover_capabilities` from your AI assistant to get a live summary of available tools organized by domain.
 
@@ -19,7 +19,7 @@ Complete reference for all 123 tools, 6 workflow prompts, MCP resources, paramet
 - [Compound Workflows (3 tools)](#compound-workflows-3-tools)
 - [Events (1 tool)](#events-1-tool)
 - [Reports (2 tools)](#reports-2-tools)
-- [Account Management (20 tools)](#account-management-20-tools)
+- [Account Management (24 tools)](#account-management-24-tools)
 - [Audit Trail (2 tools)](#audit-trail-2-tools)
 - [Policy Windows (9 tools)](#policy-windows-9-tools)
 - [Splashtop Remote Control (10 tools)](#splashtop-remote-control-10-tools)
@@ -157,7 +157,7 @@ Manage vulnerability remediation workflows via the Vuln Sync API. Supports CSV-b
 - **`prepatch_report`** - Retrieve the pre-patch readiness report showing devices with pending patches before the next scheduled patch window.
 - **`noncompliant_report`** - Retrieve the non-compliant devices report showing devices that need attention due to policy failures or missing patches.
 
-## Account Management (20 tools)
+## Account Management (24 tools)
 
 - **`invite_user_to_account`** *(write)* - Invite a user to the Automox account with optional zone assignments.
 - **`remove_user_from_account`** *(write)* - Remove a user from the Automox account by UUID.
@@ -179,6 +179,10 @@ Manage vulnerability remediation workflows via the Vuln Sync API. Supports CSV-b
 - **`create_user_api_key`** *(write)* - Create an API key for a user. Returns metadata only — the key secret is never surfaced and cannot be retrieved via MCP.
 - **`update_user_api_key`** *(write)* - Enable or disable a user API key by user ID and key ID.
 - **`delete_user_api_key`** *(write)* - Permanently delete a user API key by user ID and key ID.
+- **`list_global_api_keys`** - List global (account-scoped) API keys. Returns key metadata (name, enabled, expiry) only — secrets are never exposed.
+- **`create_global_api_key`** *(write)* - Create a global (account-scoped) API key. Returns metadata only — the key secret is never surfaced and cannot be retrieved via MCP.
+- **`update_global_api_key`** *(write)* - Enable or disable a global API key by ID.
+- **`delete_global_api_key`** *(write)* - Permanently delete a global API key by ID.
 
 ## Audit Trail (2 tools)
 

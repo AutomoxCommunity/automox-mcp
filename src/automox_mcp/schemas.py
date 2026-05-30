@@ -796,6 +796,25 @@ class DeleteUserApiKeyParams(OrgIdRequiredMixin, ForbidExtraModel):
     key_id: int = Field(description="API key ID")
 
 
+# ------------------------------------------------------------------------
+# Global (account-scoped) API keys — no decrypt (issue #91 category B)
+# ------------------------------------------------------------------------
+
+
+class CreateGlobalApiKeyParams(ForbidExtraModel):
+    name: str = Field(description="API key name", min_length=1, max_length=200)
+    expires_at: str | None = Field(None, description="Expiry timestamp (ISO 8601)")
+
+
+class UpdateGlobalApiKeyParams(ForbidExtraModel):
+    key_id: int = Field(description="Global API key ID")
+    is_enabled: bool = Field(description="Whether the key is enabled")
+
+
+class DeleteGlobalApiKeyParams(ForbidExtraModel):
+    key_id: int = Field(description="Global API key ID")
+
+
 class ListDataExtractsParams(OrgIdRequiredMixin, ForbidExtraModel):
     pass
 

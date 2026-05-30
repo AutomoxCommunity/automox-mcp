@@ -9,8 +9,10 @@ from conftest import StubClient
 
 from automox_mcp.client import AutomoxClient
 from automox_mcp.workflows.account import (
+    create_global_api_key,
     create_user_api_key,
     create_zone,
+    delete_global_api_key,
     delete_user_api_key,
     get_account,
     get_account_user,
@@ -19,6 +21,7 @@ from automox_mcp.workflows.account import (
     get_zone,
     invite_user_to_account,
     list_account_rbac_roles,
+    list_global_api_keys,
     list_org_api_keys,
     list_organizations,
     list_user_api_keys,
@@ -27,6 +30,7 @@ from automox_mcp.workflows.account import (
     list_zones,
     list_zones_for_user,
     remove_user_from_account,
+    update_global_api_key,
     update_user,
     update_user_api_key,
 )
@@ -518,3 +522,63 @@ async def test_get_user_non_mapping_returns_empty():
     client = StubClient(get_responses={"/users/7": ["unexpected"]})
     result = await get_user(cast(AutomoxClient, client), org_id=42, user_id=7)
     assert result["data"] == {}
+
+
+# ---------------------------------------------------------------------------
+# Global (account-scoped) API keys — no decrypt (issue #91 category B)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_list_global_api_keys_projects_metadata():
+    payload = {
+        "size": 1,
+        "results": [
+            {"id": 5, "name": "Global CI", "is_enabled": True, "user": {"id": 1}},
+        ],
+    }
+    client = StubClient(get_responses={"/global/api_keys": [payload]})
+    result = await list_global_api_keys(cast(AutomoxClient, client))
+    assert result["data"]["total_keys"] == 1
+    key = result["data"]["api_keys"][0]
+    assert key["name"] == "Global CI"
+    assert "user" not in key
+
+
+@pytest.mark.asyncio
+async def test_list_global_api_keys_non_mapping():
+    client = StubClient(get_responses={"/global/api_keys": ["unexpected"]})
+    result = await list_global_api_keys(cast(AutomoxClient, client))
+    assert result["data"]["total_keys"] == 0
+
+
+@pytest.mark.asyncio
+async def test_create_global_api_key_metadata_no_secret():
+    created = {"id": 9, "name": "g", "is_enabled": True, "api_key": "SHOULD-NOT-APPEAR"}
+    client = StubClient(post_responses={"/global/api_keys": [created]})
+    result = await create_global_api_key(cast(AutomoxClient, client), name="g")
+    assert result["data"]["created"] is True
+    assert "api_key" not in result["data"]
+    assert "not be retrieved" in result["metadata"]["note"]
+    _, path, body = client.calls[0]
+    assert path == "/global/api_keys"
+    assert body == {"name": "g"}  # no expires_at when omitted
+
+
+@pytest.mark.asyncio
+async def test_update_global_api_key_toggles_enabled():
+    rec = {"id": 5, "name": "g", "is_enabled": False}
+    client = StubClient(put_responses={"/global/api_keys/5": [rec]})
+    result = await update_global_api_key(cast(AutomoxClient, client), key_id=5, is_enabled=False)
+    assert result["data"]["updated"] is True
+    assert result["data"]["is_enabled"] is False
+    _, _path, body = client.calls[0]
+    assert body == {"is_enabled": False}
+
+
+@pytest.mark.asyncio
+async def test_delete_global_api_key():
+    client = StubClient(delete_responses={"/global/api_keys/5": [None]})
+    result = await delete_global_api_key(cast(AutomoxClient, client), key_id=5)
+    assert result["data"]["deleted"] is True
+    assert result["data"]["key_id"] == 5

@@ -2210,3 +2210,126 @@ class TestCategoryCAssessmentDispatch:
         server = StubServer()
         device_tools.register(server, read_only=True, client=FakeClient(org_id=42))
         assert "batch_update_devices" not in server.tools
+
+
+class TestGlobalApiKeyDispatch:
+    def _wire(self, monkeypatch: pytest.MonkeyPatch, name: str) -> dict[str, Any]:
+        recorded: dict[str, Any] = {}
+
+        async def fake(client, **kwargs):
+            recorded.update(kwargs)
+            return _success()
+
+        monkeypatch.setattr(account_tools.workflows, name, fake)
+        return recorded
+
+    @pytest.mark.asyncio
+    async def test_list_global_api_keys(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        self._wire(monkeypatch, "list_global_api_keys")
+        server = StubServer()
+        account_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+        result = await server.tools["list_global_api_keys"]()
+        assert result["metadata"]["deprecated_endpoint"] is False
+
+    @pytest.mark.asyncio
+    async def test_create_global_api_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        recorded = self._wire(monkeypatch, "create_global_api_key")
+        server = StubServer()
+        account_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+        await server.tools["create_global_api_key"](name="g", expires_at="2027-01-01")
+        assert recorded["name"] == "g"
+        assert recorded["expires_at"] == "2027-01-01"
+
+    @pytest.mark.asyncio
+    async def test_update_global_api_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        recorded = self._wire(monkeypatch, "update_global_api_key")
+        server = StubServer()
+        account_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+        await server.tools["update_global_api_key"](key_id=5, is_enabled=False)
+        assert recorded["key_id"] == 5
+        assert recorded["is_enabled"] is False
+
+    @pytest.mark.asyncio
+    async def test_delete_global_api_key(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        recorded = self._wire(monkeypatch, "delete_global_api_key")
+        server = StubServer()
+        account_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+        await server.tools["delete_global_api_key"](key_id=5)
+        assert recorded["key_id"] == 5
+
+    @pytest.mark.asyncio
+    async def test_global_key_writes_absent_in_read_only(self) -> None:
+        server = StubServer()
+        account_tools.register(server, read_only=True, client=FakeClient(org_id=42))
+        for name in ("create_global_api_key", "update_global_api_key", "delete_global_api_key"):
+            assert name not in server.tools
+        # the list read is still registered
+        assert "list_global_api_keys" in server.tools
+
+
+class TestAccountWriteIdempotencyPaths:
+    """Cache-hit + exception-release branches for account write tools."""
+
+    _CASES = [
+        ("create_zone", "create_zone", {"name": "z"}),
+        ("update_user", "update_user", {"user_id": 7, "email": "a@b.c"}),
+        ("create_user_api_key", "create_user_api_key", {"user_id": 7, "name": "k"}),
+        (
+            "update_user_api_key",
+            "update_user_api_key",
+            {"user_id": 7, "key_id": 3, "is_enabled": True},
+        ),
+        ("delete_user_api_key", "delete_user_api_key", {"user_id": 7, "key_id": 3}),
+        ("create_global_api_key", "create_global_api_key", {"name": "g"}),
+        ("update_global_api_key", "update_global_api_key", {"key_id": 5, "is_enabled": True}),
+        ("delete_global_api_key", "delete_global_api_key", {"key_id": 5}),
+    ]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("tool_name,wf_name,kwargs", _CASES)
+    async def test_cache_hit_short_circuits_workflow(
+        self, tool_name, wf_name, kwargs, monkeypatch
+    ) -> None:
+        monkeypatch.setenv("AUTOMOX_ACCOUNT_UUID", _ACCT_UUID)
+        called: list[bool] = []
+
+        async def fake_check(request_id, name):
+            return {"data": {"cached": True}, "metadata": {"deprecated_endpoint": False}}
+
+        async def fake_wf(client, **_):
+            called.append(True)
+            return _success()
+
+        monkeypatch.setattr(account_tools, "check_idempotency", fake_check)
+        monkeypatch.setattr(account_tools.workflows, wf_name, fake_wf)
+
+        server = StubServer()
+        account_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+        result = await server.tools[tool_name](request_id="req-1", **kwargs)
+        assert result["data"]["cached"] is True
+        assert called == []
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("tool_name,wf_name,kwargs", _CASES)
+    async def test_workflow_exception_releases_idempotency(
+        self, tool_name, wf_name, kwargs, monkeypatch
+    ) -> None:
+        from fastmcp.exceptions import ToolError
+
+        monkeypatch.setenv("AUTOMOX_ACCOUNT_UUID", _ACCT_UUID)
+        released: list[str] = []
+
+        async def fake_release(request_id, name):
+            released.append(name)
+
+        async def fake_wf(client, **_):
+            raise RuntimeError("upstream blew up")
+
+        monkeypatch.setattr(account_tools, "release_idempotency", fake_release)
+        monkeypatch.setattr(account_tools.workflows, wf_name, fake_wf)
+
+        server = StubServer()
+        account_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+        with pytest.raises((RuntimeError, ToolError)):
+            await server.tools[tool_name](request_id="req-2", **kwargs)
+        assert released == [tool_name]

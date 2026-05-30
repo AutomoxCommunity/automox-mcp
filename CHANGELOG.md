@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-05-30
+
 ### Fixed
 
 - **Test-suite order-dependence (latent, pre-existing).** A test reimported the package (`sys.modules` pop + re-`import`), leaving duplicate class objects behind; later `issubclass(..., OrgIdRequiredMixin)` checks then compared classes across module copies and silently stopped injecting `org_id` — invisible in the fixed CI order, but failing up to ~100 tests under randomized order. Added a `conftest` autouse fixture that snapshots/restores `sys.modules` (and `os.environ`) per test, and added `pytest-randomly` (dev) so the suite now runs in randomized order and regressions surface immediately. Suite is green across 26 seeds.

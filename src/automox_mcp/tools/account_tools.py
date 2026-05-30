@@ -12,8 +12,10 @@ from fastmcp.exceptions import ToolError
 from .. import workflows
 from ..client import AutomoxClient
 from ..schemas import (
+    CreateGlobalApiKeyParams,
     CreateUserApiKeyParams,
     CreateZoneParams,
+    DeleteGlobalApiKeyParams,
     DeleteUserApiKeyParams,
     GetAccountParams,
     GetAccountUserParams,
@@ -30,6 +32,7 @@ from ..schemas import (
     ListZonesParams,
     ListZoneUsersParams,
     RemoveUserFromAccountParams,
+    UpdateGlobalApiKeyParams,
     UpdateUserApiKeyParams,
     UpdateUserParams,
     ZoneAssignment,
@@ -406,6 +409,20 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         )
         return maybe_format_markdown(result, output_format)
 
+    @server.tool(
+        name="list_global_api_keys",
+        description=(
+            "List global (account-scoped) API keys. Returns key metadata (name, "
+            "enabled, expiry) only — secrets are never exposed."
+        ),
+        annotations=_READ_ANNOTATIONS,
+    )
+    async def list_global_api_keys(
+        output_format: str | None = "json",
+    ) -> dict[str, Any]:
+        result = await call_tool_workflow(client, workflows.list_global_api_keys, {})
+        return maybe_format_markdown(result, output_format)
+
     if not read_only:
 
         @server.tool(
@@ -586,6 +603,104 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 await release_idempotency(request_id, "delete_user_api_key")
                 raise
             await store_idempotency(request_id, "delete_user_api_key", result)
+            return result
+
+        @server.tool(
+            name="create_global_api_key",
+            description=(
+                "Create a global (account-scoped) API key. Returns metadata only "
+                "— the key secret is never surfaced and cannot be retrieved via MCP."
+            ),
+            annotations={
+                "readOnlyHint": False,
+                "destructiveHint": True,
+                "idempotentHint": False,
+                "openWorldHint": True,
+            },
+        )
+        async def create_global_api_key(
+            name: str,
+            expires_at: str | None = None,
+            request_id: str | None = None,
+        ) -> dict[str, Any]:
+            cached = await check_idempotency(request_id, "create_global_api_key")
+            if cached is not None:
+                return cached
+            params: dict[str, Any] = {"name": name}
+            if expires_at is not None:
+                params["expires_at"] = expires_at
+            try:
+                result = await call_tool_workflow(
+                    client,
+                    workflows.create_global_api_key,
+                    params,
+                    params_model=CreateGlobalApiKeyParams,
+                )
+            except BaseException:
+                await release_idempotency(request_id, "create_global_api_key")
+                raise
+            await store_idempotency(request_id, "create_global_api_key", result)
+            return result
+
+        @server.tool(
+            name="update_global_api_key",
+            description="Enable or disable a global (account-scoped) API key by ID.",
+            annotations={
+                "readOnlyHint": False,
+                "destructiveHint": True,
+                "idempotentHint": True,
+                "openWorldHint": True,
+            },
+        )
+        async def update_global_api_key(
+            key_id: int,
+            is_enabled: bool,
+            request_id: str | None = None,
+        ) -> dict[str, Any]:
+            cached = await check_idempotency(request_id, "update_global_api_key")
+            if cached is not None:
+                return cached
+            try:
+                result = await call_tool_workflow(
+                    client,
+                    workflows.update_global_api_key,
+                    {"key_id": key_id, "is_enabled": is_enabled},
+                    params_model=UpdateGlobalApiKeyParams,
+                )
+            except BaseException:
+                await release_idempotency(request_id, "update_global_api_key")
+                raise
+            await store_idempotency(request_id, "update_global_api_key", result)
+            return result
+
+        @server.tool(
+            name="delete_global_api_key",
+            description="Permanently delete a global (account-scoped) API key by ID.",
+            annotations={
+                "readOnlyHint": False,
+                "destructiveHint": True,
+                "idempotentHint": True,
+                "openWorldHint": True,
+            },
+        )
+        async def delete_global_api_key(
+            key_id: int,
+            request_id: str | None = None,
+        ) -> dict[str, Any]:
+            cached = await check_idempotency(request_id, "delete_global_api_key")
+            if cached is not None:
+                return cached
+            try:
+                result = await call_tool_workflow(
+                    client,
+                    workflows.delete_global_api_key,
+                    {"key_id": key_id},
+                    params_model=DeleteGlobalApiKeyParams,
+                )
+            except BaseException:
+                await release_idempotency(request_id, "delete_global_api_key")
+                raise
+            await store_idempotency(request_id, "delete_global_api_key", result)
             return result
 
 

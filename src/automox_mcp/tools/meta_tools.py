@@ -143,6 +143,10 @@ _DOMAIN_CATALOG: dict[str, list[tuple[str, str]]] = {
         ("create_user_api_key", "Create a user API key (secret not returned)"),
         ("update_user_api_key", "Enable/disable a user API key"),
         ("delete_user_api_key", "Delete a user API key"),
+        ("list_global_api_keys", "Global (account-scoped) API keys (metadata only)"),
+        ("create_global_api_key", "Create a global API key (secret not returned)"),
+        ("update_global_api_key", "Enable/disable a global API key"),
+        ("delete_global_api_key", "Delete a global API key"),
     ],
     "compound": [
         ("get_patch_tuesday_readiness", "Patch Tuesday readiness view"),

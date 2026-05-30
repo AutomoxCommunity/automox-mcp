@@ -565,3 +565,81 @@ async def delete_user_api_key(
         "data": {"user_id": user_id, "key_id": key_id, "deleted": True},
         "metadata": {"deprecated_endpoint": False},
     }
+
+
+# ---------------------------------------------------------------------------
+# Global (account-scoped) API keys — no decrypt (issue #91 category B)
+#
+# These are account-level credentials (higher blast radius than user keys).
+# create/update never return the secret (verified against the DTOs); the
+# decrypt endpoint is deliberately not wrapped.
+# ---------------------------------------------------------------------------
+
+
+async def list_global_api_keys(client: AutomoxClient) -> dict[str, Any]:
+    """List global (account-scoped) API keys — metadata only, secrets redacted."""
+    response = await client.get("/global/api_keys")
+    raw = response.get("results") if isinstance(response, Mapping) else response
+    items = raw if isinstance(raw, list) else []
+    keys = [_project_key(k) for k in items if isinstance(k, Mapping)]
+
+    return {
+        "data": {"total_keys": len(keys), "api_keys": keys},
+        "metadata": {"deprecated_endpoint": False},
+    }
+
+
+async def create_global_api_key(
+    client: AutomoxClient,
+    *,
+    name: str,
+    expires_at: str | None = None,
+) -> dict[str, Any]:
+    """Create a global API key. Returns metadata only — the secret is never
+    surfaced and cannot be retrieved via MCP."""
+    body: dict[str, Any] = {"name": name}
+    if expires_at is not None:
+        body["expires_at"] = expires_at
+
+    response = await client.post("/global/api_keys", json_data=body)
+    detail = _project_key(response) if isinstance(response, Mapping) else {}
+    detail["created"] = True
+
+    return {
+        "data": detail,
+        "metadata": {
+            "deprecated_endpoint": False,
+            "note": "The API key secret is not returned and cannot be retrieved via MCP.",
+        },
+    }
+
+
+async def update_global_api_key(
+    client: AutomoxClient,
+    *,
+    key_id: int,
+    is_enabled: bool,
+) -> dict[str, Any]:
+    """Enable or disable a global API key (metadata only)."""
+    response = await client.put(f"/global/api_keys/{key_id}", json_data={"is_enabled": is_enabled})
+    detail = _project_key(response) if isinstance(response, Mapping) else {}
+    detail["updated"] = True
+
+    return {
+        "data": detail,
+        "metadata": {"deprecated_endpoint": False},
+    }
+
+
+async def delete_global_api_key(
+    client: AutomoxClient,
+    *,
+    key_id: int,
+) -> dict[str, Any]:
+    """Delete a global API key by ID."""
+    await client.delete(f"/global/api_keys/{key_id}")
+
+    return {
+        "data": {"key_id": key_id, "deleted": True},
+        "metadata": {"deprecated_endpoint": False},
+    }

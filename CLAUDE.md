@@ -35,7 +35,7 @@ uv run mypy .
 uv run pytest --cov=automox_mcp --cov-fail-under=90
 ```
 
-Coverage sits near the 90% floor — new branches (e.g. idempotency cache-hit / exception-release handlers on write tools) need their own tests or the floor breaks. `bandit` is configured but **manual/non-blocking** (has untriaged B104/B613 findings); run it with `uv run pre-commit run bandit --hook-stage manual --all-files`.
+Coverage sits near the 90% floor — new branches (e.g. idempotency cache-hit / exception-release handlers on write tools) need their own tests or the floor breaks. `bandit` (`-r src/ -c pyproject.toml`) runs at **pre-push and in the CI `lint` job**; existing findings are `# nosec`-justified inline (B104 bind-host string compares in `transport_security.py`; B613 sanitizer scan-target chars in `utils/sanitize.py`). A new bandit finding blocks the push and CI — `# nosec BXXX` it with a one-line reason only when genuinely safe.
 
 ## Release safety
 

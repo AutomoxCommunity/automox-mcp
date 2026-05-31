@@ -24,17 +24,15 @@ repos:
       - id: ruff-format
         stages: [pre-commit]
 
-  # bandit: kept available but NON-BLOCKING (manual stage) — it is not in the
-  # uv dev env or CI, and currently reports latent findings (B104 bind-all,
-  # B613) that need triage before it can gate commits/pushes. Run on demand:
-  #   uv run pre-commit run bandit --hook-stage manual --all-files
+  # bandit: gates at pre-push (findings triaged — B104 bind-all comparisons and
+  # the B613 sanitizer scan-target chars are nosec-justified inline in src/).
   - repo: https://github.com/PyCQA/bandit
     rev: 1.8.3
     hooks:
       - id: bandit
         args: ["-r", "src/", "-c", "pyproject.toml"]
         pass_filenames: false
-        stages: [manual]
+        stages: [pre-push]
 
   # ---------------------------------------------------------------------------
   # Pre-push gate — the deterministic backstop. Mirrors the CI lint/typecheck/

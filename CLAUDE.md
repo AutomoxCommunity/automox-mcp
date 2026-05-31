@@ -20,16 +20,22 @@ The current split is **130 tools / 84 read / 46 write**. `discover_capabilities`
 
 ## Local gate before every push
 
-CI's `lint` job runs `ruff format --check` **in addition to** `ruff check` — these are different tools. Run the full gate locally first (a bare `pytest` does **not** enforce coverage, and pre-commit does **not** run pytest):
+A **pre-push git hook is the deterministic backstop**: `.pre-commit-config.yaml` runs the whole-repo gate at `pre-push`, so a push can't reach origin without passing it — no need to remember to run it by hand. After a fresh clone, activate it once:
 
 ```
-uv run ruff format --check .
+uv run pre-commit install        # wires both pre-commit and pre-push hooks
+```
+
+The pre-push gate (and the manual equivalent) is:
+
+```
+uv run ruff format --check .     # NB: separate tool from `ruff check`
 uv run ruff check .
 uv run mypy .
 uv run pytest --cov=automox_mcp --cov-fail-under=90
 ```
 
-Coverage sits near the 90% floor — new branches (e.g. idempotency cache-hit / exception-release handlers on write tools) need their own tests or the floor breaks.
+Coverage sits near the 90% floor — new branches (e.g. idempotency cache-hit / exception-release handlers on write tools) need their own tests or the floor breaks. `bandit` is configured but **manual/non-blocking** (has untriaged B104/B613 findings); run it with `uv run pre-commit run bandit --hook-stage manual --all-files`.
 
 ## Release safety
 

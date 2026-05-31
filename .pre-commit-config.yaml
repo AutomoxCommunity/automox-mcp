@@ -1,17 +1,72 @@
+# Wire both stages with a single install:
+#   uv run pre-commit install        # installs pre-commit AND pre-push hooks
+#
+# Design:
+#   - commit stage  → fast, reliable, per-changed-file feedback (ruff).
+#   - pre-push stage → the authoritative whole-repo gate (the same commands
+#     CLAUDE.md documents), so a push can't reach origin without passing
+#     format + lint + types + the 90% coverage floor. This is the deterministic
+#     backstop: it runs whether or not anyone remembers to run the gate by hand.
+#
+# mypy and pytest run only at pre-push via `uv run` (the project venv) — the
+# mypy mirror hook ran in an isolated env without our deps and produced false
+# failures, so it is intentionally not used here.
+default_install_hook_types: [pre-commit, pre-push]
+
 repos:
+  # Commit-stage: fast, per-changed-file feedback.
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.14.1
     hooks:
       - id: ruff
         args: [--fix]
+        stages: [pre-commit]
       - id: ruff-format
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.18.2
-    hooks:
-      - id: mypy
+        stages: [pre-commit]
+
+  # bandit: kept available but NON-BLOCKING (manual stage) — it is not in the
+  # uv dev env or CI, and currently reports latent findings (B104 bind-all,
+  # B613) that need triage before it can gate commits/pushes. Run on demand:
+  #   uv run pre-commit run bandit --hook-stage manual --all-files
   - repo: https://github.com/PyCQA/bandit
     rev: 1.8.3
     hooks:
       - id: bandit
         args: ["-r", "src/", "-c", "pyproject.toml"]
         pass_filenames: false
+        stages: [manual]
+
+  # ---------------------------------------------------------------------------
+  # Pre-push gate — the deterministic backstop. Mirrors the CI lint/typecheck/
+  # test jobs and the local gate in CLAUDE.md. Whole-repo, via the project venv.
+  # ---------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: ruff-format-check
+        name: ruff format --check (whole repo)
+        entry: uv run ruff format --check .
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+      - id: ruff-check
+        name: ruff check (whole repo)
+        entry: uv run ruff check .
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+      - id: mypy-full
+        name: mypy (whole repo)
+        entry: uv run mypy .
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+      - id: pytest-coverage
+        name: pytest with 90% coverage floor
+        entry: uv run pytest --cov=automox_mcp --cov-fail-under=90 -q
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]

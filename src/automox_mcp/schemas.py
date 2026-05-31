@@ -578,6 +578,43 @@ class BatchUpdateDevicesParams(OrgIdRequiredMixin, ForbidExtraModel):
         return self
 
 
+class UpdateDeviceParams(OrgIdRequiredMixin, ForbidExtraModel):
+    device_id: int = Field(description="Device (server) ID to update", ge=1)
+    custom_name: str | None = Field(
+        None, description="Friendly display name for the device", max_length=255
+    )
+    server_group_id: int | None = Field(
+        None, ge=0, description="Server group to move the device into"
+    )
+    exception: bool | None = Field(
+        None, description="Whether the device is excluded from policy enforcement"
+    )
+    tags: list[str] | None = Field(
+        None, description="Replacement tag list for the device", max_length=200
+    )
+    ip_addrs: list[str] | None = Field(
+        None, description="Replacement IP address list for the device", max_length=200
+    )
+
+    @model_validator(mode="after")
+    def _require_at_least_one_field(self) -> UpdateDeviceParams:
+        if all(
+            value is None
+            for value in (
+                self.custom_name,
+                self.server_group_id,
+                self.exception,
+                self.tags,
+                self.ip_addrs,
+            )
+        ):
+            raise ValueError(
+                "update_device requires at least one of: custom_name, server_group_id, "
+                "exception, tags, ip_addrs"
+            )
+        return self
+
+
 class ClonePolicyParams(OrgIdContextMixin, ForbidExtraModel):
     policy_id: int = Field(description="Policy ID to clone")
     name: str | None = Field(
@@ -848,6 +885,25 @@ class GetActionSetUploadFormatsParams(OrgIdRequiredMixin, ForbidExtraModel):
 
 class GetActionSetParams(OrgIdRequiredMixin, ForbidExtraModel):
     action_set_id: int = Field(description="Action set ID")
+
+
+class DeleteActionSetParams(OrgIdRequiredMixin, ForbidExtraModel):
+    action_set_id: int = Field(description="Action set ID to delete", ge=1)
+
+
+class DeleteActionSetsBulkParams(OrgIdRequiredMixin, ForbidExtraModel):
+    action_set_ids: list[int] = Field(
+        description="Action set IDs to delete",
+        min_length=1,
+        max_length=100,
+    )
+
+    @model_validator(mode="after")
+    def _validate_ids(self) -> DeleteActionSetsBulkParams:
+        for action_set_id in self.action_set_ids:
+            if action_set_id < 1:
+                raise ValueError("each action_set_id must be >= 1")
+        return self
 
 
 class GetActionSetIssuesParams(OrgIdRequiredMixin, ForbidExtraModel):

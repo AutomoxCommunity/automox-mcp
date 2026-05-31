@@ -450,6 +450,81 @@ class TestDeviceToolsDispatch:
         assert recorded.get("device_id") == 88
 
     @pytest.mark.asyncio
+    async def test_update_device_calls_workflow(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        recorded: dict[str, Any] = {}
+
+        async def fake_update(client, **kwargs):
+            recorded.update(kwargs)
+            return _success()
+
+        monkeypatch.setattr(device_tools.workflows, "update_device", fake_update)
+
+        server = StubServer()
+        device_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+
+        await server.tools["update_device"](device_id=99, custom_name="web-01", server_group_id=7)
+
+        assert recorded.get("device_id") == 99
+        assert recorded.get("custom_name") == "web-01"
+        assert recorded.get("server_group_id") == 7
+        # Omitted optional fields are stripped before reaching the workflow.
+        assert "tags" not in recorded
+
+    @pytest.mark.asyncio
+    async def test_update_device_absent_in_read_only(self) -> None:
+        server = StubServer()
+        device_tools.register(server, read_only=True, client=FakeClient(org_id=42))
+        assert "update_device" not in server.tools
+
+    @pytest.mark.asyncio
+    async def test_update_device_cache_hit_short_circuits(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        called: list[bool] = []
+
+        async def fake_check(request_id: str | None, name: str):
+            return {"data": {"cached": True}, "metadata": {"deprecated_endpoint": False}}
+
+        async def fake_wf(client, **_):
+            called.append(True)
+            return _success()
+
+        monkeypatch.setattr(device_tools, "check_idempotency", fake_check)
+        monkeypatch.setattr(device_tools.workflows, "update_device", fake_wf)
+
+        server = StubServer()
+        device_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+        result = await server.tools["update_device"](
+            device_id=99, custom_name="x", request_id="req-1"
+        )
+        assert result["data"] == {"cached": True}
+        assert called == []
+
+    @pytest.mark.asyncio
+    async def test_update_device_exception_releases_idempotency(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        released: list[str] = []
+
+        async def fake_release(request_id: str | None, name: str):
+            released.append(name)
+
+        async def fake_wf(client, **_):
+            raise RuntimeError("upstream blew up")
+
+        monkeypatch.setattr(device_tools, "release_idempotency", fake_release)
+        monkeypatch.setattr(device_tools.workflows, "update_device", fake_wf)
+
+        server = StubServer()
+        device_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+
+        from fastmcp.exceptions import ToolError
+
+        with pytest.raises((RuntimeError, ToolError)):
+            await server.tools["update_device"](device_id=99, custom_name="x", request_id="req-2")
+        assert released == ["update_device"]
+
+    @pytest.mark.asyncio
     async def test_execute_device_command_absent_in_read_only(self) -> None:
         server = StubServer()
         device_tools.register(server, read_only=True, client=FakeClient(org_id=42))
@@ -2157,6 +2232,105 @@ class TestVulnSyncRemediationDispatch:
         )
         assert recorded["action_set_id"] == 7
         assert recorded["org_id"] == 42
+
+    @pytest.mark.asyncio
+    async def test_delete_action_set_calls_workflow(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        recorded: dict[str, Any] = {}
+
+        async def fake(client, **kwargs):
+            recorded.update(kwargs)
+            return _success()
+
+        monkeypatch.setattr(vuln_sync_tools, "_delete_action_set", fake)
+
+        server = StubServer()
+        vuln_sync_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+        await server.tools["delete_action_set"](action_set_id=7)
+        assert recorded["action_set_id"] == 7
+        assert recorded["org_id"] == 42
+
+    @pytest.mark.asyncio
+    async def test_delete_action_sets_bulk_calls_workflow(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        recorded: dict[str, Any] = {}
+
+        async def fake(client, **kwargs):
+            recorded.update(kwargs)
+            return _success()
+
+        monkeypatch.setattr(vuln_sync_tools, "_delete_action_sets_bulk", fake)
+
+        server = StubServer()
+        vuln_sync_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+        await server.tools["delete_action_sets_bulk"](action_set_ids=[1, 2, 3])
+        assert recorded["action_set_ids"] == [1, 2, 3]
+        assert recorded["org_id"] == 42
+
+    @pytest.mark.asyncio
+    async def test_delete_action_tools_absent_in_read_only(self) -> None:
+        server = StubServer()
+        vuln_sync_tools.register(server, read_only=True, client=FakeClient(org_id=42))
+        assert "delete_action_set" not in server.tools
+        assert "delete_action_sets_bulk" not in server.tools
+
+
+class TestVulnSyncDeleteIdempotencyAndExceptionPaths:
+    """Cache-hit + exception-release branches for the action-set delete tools."""
+
+    _WRITE_CASES = [
+        ("delete_action_set", "_delete_action_set", {"action_set_id": 7}),
+        ("delete_action_sets_bulk", "_delete_action_sets_bulk", {"action_set_ids": [1, 2]}),
+    ]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("tool_name,wf_attr,kwargs", _WRITE_CASES)
+    async def test_cache_hit_short_circuits_workflow(
+        self, tool_name: str, wf_attr: str, kwargs: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        called: list[bool] = []
+
+        async def fake_check(request_id: str | None, name: str):
+            return {"data": {"cached": True}, "metadata": {"deprecated_endpoint": False}}
+
+        async def fake_wf(client, **_):
+            called.append(True)
+            return _success()
+
+        monkeypatch.setattr(vuln_sync_tools, "check_idempotency", fake_check)
+        monkeypatch.setattr(vuln_sync_tools, wf_attr, fake_wf)
+
+        server = StubServer()
+        vuln_sync_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+
+        result = await server.tools[tool_name](request_id="req-1", **kwargs)
+        assert result == {"data": {"cached": True}, "metadata": {"deprecated_endpoint": False}}
+        assert called == []
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("tool_name,wf_attr,kwargs", _WRITE_CASES)
+    async def test_workflow_exception_releases_idempotency(
+        self, tool_name: str, wf_attr: str, kwargs: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        released: list[str] = []
+
+        async def fake_release(request_id: str | None, name: str):
+            released.append(name)
+
+        async def fake_wf(client, **_):
+            raise RuntimeError("upstream blew up")
+
+        monkeypatch.setattr(vuln_sync_tools, "release_idempotency", fake_release)
+        monkeypatch.setattr(vuln_sync_tools, wf_attr, fake_wf)
+
+        server = StubServer()
+        vuln_sync_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+
+        from fastmcp.exceptions import ToolError
+
+        with pytest.raises((RuntimeError, ToolError)):
+            await server.tools[tool_name](request_id="req-2", **kwargs)
+        assert released == [tool_name]
 
 
 class TestCategoryCAssessmentDispatch:

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from ..client import AutomoxClient
+from ..client import AutomoxAPIError, AutomoxClient
 from ..utils.response import extract_list as _extract_list
 
 
@@ -250,6 +250,71 @@ async def upload_action_set(
             "message": "Action set upload submitted.",
         },
         "metadata": {"deprecated_endpoint": False},
+    }
+
+
+async def delete_action_set(
+    client: AutomoxClient,
+    *,
+    org_id: int,
+    action_set_id: int,
+) -> dict[str, Any]:
+    """Delete a single Vuln Sync action set.
+
+    Wraps ``DELETE /orgs/{org}/remediations/action-sets/{actionSetID}``. This is
+    console metadata (not endpoint state) and is reconstructable by re-uploading
+    the source CSV, so it is exposed as Tier-1 ask-first (confirmation-only, no
+    env gate).
+    """
+    await client.delete(
+        f"/orgs/{org_id}/remediations/action-sets/{action_set_id}",
+    )
+
+    return {
+        "data": {
+            "action_set_id": action_set_id,
+            "deleted": True,
+        },
+        "metadata": {"deprecated_endpoint": False, "org_id": org_id},
+    }
+
+
+async def delete_action_sets_bulk(
+    client: AutomoxClient,
+    *,
+    org_id: int,
+    action_set_ids: list[int],
+) -> dict[str, Any]:
+    """Delete multiple Vuln Sync action sets.
+
+    Implemented by iterating the confirmed single-delete endpoint
+    (``DELETE /orgs/{org}/remediations/action-sets/{actionSetID}``) rather than the
+    native bulk endpoint (``DELETE /orgs/{org}/remediations/action-sets``), whose
+    request-body shape is not documented in the OpenAPI bundle and could not be
+    verified at build time. Deletion is therefore non-atomic: each ID is reported
+    individually and a mid-list failure leaves earlier deletions applied (safe —
+    action sets are reconstructable via re-upload). Swapping to the native bulk
+    endpoint is a tracked perf optimization once its contract is confirmed.
+    """
+    deleted: list[int] = []
+    failed: list[dict[str, Any]] = []
+    for action_set_id in action_set_ids:
+        try:
+            await client.delete(
+                f"/orgs/{org_id}/remediations/action-sets/{action_set_id}",
+            )
+            deleted.append(action_set_id)
+        except AutomoxAPIError as exc:
+            failed.append({"action_set_id": action_set_id, "error": str(exc)})
+
+    return {
+        "data": {
+            "requested": len(action_set_ids),
+            "deleted_count": len(deleted),
+            "deleted": deleted,
+            "failed": failed,
+        },
+        "metadata": {"deprecated_endpoint": False, "org_id": org_id},
     }
 
 

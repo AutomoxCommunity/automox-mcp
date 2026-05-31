@@ -83,6 +83,7 @@ from .devices import (
     list_devices_needing_attention,
     search_devices,
     summarize_device_health,
+    update_device,
 )
 from .events import list_events
 from .groups import (
@@ -211,6 +212,7 @@ __all__ = [
     "audit_events_ocsf",
     "audit_trail_user_activity",
     "batch_update_devices",
+    "update_device",
     "clone_policy",
     "create_data_extract",
     "create_global_api_key",

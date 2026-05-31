@@ -19,6 +19,7 @@ _DOMAIN_CATALOG: dict[str, list[tuple[str, str]]] = {
         ("get_device_inventory_categories", "Available inventory categories"),
         ("execute_device_command", "Issue scan/patch/reboot command"),
         ("batch_update_devices", "Bulk attribute actions (e.g. tags) on many devices"),
+        ("update_device", "Update one device: name, group, exception, tags, IPs"),
         ("get_device_full_profile", "Complete profile: detail + inventory + packages"),
     ],
     "device_search": [
@@ -117,6 +118,8 @@ _DOMAIN_CATALOG: dict[str, list[tuple[str, str]]] = {
         ("get_action_set_solutions", "Solutions for an action set"),
         ("get_upload_formats", "Supported CSV upload formats"),
         ("upload_action_set", "Upload CSV remediation data"),
+        ("delete_action_set", "Delete one remediation action set"),
+        ("delete_action_sets_bulk", "Delete multiple action sets by ID"),
         (
             "apply_remediation_actions",
             "Execute remediations now (requires AUTOMOX_MCP_ALLOW_REMEDIATION)",

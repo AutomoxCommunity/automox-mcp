@@ -5,9 +5,11 @@ from typing import cast
 import pytest
 from conftest import StubClient
 
-from automox_mcp.client import AutomoxClient
+from automox_mcp.client import AutomoxAPIError, AutomoxClient
 from automox_mcp.workflows.vuln_sync import (
     apply_remediation_actions,
+    delete_action_set,
+    delete_action_sets_bulk,
     get_action_set_detail,
     get_action_set_issues,
     get_action_set_solutions,
@@ -285,3 +287,48 @@ def test_apply_remediation_tool_gated_by_env(monkeypatch) -> None:
     ro = StubServer()
     vuln_sync_tools.register(ro, read_only=True, client=FakeClient())
     assert "apply_remediation_actions" not in ro.tools
+
+
+@pytest.mark.asyncio
+async def test_delete_action_set_calls_endpoint() -> None:
+    client = StubClient()
+    result = await delete_action_set(cast(AutomoxClient, client), org_id=42, action_set_id=7)
+    assert ("DELETE", "/orgs/42/remediations/action-sets/7", None) in client.calls
+    assert result["data"] == {"action_set_id": 7, "deleted": True}
+    assert result["metadata"]["org_id"] == 42
+
+
+@pytest.mark.asyncio
+async def test_delete_action_sets_bulk_iterates_single_endpoint() -> None:
+    client = StubClient()
+    result = await delete_action_sets_bulk(
+        cast(AutomoxClient, client), org_id=42, action_set_ids=[1, 2, 3]
+    )
+    deleted_paths = [c[1] for c in client.calls if c[0] == "DELETE"]
+    assert deleted_paths == [
+        "/orgs/42/remediations/action-sets/1",
+        "/orgs/42/remediations/action-sets/2",
+        "/orgs/42/remediations/action-sets/3",
+    ]
+    assert result["data"]["deleted_count"] == 3
+    assert result["data"]["deleted"] == [1, 2, 3]
+    assert result["data"]["failed"] == []
+
+
+@pytest.mark.asyncio
+async def test_delete_action_sets_bulk_reports_partial_failure() -> None:
+    class _RaisingClient(StubClient):
+        async def delete(self, path: str, *, params=None, headers=None):
+            self.calls.append(("DELETE", path, params))
+            if path.endswith("/2"):
+                raise AutomoxAPIError("boom", status_code=500)
+            return None
+
+    client = _RaisingClient()
+    result = await delete_action_sets_bulk(
+        cast(AutomoxClient, client), org_id=42, action_set_ids=[1, 2, 3]
+    )
+    assert result["data"]["deleted"] == [1, 3]
+    assert result["data"]["deleted_count"] == 2
+    assert result["data"]["requested"] == 3
+    assert [f["action_set_id"] for f in result["data"]["failed"]] == [2]

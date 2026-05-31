@@ -6,7 +6,13 @@ output, capability discovery, non-loopback warnings, and every read-only
 tool against a live Automox organisation.  Tests 35–49 cover Phase 3 tools
 (worklets, data extracts, org API keys, policy history v2, audit v2/OCSF,
 advanced device search, and vulnerability sync).  Tests 50–55 cover policy
-windows (maintenance/exclusion windows).
+windows (maintenance/exclusion windows).  Tests 56–91 cover the 1.2.0 #91
+wave (identity/users/zones, API-key metadata, device-search enrichment,
+policy device-targeting, action-set detail, Splashtop read-only status) plus
+the #111 single-device update_device (re-applied as a no-op write).
+
+Dependent reads chain IDs from their list call and skip-OK when the org has
+no such record, so a sparse tenant does not fail the run.
 
 Note: The idempotency test issues an ``execute_device_command`` call with
 ``command_type="scan"`` against a real device.  This queues a lightweight
@@ -906,6 +912,343 @@ async def run_readonly_tools() -> None:
                 "get_device_scheduled_windows",
                 True,
                 "skipped — no devices in org (OK)",
+            )
+
+        # ================================================================
+        # Phase 4: #91 identity / API-key-metadata / device-search-
+        # enrichment / policy-device-targeting read tools (tests 56+).
+        #
+        # These are the 1.2.0 #91 wave the smoke script had not kept pace
+        # with. Read-only; dependent calls chain IDs from their list call
+        # and skip-OK when the org has no such records.
+        # ================================================================
+
+        device_uuid: str | None = None
+        if device_list:
+            device_uuid = device_list[0].get("uuid") or device_list[0].get("device_uuid")
+
+        # ---- Identity / account ----
+        log.info(f"\n{BOLD}Phase 4: Identity / Account{RESET}")
+
+        # 56. list_users
+        resp = await _safe_call(session, "list_users", {"limit": 5})
+        users = _extract_list(resp.get("data")) if resp else []
+        record("list_users", resp is not None, f"count={len(users)}")
+        user_id = _extract_id(users[0], "id", "user_id") if users else None
+
+        # 57. get_user
+        if user_id:
+            resp = await _safe_call(session, "get_user", {"user_id": user_id})
+            record("get_user", resp is not None, f"id={user_id}")
+        else:
+            record("get_user", True, "skipped — no users in org (OK)")
+
+        # 58. get_account_user
+        if user_id:
+            resp = await _safe_call(session, "get_account_user", {"user_id": user_id})
+            record("get_account_user", resp is not None, f"id={user_id}")
+        else:
+            record("get_account_user", True, "skipped — no user_id (OK)")
+
+        # 59. list_zones_for_user
+        if user_id:
+            resp = await _safe_call(session, "list_zones_for_user", {"user_id": user_id})
+            record("list_zones_for_user", resp is not None, _count_or_err(resp))
+        else:
+            record("list_zones_for_user", True, "skipped — no user_id (OK)")
+
+        # 60. list_user_api_keys
+        key_id = None
+        if user_id:
+            resp = await _safe_call(session, "list_user_api_keys", {"user_id": user_id})
+            record("list_user_api_keys", resp is not None, _count_or_err(resp))
+            keys = _extract_list(resp.get("data")) if resp else []
+            if keys:
+                key_id = _extract_id(keys[0], "id", "key_id")
+        else:
+            record("list_user_api_keys", True, "skipped — no user_id (OK)")
+
+        # 61. get_user_api_key
+        if user_id and key_id:
+            resp = await _safe_call(
+                session, "get_user_api_key", {"user_id": user_id, "key_id": key_id}
+            )
+            record("get_user_api_key", resp is not None, f"key_id={key_id}")
+        else:
+            record("get_user_api_key", True, "skipped — no user API keys (OK)")
+
+        # 62. get_account
+        resp = await _safe_call(session, "get_account", {})
+        record("get_account", resp is not None and "data" in (resp or {}), _data_keys(resp))
+
+        # 63. list_account_rbac_roles
+        resp = await _safe_call(session, "list_account_rbac_roles", {})
+        record("list_account_rbac_roles", resp is not None, _count_or_err(resp))
+
+        # 64. list_organizations
+        resp = await _safe_call(session, "list_organizations", {"limit": 5})
+        record("list_organizations", resp is not None, _count_or_err(resp))
+
+        # 65. list_global_api_keys
+        resp = await _safe_call(session, "list_global_api_keys", {})
+        record("list_global_api_keys", resp is not None, _count_or_err(resp))
+
+        # ---- Zones ----
+        # 66. list_zones
+        resp = await _safe_call(session, "list_zones", {"limit": 5})
+        zones = _extract_list(resp.get("data")) if resp else []
+        record("list_zones", resp is not None, f"count={len(zones)}")
+        zone_id = None
+        if zones:
+            zone_id = zones[0].get("id") or zones[0].get("uuid") or zones[0].get("zone_id")
+
+        # 67. get_zone
+        if zone_id:
+            resp = await _safe_call(session, "get_zone", {"zone_id": zone_id})
+            record("get_zone", resp is not None, f"zone_id={zone_id}")
+        else:
+            record("get_zone", True, "skipped — no zones in org (OK)")
+
+        # 68. list_zone_users
+        if zone_id:
+            resp = await _safe_call(session, "list_zone_users", {"zone_id": zone_id})
+            record("list_zone_users", resp is not None, _count_or_err(resp))
+        else:
+            record("list_zone_users", True, "skipped — no zone_id (OK)")
+
+        # ---- Device-search enrichment ----
+        log.info(f"\n{BOLD}Phase 4: Device-search enrichment{RESET}")
+
+        # 69. advanced_device_search
+        resp = await _safe_call(session, "advanced_device_search", {"limit": 2})
+        record("advanced_device_search", resp is not None, _count_or_err(resp))
+
+        # 70. device_search_typeahead
+        resp = await _safe_call(
+            session, "device_search_typeahead", {"field": "hostname", "prefix": "a"}
+        )
+        record("device_search_typeahead", resp is not None, _count_or_err(resp))
+
+        # 71. get_search_scopes
+        resp = await _safe_call(session, "get_search_scopes", {})
+        record("get_search_scopes", resp is not None, _count_or_err(resp))
+
+        # 72. get_searchable_fields
+        resp = await _safe_call(session, "get_searchable_fields", {})
+        record("get_searchable_fields", resp is not None, _count_or_err(resp))
+
+        # 73. get_device_by_uuid
+        if device_uuid:
+            resp = await _safe_call(session, "get_device_by_uuid", {"device_uuid": device_uuid})
+            record("get_device_by_uuid", resp is not None, f"uuid={device_uuid}")
+        else:
+            record("get_device_by_uuid", True, "skipped — no device uuid (OK)")
+
+        # 74. list_searches_for_device
+        if device_uuid:
+            resp = await _safe_call(
+                session, "list_searches_for_device", {"device_uuid": device_uuid}
+            )
+            record("list_searches_for_device", resp is not None, _count_or_err(resp))
+        else:
+            record("list_searches_for_device", True, "skipped — no device uuid (OK)")
+
+        # 75–78. Saved-search detail tools (need a saved search to exist)
+        resp = await _safe_call(session, "list_saved_searches", {})
+        saved = _extract_list(resp.get("data")) if resp else []
+        saved_id = _extract_id(saved[0], "id", "saved_search_id") if saved else None
+        saved_uuid = None
+        if saved:
+            saved_uuid = (
+                saved[0].get("uuid")
+                or saved[0].get("saved_search_uuid")
+                or saved[0].get("search_uuid")
+            )
+
+        # 75. get_saved_search
+        if saved_id:
+            resp = await _safe_call(session, "get_saved_search", {"saved_search_id": saved_id})
+            record("get_saved_search", resp is not None, f"id={saved_id}")
+        else:
+            record("get_saved_search", True, "skipped — no saved searches (OK)")
+
+        # 76. get_saved_search_results
+        if saved_id:
+            resp = await _safe_call(
+                session, "get_saved_search_results", {"saved_search_id": saved_id, "limit": 2}
+            )
+            record("get_saved_search_results", resp is not None, _count_or_err(resp))
+        else:
+            record("get_saved_search_results", True, "skipped — no saved searches (OK)")
+
+        # 77. run_saved_search (by UUID)
+        if saved_uuid:
+            resp = await _safe_call(
+                session, "run_saved_search", {"search_id": saved_uuid, "size": 2}
+            )
+            record("run_saved_search", resp is not None, _count_or_err(resp))
+        else:
+            record("run_saved_search", True, "skipped — no saved-search uuid (OK)")
+
+        # 78. get_cached_search_results — keyed by a prior *search execution* id,
+        # which this read-only smoke pass doesn't create, so there's no reliable
+        # id to pass. Skip-OK rather than guess a wrong key.
+        record(
+            "get_cached_search_results",
+            True,
+            "skipped — needs a prior search-execution id (OK)",
+        )
+
+        # ---- Policy device-targeting ----
+        log.info(f"\n{BOLD}Phase 4: Policy device-targeting{RESET}")
+
+        # 79. preview_policy_device_filters
+        resp = await _safe_call(session, "preview_policy_device_filters", {"limit": 2})
+        record("preview_policy_device_filters", resp is not None, _data_keys(resp))
+
+        # 80. list_devices_for_policies (needs a policy uuid)
+        if policy_uuid:
+            resp = await _safe_call(
+                session, "list_devices_for_policies", {"policies": [policy_uuid]}
+            )
+            record("list_devices_for_policies", resp is not None, _count_or_err(resp))
+        else:
+            record("list_devices_for_policies", True, "skipped — no policy uuid (OK)")
+
+        # 81. policy_execution_counts
+        resp = await _safe_call(session, "policy_execution_counts", {})
+        record("policy_execution_counts", resp is not None, _data_keys(resp))
+
+        # 82. policy_run_detail_v2 (needs policy_uuid + exec_token)
+        if policy_uuid and exec_token:
+            resp = await _safe_call(
+                session,
+                "policy_run_detail_v2",
+                {"policy_uuid": policy_uuid, "exec_token": exec_token, "limit": 2},
+            )
+            record("policy_run_detail_v2", resp is not None, _count_or_err(resp))
+        else:
+            record(
+                "policy_run_detail_v2",
+                True,
+                f"skipped — policy_uuid={policy_uuid}, exec_token={exec_token} (OK)",
+            )
+
+        # ---- Vuln Sync action-set detail (need an action set to exist) ----
+        log.info(f"\n{BOLD}Phase 4: Vuln Sync action-set detail{RESET}")
+        resp = await _safe_call(session, "list_remediation_action_sets", {})
+        action_sets = _extract_list(resp.get("data")) if resp else []
+        action_set_id = _extract_id(action_sets[0], "id", "action_set_id") if action_sets else None
+
+        # 83. get_action_set_detail
+        if action_set_id:
+            resp = await _safe_call(
+                session, "get_action_set_detail", {"action_set_id": action_set_id}
+            )
+            record("get_action_set_detail", resp is not None, _data_keys(resp))
+        else:
+            record("get_action_set_detail", True, "skipped — no action sets (OK)")
+
+        # 84. get_action_set_issues
+        if action_set_id:
+            resp = await _safe_call(
+                session, "get_action_set_issues", {"action_set_id": action_set_id}
+            )
+            record("get_action_set_issues", resp is not None, _count_or_err(resp))
+        else:
+            record("get_action_set_issues", True, "skipped — no action sets (OK)")
+
+        # 85. get_action_set_solutions
+        if action_set_id:
+            resp = await _safe_call(
+                session, "get_action_set_solutions", {"action_set_id": action_set_id}
+            )
+            record("get_action_set_solutions", resp is not None, _count_or_err(resp))
+        else:
+            record("get_action_set_solutions", True, "skipped — no action sets (OK)")
+
+        # ---- Other detail-by-id reads ----
+        log.info(f"\n{BOLD}Phase 4: Misc detail-by-id{RESET}")
+
+        # 86. get_data_extract (needs an extract id)
+        resp = await _safe_call(session, "list_data_extracts", {})
+        extracts = _extract_list(resp.get("data")) if resp else []
+        extract_id = _extract_id(extracts[0], "id", "extract_id") if extracts else None
+        if extract_id:
+            resp = await _safe_call(session, "get_data_extract", {"extract_id": extract_id})
+            record("get_data_extract", resp is not None, f"id={extract_id}")
+        else:
+            record("get_data_extract", True, "skipped — no data extracts (OK)")
+
+        # 87. get_webhook (needs a webhook id)
+        resp = await _safe_call(session, "list_webhooks", {})
+        webhooks = _extract_list(resp.get("data")) if resp else []
+        webhook_id = None
+        if webhooks:
+            webhook_id = webhooks[0].get("id") or webhooks[0].get("webhook_id")
+        if webhook_id:
+            resp = await _safe_call(session, "get_webhook", {"webhook_id": webhook_id})
+            record("get_webhook", resp is not None, f"id={webhook_id}")
+        else:
+            record("get_webhook", True, "skipped — no webhooks in org (OK)")
+
+        # ---- Splashtop read-only status ----
+        log.info(f"\n{BOLD}Phase 4: Splashtop status (read-only){RESET}")
+
+        # 88. splashtop_device_status
+        if device_uuid:
+            resp = await _safe_call(
+                session, "splashtop_device_status", {"device_uuid": device_uuid}
+            )
+            record("splashtop_device_status", resp is not None, _data_keys(resp))
+        else:
+            record("splashtop_device_status", True, "skipped — no device uuid (OK)")
+
+        # 89. splashtop_session_status
+        if device_uuid:
+            resp = await _safe_call(
+                session, "splashtop_session_status", {"device_uuid": device_uuid}
+            )
+            record("splashtop_session_status", resp is not None, _data_keys(resp))
+        else:
+            record("splashtop_session_status", True, "skipped — no device uuid (OK)")
+
+        # 90. splashtop_get_attended_access
+        if device_uuid:
+            resp = await _safe_call(
+                session, "splashtop_get_attended_access", {"device_uuid": device_uuid}
+            )
+            record("splashtop_get_attended_access", resp is not None, _data_keys(resp))
+        else:
+            record("splashtop_get_attended_access", True, "skipped — no device uuid (OK)")
+
+        # ---- #111 update_device (safe no-op write) ----
+        log.info(f"\n{BOLD}Phase 4: update_device (#111, no-op write){RESET}")
+
+        # 91. update_device — re-apply the device's CURRENT custom_name so the
+        # write is a genuine no-op (no state change). Skip-OK if the device has
+        # no custom_name to echo back, to avoid mutating live state.
+        current_name = None
+        if device_id:
+            detail = await _safe_call(session, "device_detail", {"device_id": device_id})
+            if detail and isinstance(detail.get("data"), dict):
+                current_name = detail["data"].get("custom_name")
+        if device_id and current_name:
+            resp = await _safe_call(
+                session,
+                "update_device",
+                {
+                    "device_id": device_id,
+                    "custom_name": current_name,
+                    "request_id": f"smoke-{uuid.uuid4()}",
+                },
+            )
+            record("update_device (no-op)", resp is not None, f"custom_name={current_name!r}")
+        else:
+            record(
+                "update_device (no-op)",
+                True,
+                "skipped — no device custom_name to echo (avoids live mutation) (OK)",
             )
 
 

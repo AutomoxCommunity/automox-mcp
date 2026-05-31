@@ -78,6 +78,21 @@ def is_remediation_allowed() -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def is_remote_control_allowed() -> bool:
+    """Return True when fleet-scale remote-control actions are explicitly enabled.
+
+    Gated by ``AUTOMOX_MCP_ALLOW_REMOTE_CONTROL`` (default off). Controls the
+    ``splashtop_bulk_install_uninstall`` tool, which installs/uninstalls the
+    Splashtop RMM client across an entire server group in one call — a
+    fleet-scale change that per-call confirmation cannot meaningfully vet, so it
+    is opt-in even when write mode is enabled. Single-device Splashtop actions
+    (install/uninstall/force-disconnect one device) remain confirmation-gated
+    only, not env-gated.
+    """
+    value = os.environ.get("AUTOMOX_MCP_ALLOW_REMOTE_CONTROL", "")
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def get_tool_prefix() -> str:
     """Return the configured tool name prefix, or empty string if none."""
     return os.environ.get("AUTOMOX_MCP_TOOL_PREFIX", "").strip()

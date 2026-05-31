@@ -3,7 +3,10 @@
 Exposes the ten ``/remotecontrol-st/...`` endpoints Automox shipped on
 2026-01-14. Read-only tools (device status, session status, attended
 access lookup) are always registered; write tools are gated by
-``read_only=False`` and carry ``destructiveHint: true``.
+``read_only=False`` and carry ``destructiveHint: true``. The fleet-scale
+``splashtop_bulk_install_uninstall`` is additionally env-gated behind
+``AUTOMOX_MCP_ALLOW_REMOTE_CONTROL`` (default off): one call touches an
+entire server group, a blast radius per-call confirmation cannot vet.
 
 Why initiate_connection isn't gated more strictly: the API only returns
 a ``splashtop-sos://...`` deeplink. The actual session does not start
@@ -37,6 +40,7 @@ from ..schemas import (
 from ..utils.tooling import (
     call_tool_workflow,
     check_idempotency,
+    is_remote_control_allowed,
     maybe_format_markdown,
     release_idempotency,
     store_idempotency,
@@ -207,44 +211,52 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             await store_idempotency(request_id, "splashtop_install", result)
             return result
 
-        @server.tool(
-            name="splashtop_bulk_install_uninstall",
-            description=(
-                "Asynchronously install or uninstall the Splashtop RMM client "
-                "across a server group. Returns 200 when the operation is queued "
-                "(not when complete)."
-            ),
-            annotations={
-                "readOnlyHint": False,
-                "destructiveHint": True,
-                "idempotentHint": False,
-                "openWorldHint": True,
-            },
-        )
-        async def splashtop_bulk_install_uninstall(
-            action: str,
-            server_group_id: int | None = None,
-            request_id: str | None = None,
-        ) -> dict[str, Any]:
-            cached = await check_idempotency(request_id, "splashtop_bulk_install_uninstall")
-            if cached is not None:
-                return cached
+        # Fleet-scale remote-control execution is opt-in beyond write mode: a
+        # single call installs/uninstalls the Splashtop client across an entire
+        # server group, a blast radius per-call confirmation cannot meaningfully
+        # vet. Gated by AUTOMOX_MCP_ALLOW_REMOTE_CONTROL. Single-device Splashtop
+        # actions stay confirmation-gated only.
+        if is_remote_control_allowed():
 
-            params: dict[str, Any] = {"action": action}
-            if server_group_id is not None:
-                params["server_group_id"] = server_group_id
-            try:
-                result = await call_tool_workflow(
-                    client,
-                    _bulk_install_uninstall,
-                    params,
-                    params_model=SplashtopBulkActionParams,
-                )
-            except BaseException:
-                await release_idempotency(request_id, "splashtop_bulk_install_uninstall")
-                raise
-            await store_idempotency(request_id, "splashtop_bulk_install_uninstall", result)
-            return result
+            @server.tool(
+                name="splashtop_bulk_install_uninstall",
+                description=(
+                    "Asynchronously install or uninstall the Splashtop RMM client "
+                    "across an entire server group in one call. Returns 200 when the "
+                    "operation is queued (not when complete). Requires "
+                    "AUTOMOX_MCP_ALLOW_REMOTE_CONTROL=true."
+                ),
+                annotations={
+                    "readOnlyHint": False,
+                    "destructiveHint": True,
+                    "idempotentHint": False,
+                    "openWorldHint": True,
+                },
+            )
+            async def splashtop_bulk_install_uninstall(
+                action: str,
+                server_group_id: int | None = None,
+                request_id: str | None = None,
+            ) -> dict[str, Any]:
+                cached = await check_idempotency(request_id, "splashtop_bulk_install_uninstall")
+                if cached is not None:
+                    return cached
+
+                params: dict[str, Any] = {"action": action}
+                if server_group_id is not None:
+                    params["server_group_id"] = server_group_id
+                try:
+                    result = await call_tool_workflow(
+                        client,
+                        _bulk_install_uninstall,
+                        params,
+                        params_model=SplashtopBulkActionParams,
+                    )
+                except BaseException:
+                    await release_idempotency(request_id, "splashtop_bulk_install_uninstall")
+                    raise
+                await store_idempotency(request_id, "splashtop_bulk_install_uninstall", result)
+                return result
 
         @server.tool(
             name="splashtop_initiate_connection",

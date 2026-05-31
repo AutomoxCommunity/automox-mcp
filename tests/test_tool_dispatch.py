@@ -1741,6 +1741,7 @@ class TestSplashtopToolsDispatch:
             return _success()
 
         monkeypatch.setattr(splashtop_tools, "_bulk_install_uninstall", fake)
+        monkeypatch.setenv("AUTOMOX_MCP_ALLOW_REMOTE_CONTROL", "true")
 
         server = StubServer()
         splashtop_tools.register(server, read_only=False, client=FakeClient())
@@ -1938,6 +1939,8 @@ class TestSplashtopIdempotencyAndExceptionPaths:
 
         monkeypatch.setattr(splashtop_tools, "check_idempotency", fake_check)
         monkeypatch.setattr(splashtop_tools, wf_attr, fake_wf)
+        # Enable the gated bulk tool so the parametrized bulk case registers.
+        monkeypatch.setenv("AUTOMOX_MCP_ALLOW_REMOTE_CONTROL", "true")
 
         server = StubServer()
         splashtop_tools.register(server, read_only=False, client=FakeClient())
@@ -1965,6 +1968,8 @@ class TestSplashtopIdempotencyAndExceptionPaths:
 
         monkeypatch.setattr(splashtop_tools, "release_idempotency", fake_release)
         monkeypatch.setattr(splashtop_tools, wf_attr, fake_wf)
+        # Enable the gated bulk tool so the parametrized bulk case registers.
+        monkeypatch.setenv("AUTOMOX_MCP_ALLOW_REMOTE_CONTROL", "true")
 
         server = StubServer()
         splashtop_tools.register(server, read_only=False, client=FakeClient())

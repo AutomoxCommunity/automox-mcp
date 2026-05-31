@@ -166,6 +166,34 @@ def test_tool_reference_documents_exactly_registered_tools(
 
 
 # ---------------------------------------------------------------------------
+# discover_capabilities catalog (meta_tools._DOMAIN_CATALOG)
+# ---------------------------------------------------------------------------
+
+# `discover_capabilities` is intentionally absent from every domain — you can't
+# discover the discovery tool through itself. Every *other* registered tool must
+# appear, or the model-facing capability directory silently drifts from reality.
+_CATALOG_EXCLUDED = {"discover_capabilities"}
+
+
+def test_discover_catalog_matches_registered(monkeypatch: pytest.MonkeyPatch) -> None:
+    from automox_mcp.tools.meta_tools import _DOMAIN_CATALOG
+
+    registered = _full_tool_names(monkeypatch)
+    catalog = {name for tools in _DOMAIN_CATALOG.values() for name, _ in tools}
+
+    # No phantom entries: every catalogued name must be a real registered tool.
+    assert catalog - registered == set(), (
+        f"discover_capabilities catalog lists unregistered tools: {sorted(catalog - registered)}"
+    )
+    # Completeness: every registered tool except the discovery meta-tool must be
+    # discoverable through the catalog.
+    missing = (registered - catalog) - _CATALOG_EXCLUDED
+    assert registered - catalog == _CATALOG_EXCLUDED, (
+        f"registered tools missing from the discover_capabilities catalog: {sorted(missing)}"
+    )
+
+
+# ---------------------------------------------------------------------------
 # README.md
 # ---------------------------------------------------------------------------
 

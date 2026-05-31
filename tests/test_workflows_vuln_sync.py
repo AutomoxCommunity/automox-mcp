@@ -292,9 +292,7 @@ def test_apply_remediation_tool_gated_by_env(monkeypatch) -> None:
 @pytest.mark.asyncio
 async def test_delete_action_set_calls_endpoint() -> None:
     client = StubClient()
-    result = await delete_action_set(
-        cast(AutomoxClient, client), org_id=42, action_set_id=7
-    )
+    result = await delete_action_set(cast(AutomoxClient, client), org_id=42, action_set_id=7)
     assert ("DELETE", "/orgs/42/remediations/action-sets/7", None) in client.calls
     assert result["data"] == {"action_set_id": 7, "deleted": True}
     assert result["metadata"]["org_id"] == 42

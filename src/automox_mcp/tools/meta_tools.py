@@ -158,7 +158,11 @@ _DOMAIN_CATALOG: dict[str, list[tuple[str, str]]] = {
         ("splashtop_session_status", "Active Splashtop sessions and capacity for a device"),
         ("splashtop_get_attended_access", "Current attended-access setting for a device"),
         ("splashtop_install", "Install the Splashtop RMM client on a device"),
-        ("splashtop_bulk_install_uninstall", "Bulk install/uninstall across a server group"),
+        (
+            "splashtop_bulk_install_uninstall",
+            "Bulk install/uninstall across a server group "
+            "(requires AUTOMOX_MCP_ALLOW_REMOTE_CONTROL)",
+        ),
         ("splashtop_initiate_connection", "Generate a splashtop-sos:// deeplink for an operator"),
         ("splashtop_force_disconnect", "Force-disconnect all active sessions on a device"),
         ("splashtop_set_attended_access", "Set the end-user-consent requirement for a device"),

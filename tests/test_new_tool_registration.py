@@ -125,7 +125,6 @@ def test_splashtop_tools_register_with_writes() -> None:
     tool_names = automox_mcp.tools._get_tool_names(server)
     expected = {
         "splashtop_install",
-        "splashtop_bulk_install_uninstall",
         "splashtop_initiate_connection",
         "splashtop_force_disconnect",
         "splashtop_set_attended_access",
@@ -133,6 +132,20 @@ def test_splashtop_tools_register_with_writes() -> None:
         "splashtop_uninstall",
     }
     assert expected.issubset(tool_names)
+    # The fleet-scale bulk tool is gated separately (AUTOMOX_MCP_ALLOW_REMOTE_CONTROL)
+    # and must NOT register on write mode alone.
+    assert "splashtop_bulk_install_uninstall" not in tool_names
+
+
+def test_splashtop_bulk_gated_by_remote_control_flag(monkeypatch) -> None:
+    # Off by default even in write mode.
+    server = _make_server_with_module("splashtop_tools", has_writes=True)
+    assert "splashtop_bulk_install_uninstall" not in automox_mcp.tools._get_tool_names(server)
+
+    # Registers only when AUTOMOX_MCP_ALLOW_REMOTE_CONTROL is enabled.
+    monkeypatch.setenv("AUTOMOX_MCP_ALLOW_REMOTE_CONTROL", "true")
+    server = _make_server_with_module("splashtop_tools", has_writes=True)
+    assert "splashtop_bulk_install_uninstall" in automox_mcp.tools._get_tool_names(server)
 
 
 def test_vuln_sync_tools_register_read_only() -> None:

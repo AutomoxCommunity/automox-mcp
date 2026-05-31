@@ -105,6 +105,7 @@ For the full list of tools, parameters, and MCP resources, see the **[Tool Refer
 | `AUTOMOX_ORG_ID` | Recommended | — | Numeric organization ID (required by most tools) |
 | `AUTOMOX_MCP_READ_ONLY` | No | `false` | Disable all write operations (84 of 127 tools remain) |
 | `AUTOMOX_MCP_ALLOW_REMEDIATION` | No | `false` | Opt in to the `apply_remediation_actions` tool, which patches/runs worklets on endpoints immediately. Off by default even in write mode. |
+| `AUTOMOX_MCP_ALLOW_REMOTE_CONTROL` | No | `false` | Opt in to the `splashtop_bulk_install_uninstall` tool, which installs/uninstalls the Splashtop client across an entire server group in one call. Off by default even in write mode. |
 | `AUTOMOX_MCP_MODULES` | No | all | Comma-separated list of modules to load (see below) |
 | `AUTOMOX_MCP_TOKEN_BUDGET` | No | `4000` | Max estimated tokens per response before truncation |
 | `AUTOMOX_MCP_SANITIZE_RESPONSES` | No | `true` | Sanitize API data to mitigate prompt injection |
@@ -202,6 +203,14 @@ The Automox MCP server is designed for enterprise deployment with defense-in-dep
 - **Remote bind protection** — non-loopback HTTP/SSE binding requires explicit `--allow-remote-bind` opt-in
 - **MCP Tool Annotations** on all 127 tools — `readOnlyHint`, `destructiveHint`, `idempotentHint`, and `openWorldHint` per the MCP Protocol specification, enabling client-side confirmation dialogs and safety guardrails
 - **60 security hardening items** (V-001 through V-181, S-001 through S-006) documented in CHANGELOG and SECURITY.md
+
+**Capability model.** What the server exposes follows three categorical rules:
+
+- **Secrets are never handled** — the server never returns secret material and never lets the model set it. Credentials enter only via environment/config; decrypt endpoints are not wrapped, password-setting is excluded, and secret fields are redacted from every projection.
+- **Destructive operations are two-tier.** Single-target, recoverable actions are **ask-first** (`destructiveHint: true`, surfaced as a host confirmation dialog, disabled entirely by read-only mode). Operations where per-call confirmation can't protect you — fleet-scale, self-lockout, or arbitrary model-authored code execution — are **gated** behind explicit, default-off env flags (`AUTOMOX_MCP_ALLOW_REMEDIATION`, `AUTOMOX_MCP_ALLOW_REMOTE_CONTROL`).
+- **A few endpoints are intentionally omitted** (e.g. device deletion) on the same safety grounds.
+
+The full coverage map, the gating principle, and every intentional omission are documented in [API Coverage & Intentional Omissions](docs/api-coverage.md).
 
 For vulnerability reporting and the full threat model, see [SECURITY.md](SECURITY.md).
 For deployment hardening (containers, Kubernetes, MCP gateways, TLS, authentication), see the [Deployment Security Guide](docs/deployment-security.md).

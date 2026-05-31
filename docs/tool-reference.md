@@ -205,7 +205,7 @@ Manage maintenance/exclusion windows that prevent policy execution during schedu
 
 ## Splashtop Remote Control (10 tools)
 
-Wraps the ten `/remotecontrol-st/...` endpoints Automox shipped on 2026-01-14 (Splashtop partnership GA). Read-only tools (`splashtop_device_status`, `splashtop_session_status`, `splashtop_get_attended_access`) are always registered; write tools are gated by `read_only=False` and carry `destructiveHint: true`.
+Wraps the ten `/remotecontrol-st/...` endpoints Automox shipped on 2026-01-14 (Splashtop partnership GA). Read-only tools (`splashtop_device_status`, `splashtop_session_status`, `splashtop_get_attended_access`) are always registered; write tools are gated by `read_only=False` and carry `destructiveHint: true`. The fleet-scale `splashtop_bulk_install_uninstall` is additionally gated behind `AUTOMOX_MCP_ALLOW_REMOTE_CONTROL` (see [API Coverage & Omissions](api-coverage.md)).
 
 Tenants without an active Remote Control subscription (Core bundled with Automate Enterprise, or Resolve as a paid add-on) will receive 4XX errors from the upstream — tools surface these as standard `AutomoxApiError`. Module loads only when `splashtop` is included in `AUTOMOX_MCP_MODULES` (or no module filter is set).
 
@@ -213,7 +213,7 @@ Tenants without an active Remote Control subscription (Core bundled with Automat
 - **`splashtop_session_status`** - Active session count, max sessions, and whether a new session can be started.
 - **`splashtop_get_attended_access`** - Returns whether end-user consent is required before remote sessions can start.
 - **`splashtop_install`** *(write)* - Install the Splashtop RMM client on a device (asynchronous). `request_permission` controls install-time consent (`not_needed` or `ask_reject_on_timeout`), distinct from per-session attended access.
-- **`splashtop_bulk_install_uninstall`** *(write)* - Bulk install or uninstall across a server group. Returns 200 when queued, not when complete.
+- **`splashtop_bulk_install_uninstall`** *(write, gated)* - Bulk install or uninstall across a server group. Returns 200 when queued, not when complete. Fleet-scale, so **registered only when `AUTOMOX_MCP_ALLOW_REMOTE_CONTROL=true`** and write mode is enabled.
 - **`splashtop_initiate_connection`** *(write)* - Generate a `splashtop-sos://...` deeplink for an operator. The API does NOT start the session — the operator opens the URL in their local Splashtop RMM App, and end-user consent still applies when attended access is enabled.
 - **`splashtop_force_disconnect`** *(write)* - Force-disconnect all active Splashtop sessions on a device. Interrupts any in-progress operator work.
 - **`splashtop_set_attended_access`** *(write)* - Enable or disable the end-user-consent requirement for a device. Setting to `false` allows unattended sessions — review your organization's policy.

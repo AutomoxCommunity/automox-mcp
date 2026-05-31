@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-05-31
+
+Establishes and documents the server's capability model: a categorical policy for what the MCP server exposes, omits, and gates.
+
+### Added
+
+- **`docs/api-coverage.md` — coverage map and capability policy.** Documents, against the `2026-05-28` Console API bundle (115 documented operations), every intentional omission and the destructive-operation gating principle. README gains a **Capability model** section summarizing it.
+- **`AUTOMOX_MCP_ALLOW_REMOTE_CONTROL` env gate.** New default-off flag controlling the fleet-scale `splashtop_bulk_install_uninstall` tool, parallel to `AUTOMOX_MCP_ALLOW_REMEDIATION`.
+
+### Changed
+
+- **`splashtop_bulk_install_uninstall` is now gated (behavioral change).** It installs/uninstalls the Splashtop client across an entire server group in one call — a fleet-scale blast radius per-call confirmation cannot meaningfully vet — so it now requires `AUTOMOX_MCP_ALLOW_REMOTE_CONTROL=true` in addition to write mode. Previously it registered on write mode alone. **No grandfathering:** the destructive-gating standard is applied uniformly. Single-device Splashtop actions (`install`/`uninstall`/`force_disconnect`) are unaffected — they remain confirmation-gated (`destructiveHint`) only, since they are single-target and recoverable.
+
+### Policy (documented, no code change)
+
+- **Secrets are never handled** — no decrypt tools, no password-setting, secret fields redacted. `PUT /users/{id}` (full-replace, accepts `password`) stays omitted; the `PATCH` variant (`update_user`) is the wrapped one.
+- **Destructive operations are two-tier** — *ask-first* (`destructiveHint`, host confirmation) for single-target/recoverable actions; *gated* (default-off env flag) only when confirmation can't protect the operator: fleet-scale **(A)**, self-lockout **(B)**, or arbitrary model-authored code execution **(C)**.
+- **`DELETE /servers/{id}` (device deletion) intentionally omitted** — self-lockout + no create-counterpart. Build backlog (`PUT /servers/{id}`, action-set deletes) tracked in #111.
+
 ## [1.2.1] - 2026-05-30
 
 Directory-submission preparation for the Anthropic Connectors Directory. No new tools, endpoints, or behavioral changes — additive metadata, documentation accuracy, and tool-description clarifications.

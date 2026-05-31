@@ -113,9 +113,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     @server.tool(
         name="advanced_device_search",
         description=(
-            "Execute an advanced device search using structured query language. "
-            "Enables complex queries like 'find all Windows devices not seen in 30 days' "
-            "using field-based filtering. Pass the query as a dict with filter conditions."
+            "Execute an advanced device search using the Automox Advanced Device "
+            "Search API's structured query language. Enables complex queries like "
+            "'find all Windows devices not seen in 30 days' using field-based "
+            "filtering. Pass the query as a dict with filter conditions; use "
+            "`get_device_metadata_fields` and `device_search_typeahead` to discover "
+            "valid fields and values."
         ),
         annotations={
             "readOnlyHint": True,
@@ -411,8 +414,9 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         @server.tool(
             name="create_saved_search",
             description=(
-                "Create a new saved device search. Provide a name, a "
-                "structured query dict, and an optional description."
+                "Create a new saved device search. Provide a name, a structured "
+                "query dict (Automox Advanced Device Search API query syntax — see "
+                "`advanced_device_search`), and an optional description."
             ),
             annotations={
                 "readOnlyHint": False,
@@ -451,7 +455,9 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             name="update_saved_search",
             description=(
                 "Update an existing saved device search (partial update). "
-                "Provide at least one of name, query, or description."
+                "Provide at least one of name, query, or description. The query "
+                "dict uses the Automox Advanced Device Search API query syntax "
+                "(see `advanced_device_search`)."
             ),
             annotations={
                 "readOnlyHint": False,

@@ -6,11 +6,24 @@ import importlib
 import logging
 
 from fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 
 from ..client import AutomoxClient
 from ..utils.tooling import get_enabled_modules, get_tool_prefix, is_read_only
 
 logger = logging.getLogger(__name__)
+
+# Tokens that should not be naively title-cased when deriving a human-readable
+# tool title from its snake_case name.
+_TITLE_ACRONYMS = {
+    "api": "API",
+    "uuid": "UUID",
+    "ocsf": "OCSF",
+    "rbac": "RBAC",
+    "v2": "v2",
+}
+# Joiner words kept lowercase when not the first word of the title.
+_TITLE_LOWERCASE = {"to", "for", "by", "from", "of"}
 
 # Map of module name -> (register_function_module, contains_write_tools)
 _MODULE_REGISTRY: dict[str, tuple[str, bool]] = {
@@ -66,10 +79,55 @@ def register_tools(server: FastMCP, *, client: AutomoxClient) -> None:
         except Exception:
             logger.exception("Failed to register tool module %s", tool_module_name)
 
+    # Populate human-readable titles before any prefixing (titles derive from the
+    # unprefixed name).
+    _apply_tool_titles(server)
+
     # Apply tool name prefix if configured
     prefix = get_tool_prefix()
     if prefix:
         _apply_tool_prefix(server, prefix)
+
+
+def _humanize_tool_name(name: str) -> str:
+    """Derive a human-readable title from a snake_case tool name.
+
+    ``list_account_rbac_roles`` -> ``List Account RBAC Roles``;
+    ``get_device_by_uuid`` -> ``Get Device by UUID``.
+    """
+    words = name.split("_")
+    titled: list[str] = []
+    for i, word in enumerate(words):
+        if word in _TITLE_ACRONYMS:
+            titled.append(_TITLE_ACRONYMS[word])
+        elif i != 0 and word in _TITLE_LOWERCASE:
+            titled.append(word)
+        else:
+            titled.append(word.capitalize())
+    return " ".join(titled)
+
+
+def _apply_tool_titles(server: FastMCP) -> None:
+    """Populate ``annotations.title`` for every tool that lacks one.
+
+    Titles are derived from the tool name so they cannot drift from a separate
+    source of truth. An explicitly-set title is preserved. Applied as a
+    post-registration pass (mirroring ``_apply_tool_prefix``) so it covers every
+    tool module without touching each ``@server.tool`` registration.
+    """
+    lp = getattr(server, "local_provider", None)
+    if lp is None:  # lightweight test stubs without FastMCP internals
+        return
+    for key, comp in list(lp._components.items()):
+        if not key.startswith("tool:"):
+            continue
+        title = _humanize_tool_name(comp.name)
+        ann = comp.annotations
+        if ann is None:
+            renamed = comp.model_copy(update={"annotations": ToolAnnotations(title=title)})
+            lp._components[key] = renamed
+        elif not ann.title:
+            ann.title = title
 
 
 def _get_tool_names(server: FastMCP) -> set[str]:

@@ -6,6 +6,8 @@ The Automox MCP server is an open-source, locally executed Model Context Protoco
 
 This document describes how data is handled when the server is run as distributed (PyPI package, Docker image, or MCPB bundle published by Automox). Self-hosted deployments may differ; this policy applies to the upstream artifact only.
 
+This policy covers **only the local MCP server**. Data transmitted to, and stored within, the Automox platform (`console.automox.com`) — including device, policy, and account data the server reads or writes on your behalf — is governed by the **[Automox Privacy Policy](https://www.automox.com/legal/privacy-policy)**. The "does not collect / store / share" statements below describe the behavior of the local proxy, not the data-handling practices of the Automox platform it connects to.
+
 ## Data collection
 
 The Automox MCP server does not collect, store, or transmit any user data beyond what is required to fulfill API requests to the Automox platform.

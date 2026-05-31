@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-05-30
+
+Directory-submission preparation for the Anthropic Connectors Directory. No new tools, endpoints, or behavioral changes — additive metadata, documentation accuracy, and tool-description clarifications.
+
+### Added
+
+- **Privacy policy declaration for directory submission.** Added the `privacy_policies` array to `mcpb/manifest.json` (pointing at the public `PRIVACY.md` on `main`), satisfying the directory's requirement for an HTTPS-hosted policy declared in both README and manifest. Added a scope/deference clause to `PRIVACY.md` clarifying that it covers only the local MCP proxy and that data within the Automox platform is governed by the [Automox Privacy Policy](https://www.automox.com/legal/privacy-policy).
+- **Human-readable `title` on every tool annotation.** All 127 tools now expose an MCP `ToolAnnotations.title` (e.g. `list_devices` → "List Devices"), derived from the tool name by a post-registration pass so titles cannot drift from a separate source. Improves host-client UI display and satisfies the directory's tool-annotation guidance.
+
+### Fixed
+
+- **Tool-count consistency across docs.** Reconciled stale read/write counts to the true split — **127 tools = 84 read / 43 write** — in `mcpb/manifest.json` (read-only config description), `README.md`, and `docs/deployment-security.md`. The latter also previously characterized all write tools as `destructiveHint: true`; corrected to `readOnlyHint: false` (the actual invariant — 42 of the 43 are destructive; `refresh_saved_search_cache` is an idempotent non-destructive write).
+- **API references on freeform-query tools.** `advanced_device_search`, `create_saved_search`, and `update_saved_search` now name the Automox Advanced Device Search API in their descriptions, per the directory's requirement that caller-constructed-query tools reference the target API.
+
 ## [1.2.0] - 2026-05-30
 
 ### Fixed

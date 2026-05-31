@@ -39,6 +39,7 @@ Coverage sits near the 90% floor — new branches (e.g. idempotency cache-hit / 
 
 ## Release safety
 
-- **Never push a tag without an explicit go-ahead.** A `vX.Y.Z` tag push triggers irreversible PyPI / registry / MCPB publishing. Releasing = merge PR → tag-push (never the GitHub "Publish release" UI).
+- **Never push a tag without an explicit go-ahead.** A `vX.Y.Z` tag push starts the publish run for irreversible PyPI / registry / MCPB publishing. Releasing = merge PR → tag-push (never the GitHub "Publish release" UI).
+- **The publish run pauses for manual approval** — the `release` GitHub environment requires a reviewer (`ax-jkikta`). A tag push that "hangs" is waiting on that approval click, not broken; nothing publishes until it's approved. After publish, the `verify-publish` job installs the new version from PyPI and boots it.
 - Versions must match across `pyproject.toml`, `server.json` (incl. `packages[].version`), `mcpb/manifest.json` — the `manifests` CI job enforces this.
 - Capability/destructive-gating policy lives in `docs/api-coverage.md`; read it before adding any write/delete tool to pick the right safety tier.

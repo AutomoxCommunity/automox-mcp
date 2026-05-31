@@ -26,6 +26,7 @@ from automox_mcp.workflows.devices import (
     list_devices_needing_attention,
     search_devices,
     summarize_device_health,
+    update_device,
 )
 
 # ---------------------------------------------------------------------------
@@ -1584,3 +1585,46 @@ async def test_batch_update_devices_posts_devices_and_actions() -> None:
     assert method == "POST"
     assert path == "/servers/batch"
     assert body == {"devices": [1, 2, 3], "actions": actions}
+
+
+# ---------------------------------------------------------------------------
+# update_device (#111 single-device PUT /servers/{id})
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_update_device_sends_only_supplied_fields() -> None:
+    client = StubClient(put_responses={"/servers/99": [{"id": 99}]})
+    client.org_id = 555
+    result = await update_device(
+        cast(AutomoxClient, client),
+        org_id=555,
+        device_id=99,
+        custom_name="web-01",
+        server_group_id=7,
+    )
+    method, path, body = client.calls[0]
+    assert method == "PUT"
+    assert path == "/servers/99"
+    # Omitted fields (exception/tags/ip_addrs) must not be sent.
+    assert body == {"custom_name": "web-01", "server_group_id": 7}
+    assert result["data"]["device_id"] == 99
+    assert result["data"]["updated"] is True
+    assert result["data"]["updated_fields"] == ["custom_name", "server_group_id"]
+    assert result["metadata"]["org_id"] == 555
+
+
+@pytest.mark.asyncio
+async def test_update_device_sends_falsey_exception_flag() -> None:
+    client = StubClient(put_responses={"/servers/12": [{}]})
+    client.org_id = 42
+    await update_device(
+        cast(AutomoxClient, client),
+        org_id=42,
+        device_id=12,
+        exception=False,
+        tags=["a", "b"],
+    )
+    _method, _path, body = client.calls[0]
+    # exception=False is a meaningful value and must be sent, not dropped.
+    assert body == {"exception": False, "tags": ["a", "b"]}

@@ -154,12 +154,25 @@ def test_vuln_sync_tools_register_read_only() -> None:
     assert "list_remediation_action_sets" in tool_names
     assert "get_action_set_detail" in tool_names
     assert "upload_action_set" not in tool_names
+    # Ask-first deletes are writes — absent in read-only mode.
+    assert "delete_action_set" not in tool_names
+    assert "delete_action_sets_bulk" not in tool_names
 
 
 def test_vuln_sync_tools_register_with_writes() -> None:
     server = _make_server_with_module("vuln_sync_tools", has_writes=True)
     tool_names = automox_mcp.tools._get_tool_names(server)
     assert "upload_action_set" in tool_names
+    # Tier-1 ask-first deletes register on write mode (no env gate).
+    assert "delete_action_set" in tool_names
+    assert "delete_action_sets_bulk" in tool_names
+
+
+def test_device_tools_update_device_gated_by_write() -> None:
+    ro = _make_server_with_module("device_tools", has_writes=False)
+    assert "update_device" not in automox_mcp.tools._get_tool_names(ro)
+    rw = _make_server_with_module("device_tools", has_writes=True)
+    assert "update_device" in automox_mcp.tools._get_tool_names(rw)
 
 
 def test_account_tools_register_includes_api_keys() -> None:

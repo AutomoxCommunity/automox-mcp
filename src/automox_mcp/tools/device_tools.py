@@ -19,6 +19,7 @@ from ..schemas import (
     DeviceSearchParams,
     DevicesNeedingAttentionParams,
     IssueDeviceCommandParams,
+    UpdateDeviceParams,
 )
 from ..utils.tooling import (
     call_tool_workflow,
@@ -332,6 +333,57 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 await release_idempotency(request_id, "batch_update_devices")
                 raise
             await store_idempotency(request_id, "batch_update_devices", result)
+            return result
+
+        @server.tool(
+            name="update_device",
+            description=(
+                "Update a single device's mutable attributes: custom_name, "
+                "server_group_id, exception (policy-enforcement exclusion), tags, and "
+                "ip_addrs. Fills the single-device gap that batch_update_devices "
+                "(tags-only, bulk) does not cover — e.g. renaming a device or moving it "
+                "to a server group. Supply only the fields you want to change; at least "
+                "one is required."
+            ),
+            annotations={
+                "readOnlyHint": False,
+                "destructiveHint": False,
+                "idempotentHint": True,
+                "openWorldHint": True,
+            },
+        )
+        async def update_device(
+            device_id: int,
+            custom_name: str | None = None,
+            server_group_id: int | None = None,
+            exception: bool | None = None,
+            tags: list[str] | None = None,
+            ip_addrs: list[str] | None = None,
+            request_id: str | None = None,
+        ) -> dict[str, Any]:
+            cached = await check_idempotency(request_id, "update_device")
+            if cached is not None:
+                return cached
+
+            params = {
+                "device_id": device_id,
+                "custom_name": custom_name,
+                "server_group_id": server_group_id,
+                "exception": exception,
+                "tags": tags,
+                "ip_addrs": ip_addrs,
+            }
+            try:
+                result = await call_tool_workflow(
+                    client,
+                    workflows.update_device,
+                    params,
+                    params_model=UpdateDeviceParams,
+                )
+            except BaseException:
+                await release_idempotency(request_id, "update_device")
+                raise
+            await store_idempotency(request_id, "update_device", result)
             return result
 
 

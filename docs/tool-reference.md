@@ -1,6 +1,6 @@
 # Tool Reference
 
-Complete reference for all 127 tools, 6 workflow prompts, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
+Complete reference for all 130 tools, 6 workflow prompts, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
 
 > **Tip:** You don't need to memorize this. Call `discover_capabilities` from your AI assistant to get a live summary of available tools organized by domain.
 
@@ -31,7 +31,7 @@ Complete reference for all 127 tools, 6 workflow prompts, MCP resources, paramet
 
 ---
 
-## Device Management (9 tools)
+## Device Management (10 tools)
 
 - **`list_devices`** - Summarize device inventory and policy status across the organization. Returns each device's `uuid` (needed by policy windows tools). Includes unmanaged devices by default and supports `policy_status`/`managed` filters so you can zero in on, for example, non-compliant managed endpoints.
 - **`device_detail`** - Return curated device context (recent policy status, assignments, queued commands, key facts). Pass `include_raw_details=true` only when you explicitly need a sanitized slice of the raw Automox payload.
@@ -42,6 +42,7 @@ Complete reference for all 127 tools, 6 workflow prompts, MCP resources, paramet
 - **`get_device_inventory_categories`** - List available inventory categories for a device. Categories are dynamic per device.
 - **`execute_device_command`** - Issue an immediate command to a device (scan, patch_all, patch_specific, reboot).
 - **`batch_update_devices`** *(write)* - Apply bulk attribute actions to up to 500 devices at once (currently tag apply/remove, e.g. `{"attribute": "tags", "action": "apply", "value": ["env:prod"]}`).
+- **`update_device`** *(write)* - Update a single device's mutable attributes (`custom_name`, `server_group_id`, `exception`, `tags`, `ip_addrs`); supply at least one. Fills the single-device gap that `batch_update_devices` (tags-only, bulk) does not cover — e.g. renaming a device or moving it to a server group.
 
 ## Advanced Device Search (18 tools)
 
@@ -130,7 +131,7 @@ Richer policy execution reporting via the `/policy-history` API with UUID-based 
 - **`get_data_extract`** - Get details and download information for a specific data extract.
 - **`create_data_extract`** - Request a new data extract for bulk reporting. Returns the extract ID and initial status.
 
-## Vulnerability Sync (7 tools)
+## Vulnerability Sync (9 tools)
 
 Manage vulnerability remediation workflows via the Vuln Sync API. Supports CSV-based import from vulnerability scanners (Qualys, Tenable, etc.).
 
@@ -140,6 +141,8 @@ Manage vulnerability remediation workflows via the Vuln Sync API. Supports CSV-b
 - **`get_action_set_solutions`** - Get solutions for an action set. Shows recommended patches or configurations.
 - **`get_upload_formats`** - Get supported CSV upload formats for vulnerability remediation action sets.
 - **`upload_action_set`** *(write)* - Upload a CSV-based vulnerability remediation action set.
+- **`delete_action_set`** *(write)* - Delete a single remediation action set by ID. Console metadata, reconstructable via re-upload.
+- **`delete_action_sets_bulk`** *(write)* - Delete multiple action sets by ID (up to 100). Deletes each individually with per-ID results; a partial failure leaves earlier deletes applied.
 - **`apply_remediation_actions`** *(write, gated)* - Execute remediations now (`patch-now` / `patch-with-worklet`) on explicit devices for an action set. Immediately changes endpoint state (async, returns 202). **Registered only when `AUTOMOX_MCP_ALLOW_REMEDIATION=true`** and write mode is enabled.
 
 ## Compound Workflows (3 tools)

@@ -1283,3 +1283,54 @@ async def batch_update_devices(
         "data": data,
         "metadata": {"deprecated_endpoint": False, "org_id": resolved_org_id},
     }
+
+
+async def update_device(
+    client: AutomoxClient,
+    *,
+    org_id: int | None = None,
+    device_id: int,
+    custom_name: str | None = None,
+    server_group_id: int | None = None,
+    exception: bool | None = None,
+    tags: list[str] | None = None,
+    ip_addrs: list[str] | None = None,
+) -> dict[str, Any]:
+    """Update a single device's mutable attributes.
+
+    Wraps ``PUT /servers/{id}`` (``updateDevice``). Fills the single-device-update
+    gap that ``batch_update_devices`` (``POST /servers/batch``) does not cover:
+    that endpoint only applies/removes tags, so renaming a device, moving it to a
+    server group, or toggling its policy ``exception`` flag is otherwise
+    unreachable. Only the fields the caller supplies are sent; omitted fields are
+    left to the upstream endpoint's documented per-field update semantics. At
+    least one field is required (enforced by ``UpdateDeviceParams``).
+    """
+    resolved_org_id = require_org_id(client, org_id)
+
+    body: dict[str, Any] = {}
+    if custom_name is not None:
+        body["custom_name"] = custom_name
+    if server_group_id is not None:
+        body["server_group_id"] = server_group_id
+    if exception is not None:
+        body["exception"] = exception
+    if tags is not None:
+        body["tags"] = list(tags)
+    if ip_addrs is not None:
+        body["ip_addrs"] = list(ip_addrs)
+
+    await client.put(
+        f"/servers/{device_id}",
+        json_data=body,
+        params={"o": resolved_org_id},
+    )
+
+    return {
+        "data": {
+            "device_id": device_id,
+            "updated": True,
+            "updated_fields": sorted(body.keys()),
+        },
+        "metadata": {"deprecated_endpoint": False, "org_id": resolved_org_id},
+    }

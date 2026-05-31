@@ -15,6 +15,9 @@ Establishes and documents the server's capability model: a categorical policy fo
 
 - **`docs/api-coverage.md` — coverage map and capability policy.** Documents, against the `2026-05-28` Console API bundle (115 documented operations), every intentional omission and the destructive-operation gating principle. README gains a **Capability model** section summarizing it.
 - **`AUTOMOX_MCP_ALLOW_REMOTE_CONTROL` env gate.** New default-off flag controlling the fleet-scale `splashtop_bulk_install_uninstall` tool, parallel to `AUTOMOX_MCP_ALLOW_REMEDIATION`.
+- **`update_device` tool (#111).** Updates a single device's `custom_name`, `server_group_id`, `exception`, `tags`, or `ip_addrs` via `PUT /servers/{id}`. Fills the single-device-update gap that `batch_update_devices` (tags-only) leaves; not destructive, plain write (off under `read_only`).
+- **`delete_action_set` / `delete_action_sets_bulk` tools (#111).** Delete Vuln Sync action sets — Tier-1 ask-first (`destructiveHint`, reconstructable via re-upload). The bulk tool iterates the single-delete endpoint (the native bulk-delete body shape is undocumented; per-ID results, non-atomic) — see `docs/api-coverage.md`.
+- Tool count is now **130** (84 read / 46 write); read-only mode still exposes 84.
 
 ### Changed
 
@@ -24,7 +27,7 @@ Establishes and documents the server's capability model: a categorical policy fo
 
 - **Secrets are never handled** — no decrypt tools, no password-setting, secret fields redacted. `PUT /users/{id}` (full-replace, accepts `password`) stays omitted; the `PATCH` variant (`update_user`) is the wrapped one.
 - **Destructive operations are two-tier** — *ask-first* (`destructiveHint`, host confirmation) for single-target/recoverable actions; *gated* (default-off env flag) only when confirmation can't protect the operator: fleet-scale **(A)**, self-lockout **(B)**, or arbitrary model-authored code execution **(C)**.
-- **`DELETE /servers/{id}` (device deletion) intentionally omitted** — self-lockout + no create-counterpart. Build backlog (`PUT /servers/{id}`, action-set deletes) tracked in #111.
+- **`DELETE /servers/{id}` (device deletion) intentionally omitted** — self-lockout + no create-counterpart. The documented-surface build backlog (`PUT /servers/{id}`, action-set deletes) is now covered (#111); binary/multipart uploads remain tracked in #106.
 
 ## [1.2.1] - 2026-05-30
 

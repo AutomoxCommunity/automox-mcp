@@ -9,6 +9,8 @@ from fastmcp import FastMCP
 
 from ..client import AutomoxClient
 from ..schemas import (
+    DeleteActionSetParams,
+    DeleteActionSetsBulkParams,
     GetActionSetIssuesParams,
     GetActionSetParams,
     GetActionSetSolutionsParams,
@@ -27,6 +29,12 @@ from ..utils.tooling import (
 )
 from ..workflows.vuln_sync import (
     apply_remediation_actions as _apply_remediation_actions,
+)
+from ..workflows.vuln_sync import (
+    delete_action_set as _delete_action_set,
+)
+from ..workflows.vuln_sync import (
+    delete_action_sets_bulk as _delete_action_sets_bulk,
 )
 from ..workflows.vuln_sync import (
     get_action_set_detail as _get_action_set_detail,
@@ -199,6 +207,75 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 params_model=UploadActionSetParams,
             )
             await store_idempotency(request_id, "upload_action_set", result)
+            return result
+
+        @server.tool(
+            name="delete_action_set",
+            description=(
+                "Delete a single vulnerability remediation action set by ID. "
+                "Action sets are console metadata (not endpoint state) and are "
+                "reconstructable by re-uploading the source CSV."
+            ),
+            annotations={
+                "readOnlyHint": False,
+                "destructiveHint": True,
+                "idempotentHint": True,
+                "openWorldHint": True,
+            },
+        )
+        async def delete_action_set(
+            action_set_id: int,
+            request_id: str | None = None,
+        ) -> dict[str, Any]:
+            cached = await check_idempotency(request_id, "delete_action_set")
+            if cached is not None:
+                return cached
+            try:
+                result = await call_tool_workflow(
+                    client,
+                    _delete_action_set,
+                    {"action_set_id": action_set_id},
+                    params_model=DeleteActionSetParams,
+                )
+            except BaseException:
+                await release_idempotency(request_id, "delete_action_set")
+                raise
+            await store_idempotency(request_id, "delete_action_set", result)
+            return result
+
+        @server.tool(
+            name="delete_action_sets_bulk",
+            description=(
+                "Delete multiple vulnerability remediation action sets by ID (up to "
+                "100). Deletes each ID individually and reports per-ID results, so a "
+                "partial failure leaves earlier deletions applied. Action sets are "
+                "reconstructable by re-uploading the source CSV."
+            ),
+            annotations={
+                "readOnlyHint": False,
+                "destructiveHint": True,
+                "idempotentHint": True,
+                "openWorldHint": True,
+            },
+        )
+        async def delete_action_sets_bulk(
+            action_set_ids: list[int],
+            request_id: str | None = None,
+        ) -> dict[str, Any]:
+            cached = await check_idempotency(request_id, "delete_action_sets_bulk")
+            if cached is not None:
+                return cached
+            try:
+                result = await call_tool_workflow(
+                    client,
+                    _delete_action_sets_bulk,
+                    {"action_set_ids": action_set_ids},
+                    params_model=DeleteActionSetsBulkParams,
+                )
+            except BaseException:
+                await release_idempotency(request_id, "delete_action_sets_bulk")
+                raise
+            await store_idempotency(request_id, "delete_action_sets_bulk", result)
             return result
 
         # Remediation EXECUTION is opt-in beyond write mode: it immediately

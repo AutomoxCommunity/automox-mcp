@@ -4,7 +4,7 @@ This document records what the Automox MCP server deliberately does **not** expo
 
 Audited against the Automox Console API OpenAPI bundle (`ax-console-bundle.yaml`, version `2026-05-28`): **115 documented operations**. Coverage verified by registering the server and reading the live tool set, not by reading prose. Undocumented-but-wrapped paths (endpoints the live tenant serves that the spec omits) are tracked separately in [#95](https://github.com/AutomoxCommunity/automox-mcp/issues/95) and are **not** coverage gaps.
 
-The server exposes 127 tools (84 read / 43 write). Effectively every documented **read** operation is covered; the omissions below are all writes, deletes, or secret-exposing endpoints.
+The server exposes 130 tools (84 read / 46 write). Effectively every documented **read** operation is covered; the omissions below are all writes, deletes, or secret-exposing endpoints.
 
 ## Three categories
 
@@ -43,7 +43,7 @@ Most destructive operations **are** exposed; the server already ships create/upd
 
 Single-target, human-vettable, recoverable destructive or real-world actions. Each carries `readOnlyHint: false` and `destructiveHint: true`, so a compliant host surfaces a confirmation dialog. The human in the loop is genuinely sufficient.
 
-Examples: `delete_policy`, `delete_webhook`, `delete_server_group`, `delete_saved_search`, `delete_*_api_key`, `delete_policy_window`, `remove_user_from_account`, `execute_policy_now` (triggers a human-curated policy), `execute_device_command` (one device), `splashtop_install`/`uninstall`/`force_disconnect` (one device; `force_disconnect` is fully reversible — reconnect).
+Examples: `delete_policy`, `delete_webhook`, `delete_server_group`, `delete_saved_search`, `delete_*_api_key`, `delete_policy_window`, `delete_action_set`/`delete_action_sets_bulk` (reconstructable via re-upload), `remove_user_from_account`, `execute_policy_now` (triggers a human-curated policy), `execute_device_command` (one device), `splashtop_install`/`uninstall`/`force_disconnect` (one device; `force_disconnect` is fully reversible — reconnect).
 
 **Reversibility and disruption are handled here, not by gating.** A reboot is disruptive but recoverable and single-target → confirm, don't gate.
 
@@ -72,13 +72,17 @@ Note: *bulk alone is not a gate.* `batch_update_devices` is bulk but only applie
 
 ## 3. Build backlog
 
-Everything else uncovered is intended to be built. Tracked in [#111](https://github.com/AutomoxCommunity/automox-mcp/issues/111):
+The documented-surface build items from [#111](https://github.com/AutomoxCommunity/automox-mcp/issues/111) are now **covered**:
 
-| Operation | Tier when built |
-|---|---|
-| `PUT /servers/{id}` (`updateDevice`: `custom_name`, `server_group_id`, `exception`, `tags`, `ip_addrs`) | **Not destructive** — plain write, no gate. Fills the single-device-update hole `batch_update_devices` (tags only) doesn't cover. |
-| `DELETE /orgs/{org}/remediations/action-sets/{id}` (`deleteActionSet`) | Tier 1 ask-first (reconstructable via re-upload) |
-| `DELETE /orgs/{org}/remediations/action-sets` (`deleteActionSetsBulk`) | Tier 1 ask-first (console metadata, not endpoint state) |
+| Operation | Tool | Tier |
+|---|---|---|
+| `PUT /servers/{id}` (`updateDevice`: `custom_name`, `server_group_id`, `exception`, `tags`, `ip_addrs`) | `update_device` | **Not destructive** — plain write, no gate. Fills the single-device-update hole `batch_update_devices` (tags only) doesn't cover. |
+| `DELETE /orgs/{org}/remediations/action-sets/{id}` (`deleteActionSet`) | `delete_action_set` | Tier 1 ask-first (reconstructable via re-upload) |
+| `DELETE /orgs/{org}/remediations/action-sets` (`deleteActionSetsBulk`) | `delete_action_sets_bulk` | Tier 1 ask-first (console metadata, not endpoint state) |
+
+**Implementation note — `delete_action_sets_bulk`:** implemented by iterating the single-delete endpoint (`DELETE /…/action-sets/{id}`) rather than the native bulk endpoint (`DELETE /…/action-sets`), whose request-body shape is undocumented in the OpenAPI bundle and was unverifiable at build time. Deletion is non-atomic (per-ID results; a mid-list failure leaves earlier deletes applied — safe, since action sets are re-uploadable). **Actionable follow-on:** confirm the native bulk-delete contract (rendered docs or a console cURL capture) and swap to a single round-trip — tracked as a perf optimization, not a coverage gap.
+
+Remaining uncovered documented surface (binary/multipart uploads) is tracked in [#106](https://github.com/AutomoxCommunity/automox-mcp/issues/106).
 
 ---
 

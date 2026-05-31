@@ -66,7 +66,12 @@ _EVENT_HANDLER_RE = re.compile(r"^on\w+$", re.IGNORECASE)
 # downstream regex, so we run the full pipeline. ASCII strings containing none
 # of these characters cannot match any of our markdown/HTML/code-block regexes
 # and skip straight to the instruction-prefix check.
-_SANITIZE_TRIGGER_CHARS: frozenset[str] = frozenset("[!`<​‌‍‎‏﻿­⁠⁡⁢⁣⁤᠎")
+# The set deliberately includes bidirectional/zero-width control characters:
+# they are *scan targets* (TrojanSource-style payloads we detect), not source
+# obfuscation — hence the nosec on the literal below.
+_SANITIZE_TRIGGER_CHARS: frozenset[str] = frozenset(
+    "[!`<​‌‍‎‏﻿­⁠⁡⁢⁣⁤᠎"  # nosec B613
+)
 
 # Cheap prefix probe — matches the start of *any line* that might contain an
 # instruction prefix. Multi-line aware so the fast-path doesn't miss a prefix

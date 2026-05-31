@@ -409,7 +409,7 @@ def build_transport_security_middleware(
         for lb in _LOOPBACK_HOSTS:
             _add_host_variants(lb, port)
     # For wildcard bind addresses, also add loopback aliases
-    if host in {"0.0.0.0", "::"}:
+    if host in {"0.0.0.0", "::"}:  # nosec B104 — string compare of the bound host, not a bind
         for lb in _LOOPBACK_HOSTS:
             _add_host_variants(lb, port)
     # User-supplied extras
@@ -431,7 +431,7 @@ def build_transport_security_middleware(
     if host in _LOOPBACK_HOSTS:
         for lb in _LOOPBACK_HOSTS:
             _add_origin_variants(lb, port)
-    if host in {"0.0.0.0", "::"}:
+    if host in {"0.0.0.0", "::"}:  # nosec B104 — string compare of the bound host, not a bind
         for lb in _LOOPBACK_HOSTS:
             _add_origin_variants(lb, port)
     # User-supplied extras (e.g. "https://app.example.com")

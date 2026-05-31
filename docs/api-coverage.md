@@ -80,7 +80,7 @@ The documented-surface build items from [#111](https://github.com/AutomoxCommuni
 | `DELETE /orgs/{org}/remediations/action-sets/{id}` (`deleteActionSet`) | `delete_action_set` | Tier 1 ask-first (reconstructable via re-upload) |
 | `DELETE /orgs/{org}/remediations/action-sets` (`deleteActionSetsBulk`) | `delete_action_sets_bulk` | Tier 1 ask-first (console metadata, not endpoint state) |
 
-**Implementation note — `delete_action_sets_bulk`:** implemented by iterating the single-delete endpoint (`DELETE /…/action-sets/{id}`) rather than the native bulk endpoint (`DELETE /…/action-sets`), whose request-body shape is undocumented in the OpenAPI bundle and was unverifiable at build time. Deletion is non-atomic (per-ID results; a mid-list failure leaves earlier deletes applied — safe, since action sets are re-uploadable). **Actionable follow-on:** confirm the native bulk-delete contract (rendered docs or a console cURL capture) and swap to a single round-trip — tracked as a perf optimization, not a coverage gap.
+**Implementation note — `delete_action_sets_bulk`:** wraps the native bulk endpoint `DELETE /…/action-sets` with a JSON body `{"ids": [...]}` (schema `delete-action-set`, `console-api.yaml` `2026-05-08`; responds `204`) — a single atomic call.
 
 Remaining uncovered documented surface (binary/multipart uploads) is tracked in [#106](https://github.com/AutomoxCommunity/automox-mcp/issues/106).
 

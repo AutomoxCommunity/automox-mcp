@@ -247,9 +247,8 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             name="delete_action_sets_bulk",
             description=(
                 "Delete multiple vulnerability remediation action sets by ID (up to "
-                "100). Deletes each ID individually and reports per-ID results, so a "
-                "partial failure leaves earlier deletions applied. Action sets are "
-                "reconstructable by re-uploading the source CSV."
+                "100) in one atomic call. Action sets are reconstructable by "
+                "re-uploading the source CSV."
             ),
             annotations={
                 "readOnlyHint": False,

@@ -181,6 +181,10 @@ class StubClient:
         self.calls.append(("PATCH", path, json_data))
         return self._pop(self._patch, path)
 
-    async def delete(self, path: str, *, params: Any = None, headers: Any = None) -> Any:
-        self.calls.append(("DELETE", path, params))
+    async def delete(
+        self, path: str, *, json_data: Any = None, params: Any = None, headers: Any = None
+    ) -> Any:
+        # Record json_data when present (body-bearing DELETE), else params, so
+        # existing param-only delete assertions stay unchanged.
+        self.calls.append(("DELETE", path, json_data if json_data is not None else params))
         return self._pop(self._delete, path, default=None)

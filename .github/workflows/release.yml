@@ -228,3 +228,34 @@ jobs:
         run: |
           gh release upload "$GITHUB_REF_NAME" --clobber \
             "mcpb/automox-mcp-${BUNDLE_VERSION}.mcpb"
+
+  # Post-publish smoke: install the just-published version straight from PyPI and
+  # confirm the wheel resolves and the entry point boots. Catches a broken
+  # publish (bad wheel, missing dep, broken console-script) in minutes rather
+  # than via a user report. Runs after `publish`; no secrets, no approval gate.
+  verify-publish:
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions: {}
+    steps:
+      - name: Set up uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
+        with:
+          python-version: "3.13"
+          enable-cache: false
+
+      - name: Install published package from PyPI and boot it
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Verifying automox-mcp==${VERSION} installs from PyPI and boots..."
+          for i in $(seq 1 6); do
+            if uvx --from "automox-mcp==${VERSION}" automox-mcp --help > /dev/null 2>&1; then
+              echo "Published package installs and the entry point boots."
+              exit 0
+            fi
+            echo "  attempt ${i}/6: not installable yet (PyPI CDN propagation?), sleeping 20s..."
+            sleep 20
+          done
+          echo "::error::Published automox-mcp==${VERSION} failed to install/boot from PyPI."
+          exit 1

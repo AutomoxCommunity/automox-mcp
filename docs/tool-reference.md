@@ -142,7 +142,7 @@ Manage vulnerability remediation workflows via the Vuln Sync API. Supports CSV-b
 - **`get_upload_formats`** - Get supported CSV upload formats for vulnerability remediation action sets.
 - **`upload_action_set`** *(write)* - Upload a CSV-based vulnerability remediation action set.
 - **`delete_action_set`** *(write)* - Delete a single remediation action set by ID. Console metadata, reconstructable via re-upload.
-- **`delete_action_sets_bulk`** *(write)* - Delete multiple action sets by ID (up to 100). Deletes each individually with per-ID results; a partial failure leaves earlier deletes applied.
+- **`delete_action_sets_bulk`** *(write)* - Delete multiple action sets by ID (up to 100) in one atomic call. Console metadata, reconstructable via re-upload.
 - **`apply_remediation_actions`** *(write, gated)* - Execute remediations now (`patch-now` / `patch-with-worklet`) on explicit devices for an action set. Immediately changes endpoint state (async, returns 202). **Registered only when `AUTOMOX_MCP_ALLOW_REMEDIATION=true`** and write mode is enabled.
 
 ## Compound Workflows (3 tools)

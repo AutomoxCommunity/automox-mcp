@@ -195,6 +195,7 @@ class AutomoxClient:
         self,
         path: str,
         *,
+        json_data: Mapping[str, Any] | None = None,
         params: Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
     ) -> AutomoxResponse:
@@ -202,6 +203,7 @@ class AutomoxClient:
             "DELETE",
             path,
             params=params,
+            json_data=json_data,
             headers=headers,
         )
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from ..client import AutomoxAPIError, AutomoxClient
+from ..client import AutomoxClient
 from ..utils.response import extract_list as _extract_list
 
 
@@ -285,34 +285,25 @@ async def delete_action_sets_bulk(
     org_id: int,
     action_set_ids: list[int],
 ) -> dict[str, Any]:
-    """Delete multiple Vuln Sync action sets.
+    """Delete multiple Vuln Sync action sets in one atomic call.
 
-    Implemented by iterating the confirmed single-delete endpoint
-    (``DELETE /orgs/{org}/remediations/action-sets/{actionSetID}``) rather than the
-    native bulk endpoint (``DELETE /orgs/{org}/remediations/action-sets``), whose
-    request-body shape is not documented in the OpenAPI bundle and could not be
-    verified at build time. Deletion is therefore non-atomic: each ID is reported
-    individually and a mid-list failure leaves earlier deletions applied (safe —
-    action sets are reconstructable via re-upload). Swapping to the native bulk
-    endpoint is a tracked perf optimization once its contract is confirmed.
+    Wraps the native bulk endpoint ``DELETE /orgs/{org}/remediations/action-sets``
+    with a JSON body of ``{"ids": [...]}`` (schema ``delete-action-set``,
+    ``console-api.yaml`` ``2026-05-08``); the upstream responds ``204``. Action
+    sets are console metadata, reconstructable via re-upload, so this is exposed
+    Tier-1 ask-first (confirmation-only, no env gate).
     """
-    deleted: list[int] = []
-    failed: list[dict[str, Any]] = []
-    for action_set_id in action_set_ids:
-        try:
-            await client.delete(
-                f"/orgs/{org_id}/remediations/action-sets/{action_set_id}",
-            )
-            deleted.append(action_set_id)
-        except AutomoxAPIError as exc:
-            failed.append({"action_set_id": action_set_id, "error": str(exc)})
+    ids = list(action_set_ids)
+    await client.delete(
+        f"/orgs/{org_id}/remediations/action-sets",
+        json_data={"ids": ids},
+    )
 
     return {
         "data": {
-            "requested": len(action_set_ids),
-            "deleted_count": len(deleted),
-            "deleted": deleted,
-            "failed": failed,
+            "requested": len(ids),
+            "deleted_count": len(ids),
+            "deleted": ids,
         },
         "metadata": {"deprecated_endpoint": False, "org_id": org_id},
     }

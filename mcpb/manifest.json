@@ -2,7 +2,7 @@
   "manifest_version": "0.4",
   "name": "automox-mcp",
   "display_name": "Automox",
-  "version": "1.3.0",
+  "version": "2.0.0",
   "description": "Talk to your Automox console in natural language. Manage devices, patches, and policies.",
   "long_description": "The official Automox MCP server, packaged as a Claude Desktop Extension. Connects Claude to your Automox environment so you can manage devices, check compliance posture, run policies, prepare for Patch Tuesday, browse the worklet catalog, drive Splashtop remote-control sessions, and more — all by asking. Exposes 133 MCP tools across 18 domains (devices, policies, patches, groups, webhooks, worklets, vulnerability sync, audit, reports, Splashtop remote control, and more), 9 MCP resources, and 6 workflow prompts (audit_policy, investigate_device, onboard_group, patch_tuesday, security_posture, triage_failure). Read-only mode and modular tool loading are supported via optional configuration.",
   "author": {

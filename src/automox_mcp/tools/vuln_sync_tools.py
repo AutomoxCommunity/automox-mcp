@@ -183,8 +183,13 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         @server.tool(
             name="upload_action_set",
             description=(
-                "Upload a CSV-based vulnerability remediation action set. "
-                "Use get_upload_formats to see supported formats first."
+                "Upload a CSV-based vulnerability remediation action set. Provide "
+                "the CSV as text in `csv_content`; `source` selects the format "
+                "(generic | qualys | tenable | crowd-strike | rapid7). Call "
+                "get_upload_formats first to see the required columns per source. "
+                "The `filename` becomes the action set's display name. Returns the "
+                "created action set (status is usually 'building' — processing is "
+                "async)."
             ),
             annotations={
                 "readOnlyHint": False,
@@ -194,7 +199,9 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             },
         )
         async def upload_action_set(
-            action_set_data: dict[str, Any],
+            csv_content: str,
+            source: str = "generic",
+            filename: str = "action-set.csv",
             request_id: str | None = None,
         ) -> dict[str, Any]:
             cached = await check_idempotency(request_id, "upload_action_set")
@@ -203,7 +210,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             result = await call_tool_workflow(
                 client,
                 _upload_action_set,
-                {"action_set_data": action_set_data},
+                {"csv_content": csv_content, "source": source, "filename": filename},
                 params_model=UploadActionSetParams,
             )
             await store_idempotency(request_id, "upload_action_set", result)

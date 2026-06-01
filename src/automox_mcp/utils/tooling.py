@@ -96,6 +96,39 @@ def is_splashtop_bulk_allowed() -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def is_upload_policy_file_allowed() -> bool:
+    """Return True when local-file installer upload is explicitly enabled.
+
+    Gated by ``AUTOMOX_MCP_ALLOW_UPLOAD_POLICY_FILE`` (default off). Controls the
+    ``upload_policy_file`` tool, which reads an installer **from the local
+    filesystem** and uploads it to a Required Software policy. Because it reads
+    local files, it is opt-in, restricted to a directory allowlist
+    (``AUTOMOX_MCP_UPLOAD_ALLOWED_DIRS``), and **local-transport only** — see
+    ``utils/upload.py`` and the stdio guard in ``__init__.py`` /
+    ``policy_tools.py``.
+    """
+    value = os.environ.get("AUTOMOX_MCP_ALLOW_UPLOAD_POLICY_FILE", "")
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def is_stdio_transport() -> bool:
+    """Return True when the configured transport is stdio (local).
+
+    Reads ``AUTOMOX_MCP_TRANSPORT`` (default ``stdio``). This is a best-effort
+    registration-time check; the authoritative local-only guarantee for
+    ``upload_policy_file`` is enforced in ``main()`` (which refuses to start a
+    non-stdio transport while the upload flag is on) so a CLI ``--transport``
+    flag cannot diverge from it.
+
+    Caveat: the ``main()`` guarantee covers the CLI entrypoint. Code that embeds
+    the module-level ``mcp`` server and calls ``mcp.run(transport=...)`` directly
+    (bypassing ``main()``) is responsible for its own transport choice — set
+    ``AUTOMOX_MCP_TRANSPORT`` accordingly so this registration check still holds.
+    """
+    value = os.environ.get("AUTOMOX_MCP_TRANSPORT", "").strip().lower()
+    return value in {"", "stdio"}
+
+
 def is_device_deletion_allowed() -> bool:
     """Return True when device deletion is explicitly enabled.
 

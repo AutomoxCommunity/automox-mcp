@@ -75,7 +75,7 @@ That's it. Start asking questions.
 
 ## What Can I Ask?
 
-The server exposes 131 tools across devices, policies, patches, groups, webhooks, worklets, vulnerability sync, maintenance windows, and more. You don't need to know the tool names — just describe what you want:
+The server exposes 132 tools across devices, policies, patches, groups, webhooks, worklets, vulnerability sync, maintenance windows, and more. You don't need to know the tool names — just describe what you want:
 
 | Ask this | What happens |
 |---|---|
@@ -103,10 +103,14 @@ For the full list of tools, parameters, and MCP resources, see the **[Tool Refer
 | `AUTOMOX_API_KEY` | Yes | — | Automox API key |
 | `AUTOMOX_ACCOUNT_UUID` | Yes | — | Account UUID from Secrets & Keys |
 | `AUTOMOX_ORG_ID` | Recommended | — | Numeric organization ID (required by most tools) |
-| `AUTOMOX_MCP_READ_ONLY` | No | `false` | Disable all write operations (84 of 131 tools remain) |
+| `AUTOMOX_MCP_READ_ONLY` | No | `false` | Disable all write operations (84 of 132 tools remain) |
 | `AUTOMOX_MCP_ALLOW_APPLY_REMEDIATION_ACTIONS` | No | `false` | Opt in to the `apply_remediation_actions` tool, which patches/runs worklets on endpoints immediately. Off by default even in write mode. |
 | `AUTOMOX_MCP_ALLOW_SPLASHTOP_BULK_INSTALL_UNINSTALL` | No | `false` | Opt in to the `splashtop_bulk_install_uninstall` tool, which installs/uninstalls the Splashtop client across an entire server group in one call. Off by default even in write mode. |
 | `AUTOMOX_MCP_ALLOW_DELETE_DEVICE` | No | `false` | Opt in to the `delete_device` tool, which permanently deletes a device record and its history (`DELETE /servers/{id}`). Irreversible and not reconstructable through the MCP. Off by default even in write mode. |
+| `AUTOMOX_MCP_ALLOW_UPLOAD_POLICY_FILE` | No | `false` | Opt in to the `upload_policy_file` tool, which uploads a **local** installer file to a Required Software policy. Reads from the local filesystem, so it also requires `AUTOMOX_MCP_UPLOAD_ALLOWED_DIRS` and only works on the stdio (local) transport. Off by default even in write mode. |
+| `AUTOMOX_MCP_UPLOAD_ALLOWED_DIRS` | No | — | Comma-separated absolute directories `upload_policy_file` may read installers from. Required for that tool to register; paths are canonicalized and must resolve inside an allowed dir. |
+| `AUTOMOX_MCP_UPLOAD_MAX_BYTES` | No | `10737418240` | Max installer size for `upload_policy_file` (default 10 GB, Automox's ceiling). |
+| `AUTOMOX_MCP_UPLOAD_TIMEOUT_SECONDS` | No | `3600` | Upload read/write timeout for `upload_policy_file` (large installers need more than the default request timeout). |
 | `AUTOMOX_MCP_MODULES` | No | all | Comma-separated list of modules to load (see below) |
 | `AUTOMOX_MCP_TOKEN_BUDGET` | No | `4000` | Max estimated tokens per response before truncation |
 | `AUTOMOX_MCP_SANITIZE_RESPONSES` | No | `true` | Sanitize API data to mitigate prompt injection |
@@ -133,7 +137,7 @@ For the full list of tools, parameters, and MCP resources, see the **[Tool Refer
 AUTOMOX_MCP_READ_ONLY=true
 ```
 
-Disables all write operations. Only read-only tools are registered (84 of 131). Useful for auditing and monitoring.
+Disables all write operations. Only read-only tools are registered (84 of 132). Useful for auditing and monitoring.
 
 ### Modular Loading
 
@@ -185,7 +189,7 @@ The Automox MCP server is designed for enterprise deployment with defense-in-dep
 
 **Highlights:**
 
-- **Read-only mode** (`AUTOMOX_MCP_READ_ONLY`) disables all 47 write tools
+- **Read-only mode** (`AUTOMOX_MCP_READ_ONLY`) disables all 48 write tools
 - **Module filtering** (`AUTOMOX_MCP_MODULES`) for least-privilege tool loading
 - **Correlation IDs** on every tool call, forwarded to Automox API as `X-Correlation-ID`
 - **Rate limiting** (30 calls/60s) with token budget estimation and auto-truncation
@@ -202,7 +206,7 @@ The Automox MCP server is designed for enterprise deployment with defense-in-dep
 - **Security response headers** — `X-Content-Type-Options`, `X-Frame-Options`, `CSP`, `Cache-Control: no-store`, `Strict-Transport-Security` on all HTTP responses
 - **Authentication rate limiting** — blocks IPs after repeated auth failures to mitigate brute-force attacks
 - **Remote bind protection** — non-loopback HTTP/SSE binding requires explicit `--allow-remote-bind` opt-in
-- **MCP Tool Annotations** on all 131 tools — `readOnlyHint`, `destructiveHint`, `idempotentHint`, and `openWorldHint` per the MCP Protocol specification, enabling client-side confirmation dialogs and safety guardrails
+- **MCP Tool Annotations** on all 132 tools — `readOnlyHint`, `destructiveHint`, `idempotentHint`, and `openWorldHint` per the MCP Protocol specification, enabling client-side confirmation dialogs and safety guardrails
 - **60 security hardening items** (V-001 through V-181, S-001 through S-006) documented in CHANGELOG and SECURITY.md
 
 **Capability model.** What the server exposes follows three categorical rules:

@@ -230,15 +230,35 @@ async def upload_action_set(
     client: AutomoxClient,
     *,
     org_id: int,
-    action_set_data: dict[str, Any],
+    csv_content: str,
+    source: str = "generic",
+    filename: str = "action-set.csv",
 ) -> dict[str, Any]:
-    """Upload a CSV-based remediation action set."""
-    response = await client.post(
+    """Upload a CSV-based remediation action set (``multipart/form-data``).
+
+    Wraps ``POST /orgs/{org}/remediations/action-sets/upload``. Per the live
+    contract (confirmed 2026-05-31): ``source`` is a **query parameter** (enum
+    ``generic|qualys|tenable|crowd-strike|rapid7``) and the multipart body
+    carries ``file`` (the CSV) plus ``format`` (the same enum). The action set's
+    display name is derived from the uploaded ``filename``. Returns the created
+    action set; ``status`` is typically ``building`` (processing is async).
+
+    The previous implementation POSTed JSON and was non-functional — the live
+    endpoint requires a real multipart upload (see #106).
+    """
+    response = await client.post_multipart(
         f"/orgs/{org_id}/remediations/action-sets/upload",
-        json_data=action_set_data,
+        params={"source": source},
+        files={"file": (filename, csv_content.encode("utf-8"), "text/csv")},
+        data={"format": source},
     )
 
-    if isinstance(response, Mapping):
+    # The endpoint returns the created action set (the live tenant returns a
+    # single object; the spec types it as a one-element array — handle both).
+    if isinstance(response, list) and response:
+        first = response[0]
+        result = dict(first) if isinstance(first, Mapping) else {}
+    elif isinstance(response, Mapping):
         result = dict(response)
     else:
         result = {}
@@ -246,10 +266,12 @@ async def upload_action_set(
     return {
         "data": {
             "id": result.get("id"),
-            "status": result.get("status", "pending"),
+            "status": result.get("status", "building"),
+            "source": result.get("source"),
+            "organization_id": result.get("organization_id"),
             "message": "Action set upload submitted.",
         },
-        "metadata": {"deprecated_endpoint": False},
+        "metadata": {"deprecated_endpoint": False, "org_id": org_id},
     }
 
 

@@ -945,16 +945,43 @@ class CreateDataExtractParams(OrgIdRequiredMixin, ForbidExtraModel):
 
 
 class UploadActionSetParams(OrgIdRequiredMixin, ForbidExtraModel):
-    action_set_data: dict[str, Any] = Field(description="Action set upload data")
+    csv_content: str = Field(
+        description=(
+            "Raw CSV text of the remediation action set, e.g. "
+            "'Hostname,CVE ID,Severity\\nhost1,CVE-2021-1234,High'. The required "
+            "columns depend on the source — call get_upload_formats first."
+        ),
+        min_length=1,
+        max_length=1_000_000,
+    )
+    source: Literal["generic", "qualys", "tenable", "crowd-strike", "rapid7"] = Field(
+        "generic",
+        description=(
+            "CSV source/format. Sent as both the `source` query param and the "
+            "`format` body field, which the endpoint requires to agree."
+        ),
+    )
+    filename: str = Field(
+        "action-set.csv",
+        description="Upload filename; becomes the action set's display name in the console.",
+        min_length=1,
+        max_length=255,
+    )
 
-    @model_validator(mode="after")
-    def _limit_action_set_data_size(self) -> UploadActionSetParams:
-        import json
 
-        raw = json.dumps(self.action_set_data, default=str)
-        if len(raw) > 50_000:
-            raise ValueError("action_set_data payload exceeds 50 KB limit")
-        return self
+class UploadPolicyFileParams(OrgIdContextMixin, ForbidExtraModel):
+    policy_id: int = Field(
+        description="Required Software policy ID to attach the installer to.", ge=1
+    )
+    file_path: str = Field(
+        description=(
+            "Absolute path to the installer file on the machine running the MCP "
+            "server. Must resolve to a regular file inside one of the "
+            "AUTOMOX_MCP_UPLOAD_ALLOWED_DIRS directories."
+        ),
+        min_length=1,
+        max_length=4096,
+    )
 
 
 # ============================================================================

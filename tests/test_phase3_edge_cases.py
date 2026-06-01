@@ -221,9 +221,12 @@ async def test_upload_action_set_non_mapping_response() -> None:
     result = await upload_action_set(
         cast(AutomoxClient, client),
         org_id=42,
-        action_set_data={"format": "qualys"},
+        csv_content="a,b\n1,2",
+        source="qualys",
     )
-    assert result["data"]["status"] == "pending"
+    # A non-mapping/non-list response degrades to defaults rather than raising.
+    assert result["data"]["status"] == "building"
+    assert result["data"]["id"] is None
 
 
 # ---------------------------------------------------------------------------

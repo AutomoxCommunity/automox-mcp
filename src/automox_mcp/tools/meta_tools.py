@@ -56,6 +56,11 @@ _DOMAIN_CATALOG: dict[str, list[tuple[str, str]]] = {
         ("clone_policy", "Clone a policy (in-org, or multi-zone for patch policies)"),
         ("delete_policy", "Delete a policy permanently"),
         ("execute_policy_now", "Execute a policy immediately"),
+        (
+            "upload_policy_file",
+            "Upload a local installer to a Required Software policy "
+            "(requires AUTOMOX_MCP_ALLOW_UPLOAD_POLICY_FILE + allowlist, stdio only)",
+        ),
     ],
     "policy_history": [
         ("policy_runs_v2", "List policy runs with time-range and status filters"),

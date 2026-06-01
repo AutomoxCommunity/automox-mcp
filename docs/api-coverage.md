@@ -4,7 +4,7 @@ This document records what the Automox MCP server deliberately does **not** expo
 
 Audited against the Automox Console API OpenAPI bundle (`ax-console-bundle.yaml`, version `2026-05-28`): **115 documented operations**. Coverage verified by registering the server and reading the live tool set, not by reading prose. Undocumented-but-wrapped paths (endpoints the live tenant serves that the spec omits) are tracked separately in [#95](https://github.com/AutomoxCommunity/automox-mcp/issues/95) and are **not** coverage gaps.
 
-The server exposes 131 tools (84 read / 47 write). Effectively every documented **read** operation is covered; the omissions below are all secret-exposing endpoints (every documented write/delete is now either wrapped or gated).
+The server exposes 132 tools (84 read / 48 write). Effectively every documented **read** operation is covered; the omissions below are all secret-exposing endpoints (every documented write/delete/upload is now either wrapped or gated).
 
 ## Three categories
 
@@ -81,7 +81,12 @@ The documented-surface build items from [#111](https://github.com/AutomoxCommuni
 
 **Implementation note — `delete_action_sets_bulk`:** wraps the native bulk endpoint `DELETE /…/action-sets` with a JSON body `{"ids": [...]}` (schema `delete-action-set`, `console-api.yaml` `2026-05-08`; responds `204`) — a single atomic call.
 
-Remaining uncovered documented surface (binary/multipart uploads) is tracked in [#106](https://github.com/AutomoxCommunity/automox-mcp/issues/106).
+**Multipart uploads ([#106](https://github.com/AutomoxCommunity/automox-mcp/issues/106)) — both covered:**
+
+| Operation | Tool | Status |
+|---|---|---|
+| `POST /orgs/{org}/remediations/action-sets/upload` (`uploadRemediationCSV`) | `upload_action_set` | **Covered.** `AutomoxClient.post_multipart` now sends real `multipart/form-data`. Contract confirmed live 2026-05-31: `source` is a **query param** (enum); the body carries `file` + `format` (same enum). The earlier 500 was `source` sent as a form field with an empty query string. CSV arrives as inline `csv_content` text — no SSRF/file-read surface. |
+| `POST /policies/{policyID}/files` (`uploadPolicyFile`) | `upload_policy_file` | **Covered, gated, local-only.** Required-Software installer upload (up to 10 GB). Mechanism decision: **`file_path`** (server reads a local file) — `base64` is impractical at GB scale and `file_url` was rejected (would require building SSRF defense from scratch for marginal value). Confined by: env-gate `AUTOMOX_MCP_ALLOW_UPLOAD_POLICY_FILE` (default off) + a required directory allowlist `AUTOMOX_MCP_UPLOAD_ALLOWED_DIRS` (paths canonicalized; `..`/symlink escape rejected) + **stdio-only** (the tool isn't registered under a remote transport, and `main()` refuses to start a remote transport while the flag is on). The installer streams to Automox and never passes through the model. |
 
 ---
 

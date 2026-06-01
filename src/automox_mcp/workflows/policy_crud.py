@@ -13,6 +13,7 @@ from fastmcp.exceptions import ToolError
 from ..client import AutomoxAPIError, AutomoxClient
 from ..utils.response import extract_list as _extract_list
 from ..utils.response import require_org_id
+from ..utils.upload import get_upload_timeout_seconds, validate_upload_path
 
 logger = logging.getLogger(__name__)
 
@@ -1213,6 +1214,49 @@ async def list_devices_for_policies(
     }
 
 
+async def upload_policy_file(
+    client: AutomoxClient,
+    *,
+    org_id: int | None = None,
+    policy_id: int,
+    file_path: str,
+) -> dict[str, Any]:
+    """Upload an installer to a Required Software policy (multipart, local file).
+
+    Wraps ``POST /policies/{policyID}/files`` (``uploadPolicyFile``). The installer
+    is read from the **local filesystem**: ``validate_upload_path`` canonicalizes
+    the path, requires it inside ``AUTOMOX_MCP_UPLOAD_ALLOWED_DIRS`` (rejecting
+    ``..``/symlink escape), and enforces the size cap before anything is read. The
+    bytes are streamed straight to Automox — they never pass through the model.
+    ``org_id`` rides as the ``o`` query param only for child orgs (omitted for the
+    main org, per the API).
+    """
+    resolved = validate_upload_path(file_path)
+    params: dict[str, Any] = {}
+    if org_id is not None:
+        params["o"] = org_id
+
+    with resolved.open("rb") as handle:
+        response = await client.post_multipart(
+            f"/policies/{policy_id}/files",
+            params=params or None,
+            files={"file": (resolved.name, handle, "application/octet-stream")},
+            timeout=get_upload_timeout_seconds(),
+        )
+
+    result = dict(response) if isinstance(response, Mapping) else {}
+    return {
+        "data": {
+            "policy_id": policy_id,
+            "filename": resolved.name,
+            "size_bytes": resolved.stat().st_size,
+            "uploaded": True,
+            "response": result or None,
+        },
+        "metadata": {"deprecated_endpoint": False, "org_id": org_id},
+    }
+
+
 __all__ = [
     "apply_policy_changes",
     "clone_policy",
@@ -1222,4 +1266,5 @@ __all__ = [
     "normalize_policy_operations_input",
     "preview_policy_device_filters",
     "resolve_patch_approval",
+    "upload_policy_file",
 ]

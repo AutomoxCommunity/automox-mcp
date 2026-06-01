@@ -1,6 +1,6 @@
 # Tool Reference
 
-Complete reference for all 131 tools, 6 workflow prompts, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
+Complete reference for all 132 tools, 6 workflow prompts, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
 
 > **Tip:** You don't need to memorize this. Call `discover_capabilities` from your AI assistant to get a live summary of available tools organized by domain.
 
@@ -8,7 +8,7 @@ Complete reference for all 131 tools, 6 workflow prompts, MCP resources, paramet
 
 - [Device Management (9 tools)](#device-management-9-tools)
 - [Advanced Device Search (18 tools)](#advanced-device-search-18-tools)
-- [Policy Management (14 tools)](#policy-management-14-tools)
+- [Policy Management (15 tools)](#policy-management-15-tools)
 - [Policy History v2 (7 tools)](#policy-history-v2-7-tools)
 - [Package Management (2 tools)](#package-management-2-tools)
 - [Group Management (5 tools)](#group-management-5-tools)
@@ -68,7 +68,7 @@ Uses the Server Groups API v2 for structured device queries, saved searches, and
 - **`assign_policies_to_saved_search`** *(write)* - Bulk-assign one or more policies to the result set of a saved search.
 - **`refresh_saved_search_cache`** *(write)* - Force a re-cache of a saved search's results when they may be stale.
 
-## Policy Management (14 tools)
+## Policy Management (15 tools)
 
 - **`policy_health_overview`** - Summarize recent Automox policy activity. Omit `org_uuid` to let the server resolve it from `AUTOMOX_ORG_ID` / `AUTOMOX_ORG_UUID`.
 - **`policy_execution_timeline`** - Review recent executions for a policy.
@@ -82,6 +82,7 @@ Uses the Server Groups API v2 for structured device queries, saved searches, and
 - **`patch_approvals_summary`** - Summarize pending patch approvals and their severity.
 - **`decide_patch_approval`** - Approve or reject an Automox patch approval request.
 - **`execute_policy_now`** - Execute a policy immediately for remediation (all devices or specific device).
+- **`upload_policy_file`** *(write, gated, local-only)* - Upload an installer file from the local filesystem to a Required Software policy (`POST /policies/{id}/files`, up to 10 GB). The path must resolve inside an `AUTOMOX_MCP_UPLOAD_ALLOWED_DIRS` directory; bytes stream straight to Automox and never pass through the model. **Registered only when `AUTOMOX_MCP_ALLOW_UPLOAD_POLICY_FILE=true`, a directory allowlist is set, write mode is on, and the transport is stdio (local).** See [API Coverage & Omissions](api-coverage.md).
 - **`clone_policy`** - Clone an existing policy. By default an in-org copy with optional name and server-group overrides (all policy types). Pass `target_zone_ids` to clone a **patch** policy into one or more zones/orgs in a single server-side call (`POST /policies/{id}/clone`); mutually exclusive with name/server_groups.
 - **`delete_policy`** - Permanently delete a policy by ID.
 
@@ -141,7 +142,7 @@ Manage vulnerability remediation workflows via the Vuln Sync API. Supports CSV-b
 - **`get_action_set_issues`** - Get vulnerability issues (CVEs) associated with an action set.
 - **`get_action_set_solutions`** - Get solutions for an action set. Shows recommended patches or configurations.
 - **`get_upload_formats`** - Get supported CSV upload formats for vulnerability remediation action sets.
-- **`upload_action_set`** *(write)* - Upload a CSV-based vulnerability remediation action set.
+- **`upload_action_set`** *(write)* - Upload a CSV-based vulnerability remediation action set. Pass the CSV as text in `csv_content`; `source` picks the format (`generic`/`qualys`/`tenable`/`crowd-strike`/`rapid7`) and `filename` becomes the action set's display name. Sent as real `multipart/form-data`; returns the created action set (`status` usually `building` — processing is async). Call `get_upload_formats` first for the required columns.
 - **`delete_action_set`** *(write)* - Delete a single remediation action set by ID. Console metadata, reconstructable via re-upload.
 - **`delete_action_sets_bulk`** *(write)* - Delete multiple action sets by ID (up to 100) in one atomic call. Console metadata, reconstructable via re-upload.
 - **`apply_remediation_actions`** *(write, gated)* - Execute remediations now (`patch-now` / `patch-with-worklet`) on explicit devices for an action set. Immediately changes endpoint state (async, returns 202). **Registered only when `AUTOMOX_MCP_ALLOW_APPLY_REMEDIATION_ACTIONS=true`** and write mode is enabled.

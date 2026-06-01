@@ -130,6 +130,20 @@ def main(argv: Sequence[str] | None = None) -> None:
             f"Unsupported transport '{transport}'. Expected stdio, http, sse, or streamable-http."
         )
 
+    # Authoritative local-only guarantee for upload_policy_file: it reads local
+    # files, so it must never be served over a network transport. Registration
+    # also skips it under a non-stdio env, but the CLI --transport flag is only
+    # resolved here (after the server is built at import), so this is the
+    # chokepoint that closes the flag-vs-env divergence. Fail closed.
+    from .utils.tooling import is_upload_policy_file_allowed
+
+    if transport != "stdio" and is_upload_policy_file_allowed():
+        raise SystemExit(
+            "AUTOMOX_MCP_ALLOW_UPLOAD_POLICY_FILE is set but the transport is "
+            f"'{transport}'. upload_policy_file reads local files and is supported "
+            "only on the stdio (local) transport. Unset the flag or use stdio."
+        )
+
     host = args.host or _env_str("AUTOMOX_MCP_HOST")
     port = args.port
     if port is None:

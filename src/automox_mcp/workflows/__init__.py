@@ -113,6 +113,7 @@ from .policy_crud import (
     normalize_policy_operations_input,
     preview_policy_device_filters,
     resolve_patch_approval,
+    upload_policy_file,
 )
 from .policy_history import (
     get_policy_history_detail,
@@ -326,6 +327,7 @@ __all__ = [
     "update_server_group",
     "update_webhook",
     "upload_action_set",
+    "upload_policy_file",
     "check_group_exclusion_status",
     "check_window_active",
     "create_policy_window",

@@ -152,19 +152,35 @@ class TestCreateDataExtractParams:
 
 
 # ---------------------------------------------------------------------------
-# UploadActionSetParams — payload size validator
+# UploadActionSetParams — CSV upload (multipart contract)
 # ---------------------------------------------------------------------------
 
 
 class TestUploadActionSetParams:
-    def test_small_payload_accepted(self):
-        p = UploadActionSetParams(org_id=1, action_set_data={"format": "qualys"})
-        assert p.action_set_data["format"] == "qualys"
+    def test_minimal_fields_accepted(self):
+        p = UploadActionSetParams(org_id=1, csv_content="Hostname,CVE ID\nhost1,CVE-2021-1234")
+        # source/filename default; source mirrors into the body `format` downstream.
+        assert p.source == "generic"
+        assert p.filename == "action-set.csv"
 
-    def test_oversized_payload_rejected(self):
-        huge = {"data": "x" * 60_000}
-        with pytest.raises(ValidationError, match="50 KB"):
-            UploadActionSetParams(org_id=1, action_set_data=huge)
+    def test_source_and_filename_passthrough(self):
+        p = UploadActionSetParams(
+            org_id=1, csv_content="a,b\n1,2", source="qualys", filename="qualys-export.csv"
+        )
+        assert p.source == "qualys"
+        assert p.filename == "qualys-export.csv"
+
+    def test_invalid_source_rejected(self):
+        with pytest.raises(ValidationError):
+            UploadActionSetParams(org_id=1, csv_content="a,b\n1,2", source="not-a-source")
+
+    def test_empty_csv_rejected(self):
+        with pytest.raises(ValidationError):
+            UploadActionSetParams(org_id=1, csv_content="")
+
+    def test_oversized_csv_rejected(self):
+        with pytest.raises(ValidationError):
+            UploadActionSetParams(org_id=1, csv_content="x" * 1_000_001)
 
 
 # ---------------------------------------------------------------------------

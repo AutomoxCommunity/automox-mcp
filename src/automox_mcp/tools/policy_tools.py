@@ -24,14 +24,18 @@ from ..schemas import (
     PolicyHealthSummaryParams,
     PolicySummaryParams,
     RunDetailParams,
+    UploadPolicyFileParams,
 )
 from ..utils.tooling import (
     call_tool_workflow,
     check_idempotency,
+    is_stdio_transport,
+    is_upload_policy_file_allowed,
     maybe_format_markdown,
     release_idempotency,
     store_idempotency,
 )
+from ..utils.upload import get_upload_allowed_dirs
 
 logger = logging.getLogger(__name__)
 
@@ -504,6 +508,54 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 raise
             await store_idempotency(request_id, "execute_policy_now", result)
             return result
+
+        # Local-file installer upload: reads a file off disk, so it is opt-in
+        # (AUTOMOX_MCP_ALLOW_UPLOAD_POLICY_FILE), restricted to a directory
+        # allowlist (AUTOMOX_MCP_UPLOAD_ALLOWED_DIRS, must be non-empty), and
+        # local-transport only. main() additionally refuses to start a remote
+        # transport while the flag is on, so the tool can never be served
+        # remotely even if this env-based stdio check is somehow bypassed.
+        if is_upload_policy_file_allowed() and is_stdio_transport() and get_upload_allowed_dirs():
+
+            @server.tool(
+                name="upload_policy_file",
+                description=(
+                    "Upload an installer file to a Required Software policy from the "
+                    "local filesystem. `file_path` must be an absolute path resolving "
+                    "inside an AUTOMOX_MCP_UPLOAD_ALLOWED_DIRS directory; the bytes "
+                    "stream straight to Automox and never pass through the model. "
+                    "Requires AUTOMOX_MCP_ALLOW_UPLOAD_POLICY_FILE=true, a configured "
+                    "AUTOMOX_MCP_UPLOAD_ALLOWED_DIRS, and a local (stdio) transport."
+                ),
+                annotations={
+                    "readOnlyHint": False,
+                    "destructiveHint": True,
+                    "idempotentHint": False,
+                    "openWorldHint": True,
+                },
+            )
+            async def upload_policy_file(
+                policy_id: int,
+                file_path: str,
+                request_id: str | None = None,
+            ) -> dict[str, Any]:
+                cached = await check_idempotency(request_id, "upload_policy_file")
+                if cached is not None:
+                    return cached
+
+                params = {"policy_id": policy_id, "file_path": file_path}
+                try:
+                    result = await call_tool_workflow(
+                        client,
+                        workflows.upload_policy_file,
+                        params,
+                        params_model=UploadPolicyFileParams,
+                    )
+                except BaseException:
+                    await release_idempotency(request_id, "upload_policy_file")
+                    raise
+                await store_idempotency(request_id, "upload_policy_file", result)
+                return result
 
 
 __all__ = ["register"]

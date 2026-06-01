@@ -10,6 +10,7 @@ from automox_mcp.workflows.webhooks import (
     create_webhook,
     delete_webhook,
     get_webhook,
+    list_webhook_deliveries,
     list_webhook_event_types,
     list_webhooks,
     rotate_webhook_secret,
@@ -140,6 +141,99 @@ async def test_get_webhook_returns_detail() -> None:
 
     assert result["data"]["name"] == "Deploy Hook"
     assert result["data"]["enabled"] is True
+
+
+# ---------------------------------------------------------------------------
+# list_webhook_deliveries
+# ---------------------------------------------------------------------------
+
+_DELIVERY_A: dict[str, Any] = {
+    "id": "c9bf9e57-1685-4c89-bafb-ff5af830be8a",
+    "eventType": "policy.evaluated",
+    "success": True,
+    "statusCode": 200,
+    "error": None,
+    "durationMs": 150,
+    "timestamp": "2026-01-15T10:30:00Z",
+}
+
+_DELIVERY_B: dict[str, Any] = {
+    "id": "d1e2f3a4-1685-4c89-bafb-ff5af830be8a",
+    "eventType": "device.noncompliant",
+    "success": False,
+    "statusCode": 504,
+    "error": "Connection timeout",
+    "durationMs": 5000,
+    "timestamp": "2026-01-14T09:00:00Z",
+}
+
+
+@pytest.mark.asyncio
+async def test_list_deliveries_returns_summaries_and_total() -> None:
+    client = StubClient(
+        get_responses={
+            f"/organizations/{_ORG_UUID}/webhooks/wh-001/deliveries": [
+                {"data": [_DELIVERY_A, _DELIVERY_B], "meta": {"total": 2, "cursor": None}},
+            ],
+        }
+    )
+    result = await list_webhook_deliveries(
+        cast(AutomoxClient, client),
+        org_uuid=_ORG_UUID,
+        webhook_id="wh-001",
+    )
+
+    assert result["data"]["total_deliveries"] == 2
+    assert result["data"]["webhook_id"] == "wh-001"
+    statuses = [d["statusCode"] for d in result["data"]["deliveries"]]
+    assert statuses == [200, 504]
+    assert result["metadata"]["pagination"]["has_more"] is False
+
+
+@pytest.mark.asyncio
+async def test_list_deliveries_surfaces_cursor() -> None:
+    client = StubClient(
+        get_responses={
+            f"/organizations/{_ORG_UUID}/webhooks/wh-001/deliveries": [
+                {"data": [_DELIVERY_A], "meta": {"total": 1, "cursor": "next-page-token"}},
+            ],
+        }
+    )
+    result = await list_webhook_deliveries(
+        cast(AutomoxClient, client),
+        org_uuid=_ORG_UUID,
+        webhook_id="wh-001",
+        limit=1,
+        cursor="prev",
+        start_date="2026-01-01T00:00:00Z",
+        end_date="2026-01-31T00:00:00Z",
+    )
+
+    pagination = result["metadata"]["pagination"]
+    assert pagination["has_more"] is True
+    assert pagination["next_cursor"] == "next-page-token"
+    assert client.calls[0][2] == {
+        "limit": 1,
+        "cursor": "prev",
+        "startDate": "2026-01-01T00:00:00Z",
+        "endDate": "2026-01-31T00:00:00Z",
+    }
+
+
+@pytest.mark.asyncio
+async def test_list_deliveries_handles_flat_list() -> None:
+    client = StubClient(
+        get_responses={
+            f"/organizations/{_ORG_UUID}/webhooks/wh-001/deliveries": [[_DELIVERY_A]],
+        }
+    )
+    result = await list_webhook_deliveries(
+        cast(AutomoxClient, client),
+        org_uuid=_ORG_UUID,
+        webhook_id="wh-001",
+    )
+    assert result["data"]["total_deliveries"] == 1
+    assert result["metadata"]["pagination"]["has_more"] is False
 
 
 # ---------------------------------------------------------------------------

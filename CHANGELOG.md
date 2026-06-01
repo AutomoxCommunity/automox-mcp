@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`list_webhook_deliveries` tool (#128).** Lists recent delivery attempts (status, latency, error) for a webhook via `GET /organizations/{org_uuid}/webhooks/{id}/deliveries` — delivery troubleshooting. Read-only, no gate; newest-first and cursor-paginated, with optional `start_date`/`end_date` filters. This was the 9th of 9 Webhooks API paths and the only one not yet wrapped; the server now covers **100%** of the published Console **and** Webhooks APIs (the Webhooks API is a separate OpenAPI doc, `Automox Webhooks API` v1.0.0). The `DeliveryLog` projection carries no secret material (the signing secret is write/rotate-only). Tool count is now **133** (85 read / 48 write).
+
+### Changed
+
+- **README capability claim + `docs/api-coverage.md` webhooks coverage.** The README now asserts the server wraps 100% of the published Console and Webhooks APIs with the single deliberate exception of secret-exposing endpoints, and the stale line claiming device deletion is *omitted* is corrected — `delete_device` ships **gated** (#123), not omitted. `api-coverage.md` gains a Webhooks API coverage section (all 9 paths mapped; notes the spec's `PUT`-vs-our-`PATCH` drift on update, cross-ref #95).
+
 ## [1.3.0] - 2026-05-31
 
 Establishes and documents the server's capability model: a categorical policy for what the MCP server exposes, omits, and gates.

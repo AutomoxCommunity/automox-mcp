@@ -27,6 +27,9 @@ tests/probe_*.py
 Automox Console API.json
 *.openapi.json
 
+# Local webhook reference dump — never commit
+webhooks.json
+
 # MCP Registry tooling — local only, never commit
 mcp-publisher
 mcp-registry-key.pem

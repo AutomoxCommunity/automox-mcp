@@ -638,6 +638,35 @@ class TestWebhookToolsDispatch:
         assert str(recorded.get("org_uuid")) == org_uuid
 
     @pytest.mark.asyncio
+    async def test_list_webhook_deliveries_calls_workflow(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        recorded: dict[str, Any] = {}
+
+        async def fake_list(client, **kwargs):
+            recorded.update(kwargs)
+            return _success()
+
+        monkeypatch.setattr(webhook_tools.workflows, "list_webhook_deliveries", fake_list)
+
+        org_uuid = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        server = StubServer()
+        webhook_tools.register(server, client=FakeClient(org_uuid=org_uuid))
+
+        webhook_id = "550e8400-e29b-41d4-a716-446655440000"
+        await server.tools["list_webhook_deliveries"](
+            webhook_id=webhook_id,
+            org_uuid=org_uuid,
+            limit=10,
+            start_date="2026-01-01T00:00:00Z",
+        )
+
+        assert str(recorded.get("org_uuid")) == org_uuid
+        assert str(recorded.get("webhook_id")) == webhook_id
+        assert recorded.get("limit") == 10
+        assert recorded.get("start_date") == "2026-01-01T00:00:00Z"
+
+    @pytest.mark.asyncio
     async def test_create_webhook_calls_workflow(self, monkeypatch: pytest.MonkeyPatch) -> None:
         recorded: dict[str, Any] = {}
 

@@ -92,6 +92,78 @@ async def list_webhooks(
     }
 
 
+def _summarize_delivery(delivery: Mapping[str, Any]) -> dict[str, Any]:
+    """Extract the delivery-log fields (no secret material in this DTO)."""
+    return {
+        "id": delivery.get("id"),
+        "eventType": delivery.get("eventType"),
+        "success": delivery.get("success"),
+        "statusCode": delivery.get("statusCode"),
+        "error": delivery.get("error"),
+        "durationMs": delivery.get("durationMs"),
+        "timestamp": delivery.get("timestamp"),
+    }
+
+
+async def list_webhook_deliveries(
+    client: AutomoxClient,
+    *,
+    org_uuid: str,
+    webhook_id: str,
+    limit: int | None = None,
+    cursor: str | None = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> dict[str, Any]:
+    """List recent delivery attempts for a webhook (newest-first, cursor-paginated)."""
+    params: dict[str, Any] = {}
+    if limit is not None:
+        params["limit"] = limit
+    if cursor is not None:
+        params["cursor"] = cursor
+    if start_date is not None:
+        params["startDate"] = start_date
+    if end_date is not None:
+        params["endDate"] = end_date
+
+    result = await client.get(
+        f"/organizations/{org_uuid}/webhooks/{webhook_id}/deliveries",
+        params=params,
+    )
+
+    deliveries: list[dict[str, Any]] = []
+    next_cursor: str | None = None
+    total: int | None = None
+    if isinstance(result, Mapping):
+        raw_items = result.get("data") or []
+        if isinstance(raw_items, list):
+            deliveries = [_summarize_delivery(d) for d in raw_items if isinstance(d, Mapping)]
+        meta = result.get("meta")
+        if isinstance(meta, Mapping):
+            next_cursor = meta.get("cursor")
+            total = meta.get("total")
+    elif isinstance(result, list):
+        deliveries = [_summarize_delivery(d) for d in result if isinstance(d, Mapping)]
+
+    data: dict[str, Any] = {
+        "webhook_id": webhook_id,
+        "total_deliveries": total if total is not None else len(deliveries),
+        "deliveries": deliveries,
+    }
+
+    return {
+        "data": data,
+        "metadata": {
+            "deprecated_endpoint": False,
+            "pagination": build_pagination_metadata(
+                page_size=limit,
+                has_more=bool(next_cursor),
+                next_cursor=next_cursor,
+            ),
+        },
+    }
+
+
 async def get_webhook(
     client: AutomoxClient,
     *,

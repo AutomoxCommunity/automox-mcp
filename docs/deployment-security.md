@@ -261,6 +261,8 @@ These are always enabled on HTTP/SSE transports with no opt-out (defense-in-dept
 | `sse` / `http` (enterprise) | Use `AUTOMOX_MCP_OAUTH_ISSUER` for JWT/OIDC auth with audience binding. Serves RFC 9728 metadata for MCP client discovery. Place behind TLS-terminating reverse proxy |
 | Multi-user | Deploy separate server instances per API key/role, or use an MCP gateway that maps user identity to server instances |
 
+> **`upload_policy_file` is stdio-only.** It reads an installer from the local filesystem, so it is unavailable on every network transport (`streamable-http`/`sse`/`http`): it is not registered under a non-stdio transport, and `main()` refuses to start a network transport while `AUTOMOX_MCP_ALLOW_UPLOAD_POLICY_FILE` is set. On a remote-hosted deployment, leave that flag unset. (Even on `stdio` it stays opt-in behind the flag plus a required `AUTOMOX_MCP_UPLOAD_ALLOWED_DIRS` allowlist.)
+
 ## Human-in-the-Loop Configuration
 
 Client-side controls that complement the server's safety features:

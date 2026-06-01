@@ -7,18 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
-- **`upload_policy_file` tool (#106), gated + local-only.** Uploads a local installer file (up to 10 GB) to a Required Software policy via `POST /policies/{id}/files`. Mechanism: `file_path` (server reads a local file) — `base64` is impractical at GB scale and `file_url` was rejected to avoid building SSRF defense from scratch. Confined by a new default-off gate `AUTOMOX_MCP_ALLOW_UPLOAD_POLICY_FILE`, a **required** directory allowlist `AUTOMOX_MCP_UPLOAD_ALLOWED_DIRS` (paths canonicalized; `..`/symlink escape rejected), a size cap `AUTOMOX_MCP_UPLOAD_MAX_BYTES` (default 10 GB), and **stdio-only** registration — `main()` refuses to start a remote transport while the flag is on, so it can never be served over a network. The installer streams to Automox and never passes through the model. Tool count **131 → 132** (84 read / 48 write). Contract verified end-to-end against the live tenant (2026-06-01): create Required Software policy → upload → `201` (returns a file object `{uuid, filename, size}`) → delete.
-
-### Fixed
-
-- **`upload_action_set` now works — sends real `multipart/form-data` (#106).** The previous implementation POSTed JSON and was non-functional; the live endpoint requires a multipart file. Added `AutomoxClient.post_multipart`, which overrides the client's default `application/json` content-type with the boundary httpx encodes. Contract confirmed against the live tenant (2026-05-31): `source` is a **query parameter** (enum `generic|qualys|tenable|crowd-strike|rapid7`) and the multipart body carries `file` + `format` (same enum) — the earlier opaque `500` was `source` sent as a form field with an empty query string.
-
-### Changed
-
-- **`upload_action_set` tool signature.** Replaces the freeform `action_set_data` dict with `csv_content` (raw CSV text), `source` (format enum), and `filename` (becomes the action set's display name). CSV arrives inline as text — no URL fetch or local-file read, so no SSRF/file-read surface. (The Required-Software installer upload, the other half of #106, ships as `upload_policy_file` — see Added.)
-
 ## [1.3.0] - 2026-05-31
 
 Establishes and documents the server's capability model: a categorical policy for what the MCP server exposes, omits, and gates.
@@ -30,18 +18,24 @@ Establishes and documents the server's capability model: a categorical policy fo
 - **`delete_device` tool (#123), gated.** Permanently deletes a device record and its history via `DELETE /servers/{id}`. Irreversible and not reconstructable through the MCP — there is no create-device counterpart (agents self-register) — so it is gated behind a new default-off `AUTOMOX_MCP_ALLOW_DELETE_DEVICE` flag (category B), not ask-first. Off by default even in write mode.
 - **`update_device` tool (#111).** Updates a single device's `custom_name`, `server_group_id`, `exception`, `tags`, or `ip_addrs` via `PUT /servers/{id}`. Fills the single-device-update gap that `batch_update_devices` (tags-only) leaves; not destructive, plain write (off under `read_only`).
 - **`delete_action_set` / `delete_action_sets_bulk` tools (#111).** Delete Vuln Sync action sets — Tier-1 ask-first (`destructiveHint`, reconstructable via re-upload). The bulk tool issues one atomic `DELETE /…/action-sets` with a `{"ids": [...]}` body; `AutomoxClient.delete` gained JSON-body support to enable it.
-- Tool count is now **131** (84 read / 47 write); read-only mode still exposes 84.
+- **`upload_policy_file` tool (#106), gated + local-only.** Uploads a local installer file (up to 10 GB) to a Required Software policy via `POST /policies/{id}/files`. Mechanism: `file_path` (server reads a local file) — `base64` is impractical at GB scale and `file_url` was rejected to avoid building SSRF defense from scratch. Confined by a new default-off gate `AUTOMOX_MCP_ALLOW_UPLOAD_POLICY_FILE`, a **required** directory allowlist `AUTOMOX_MCP_UPLOAD_ALLOWED_DIRS` (paths canonicalized; `..`/symlink escape rejected), a size cap `AUTOMOX_MCP_UPLOAD_MAX_BYTES` (default 10 GB), and **stdio-only** registration — `main()` refuses to start a remote transport while the flag is on, so it can never be served over a network. The installer streams to Automox and never passes through the model. Contract verified end-to-end against the live tenant (2026-06-01): create Required Software policy → upload → `201` (returns a file object `{uuid, filename, size}`) → delete.
+- Tool count is now **132** (84 read / 48 write); read-only mode still exposes 84.
 
 ### Changed
 
 - **Destructive-gate env flags now follow a uniform `AUTOMOX_MCP_ALLOW_<TOOL_NAME>` rule (one breaking rename).** Each gate flag's suffix is the uppercased name of the single tool it unlocks, so the flag↔tool mapping is 1:1 and greppable. As part of this, the flag shipped in 1.2.0 as `AUTOMOX_MCP_ALLOW_REMEDIATION` is renamed to **`AUTOMOX_MCP_ALLOW_APPLY_REMEDIATION_ACTIONS`** (matching tool `apply_remediation_actions`). **Breaking:** anyone who set the old name must update it, or `apply_remediation_actions` will not register — fail-safe (the capability is withheld, never silently enabled). The new `delete_device` gate (`AUTOMOX_MCP_ALLOW_DELETE_DEVICE`) and Splashtop gate (`AUTOMOX_MCP_ALLOW_SPLASHTOP_BULK_INSTALL_UNINSTALL`, new this release) already follow the rule, so no other flags change.
 - **`splashtop_bulk_install_uninstall` is now gated (behavioral change).** It installs/uninstalls the Splashtop client across an entire server group in one call — a fleet-scale blast radius per-call confirmation cannot meaningfully vet — so it now requires `AUTOMOX_MCP_ALLOW_SPLASHTOP_BULK_INSTALL_UNINSTALL=true` in addition to write mode. Previously it registered on write mode alone. **No grandfathering:** the destructive-gating standard is applied uniformly. Single-device Splashtop actions (`install`/`uninstall`/`force_disconnect`) are unaffected — they remain confirmation-gated (`destructiveHint`) only, since they are single-target and recoverable.
+- **`upload_action_set` tool signature (#106).** Replaces the freeform `action_set_data` dict with `csv_content` (raw CSV text), `source` (format enum), and `filename` (becomes the action set's display name). CSV arrives inline as text — no URL fetch or local-file read, so no SSRF/file-read surface.
+
+### Fixed
+
+- **`upload_action_set` now works — sends real `multipart/form-data` (#106).** The previous implementation POSTed JSON and was non-functional; the live endpoint requires a multipart file. Added `AutomoxClient.post_multipart`, which overrides the client's default `application/json` content-type with the boundary httpx encodes. Contract confirmed against the live tenant (2026-05-31): `source` is a **query parameter** (enum `generic|qualys|tenable|crowd-strike|rapid7`) and the multipart body carries `file` + `format` (same enum) — the earlier opaque `500` was `source` sent as a form field with an empty query string.
 
 ### Policy (documented, no code change)
 
 - **Secrets are never handled** — no decrypt tools, no password-setting, secret fields redacted. `PUT /users/{id}` (full-replace, accepts `password`) stays omitted; the `PATCH` variant (`update_user`) is the wrapped one.
 - **Destructive operations are two-tier** — *ask-first* (`destructiveHint`, host confirmation) for single-target/recoverable actions; *gated* (default-off env flag) only when confirmation can't protect the operator: fleet-scale **(A)**, self-lockout **(B)**, or arbitrary model-authored code execution **(C)**.
-- **`DELETE /servers/{id}` (device deletion) now wrapped, gated** — after verified demand (#123) it ships behind `AUTOMOX_MCP_ALLOW_DELETE_DEVICE` (category B: no create-counterpart, no MCP-side undo), per the standing policy that it would ship gated rather than ask-first. The documented-surface build backlog (`PUT /servers/{id}`, action-set deletes) is also covered (#111); binary/multipart uploads remain tracked in #106.
+- **`DELETE /servers/{id}` (device deletion) now wrapped, gated** — after verified demand (#123) it ships behind `AUTOMOX_MCP_ALLOW_DELETE_DEVICE` (category B: no create-counterpart, no MCP-side undo), per the standing policy that it would ship gated rather than ask-first. The documented-surface build backlog (`PUT /servers/{id}`, action-set deletes) is also covered (#111); binary/multipart uploads (action-set CSV + Required Software installer) are now covered too (#106 closed).
 
 ## [1.2.1] - 2026-05-30
 

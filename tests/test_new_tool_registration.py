@@ -132,20 +132,39 @@ def test_splashtop_tools_register_with_writes() -> None:
         "splashtop_uninstall",
     }
     assert expected.issubset(tool_names)
-    # The fleet-scale bulk tool is gated separately (AUTOMOX_MCP_ALLOW_REMOTE_CONTROL)
-    # and must NOT register on write mode alone.
+    # The fleet-scale bulk tool is gated separately
+    # (AUTOMOX_MCP_ALLOW_SPLASHTOP_BULK_INSTALL_UNINSTALL) and must NOT register
+    # on write mode alone.
     assert "splashtop_bulk_install_uninstall" not in tool_names
 
 
-def test_splashtop_bulk_gated_by_remote_control_flag(monkeypatch) -> None:
+def test_splashtop_bulk_gated_by_flag(monkeypatch) -> None:
     # Off by default even in write mode.
     server = _make_server_with_module("splashtop_tools", has_writes=True)
     assert "splashtop_bulk_install_uninstall" not in automox_mcp.tools._get_tool_names(server)
 
-    # Registers only when AUTOMOX_MCP_ALLOW_REMOTE_CONTROL is enabled.
-    monkeypatch.setenv("AUTOMOX_MCP_ALLOW_REMOTE_CONTROL", "true")
+    # Registers only when AUTOMOX_MCP_ALLOW_SPLASHTOP_BULK_INSTALL_UNINSTALL is enabled.
+    monkeypatch.setenv("AUTOMOX_MCP_ALLOW_SPLASHTOP_BULK_INSTALL_UNINSTALL", "true")
     server = _make_server_with_module("splashtop_tools", has_writes=True)
     assert "splashtop_bulk_install_uninstall" in automox_mcp.tools._get_tool_names(server)
+
+
+def test_delete_device_gated_by_flag(monkeypatch) -> None:
+    # Off by default even in write mode.
+    server = _make_server_with_module("device_tools", has_writes=True)
+    assert "delete_device" not in automox_mcp.tools._get_tool_names(server)
+
+    # Registers only when AUTOMOX_MCP_ALLOW_DELETE_DEVICE is enabled.
+    monkeypatch.setenv("AUTOMOX_MCP_ALLOW_DELETE_DEVICE", "true")
+    server = _make_server_with_module("device_tools", has_writes=True)
+    assert "delete_device" in automox_mcp.tools._get_tool_names(server)
+
+
+def test_delete_device_absent_in_read_only(monkeypatch) -> None:
+    # Even with the gate flag on, read-only mode suppresses the destructive tool.
+    monkeypatch.setenv("AUTOMOX_MCP_ALLOW_DELETE_DEVICE", "true")
+    server = _make_server_with_module("device_tools", has_writes=False)
+    assert "delete_device" not in automox_mcp.tools._get_tool_names(server)
 
 
 def test_vuln_sync_tools_register_read_only() -> None:

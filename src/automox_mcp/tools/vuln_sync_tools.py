@@ -278,7 +278,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             return result
 
         # Remediation EXECUTION is opt-in beyond write mode: it immediately
-        # patches/runs worklets on endpoints. Gated by AUTOMOX_MCP_ALLOW_REMEDIATION.
+        # patches/runs worklets on endpoints. Gated by AUTOMOX_MCP_ALLOW_APPLY_REMEDIATION_ACTIONS.
         if is_remediation_allowed():
 
             @server.tool(
@@ -287,8 +287,8 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                     "Execute remediation actions on devices NOW — patch-now or "
                     "patch-with-worklet — for a remediation action set. This immediately "
                     "changes endpoint state (async, returns 202). Requires "
-                    "AUTOMOX_MCP_ALLOW_REMEDIATION=true. Provide explicit solution_id and "
-                    "device IDs per action; there is no 'all devices' shortcut."
+                    "AUTOMOX_MCP_ALLOW_APPLY_REMEDIATION_ACTIONS=true. Provide explicit "
+                    "solution_id and device IDs per action; there is no 'all devices' shortcut."
                 ),
                 annotations={
                     "readOnlyHint": False,

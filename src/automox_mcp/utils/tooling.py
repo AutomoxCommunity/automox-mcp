@@ -70,26 +70,44 @@ def is_read_only() -> bool:
 def is_remediation_allowed() -> bool:
     """Return True when remediation execution is explicitly enabled.
 
-    Gated by ``AUTOMOX_MCP_ALLOW_REMEDIATION`` (default off). Controls the
+    Gated by ``AUTOMOX_MCP_ALLOW_APPLY_REMEDIATION_ACTIONS`` (default off). Controls the
     ``apply_remediation_actions`` tool, which immediately patches/runs worklets
     on endpoints — opt-in even when write mode is enabled.
     """
-    value = os.environ.get("AUTOMOX_MCP_ALLOW_REMEDIATION", "")
+    value = os.environ.get("AUTOMOX_MCP_ALLOW_APPLY_REMEDIATION_ACTIONS", "")
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
-def is_remote_control_allowed() -> bool:
-    """Return True when fleet-scale remote-control actions are explicitly enabled.
+def is_splashtop_bulk_allowed() -> bool:
+    """Return True when fleet-scale Splashtop client deployment is explicitly enabled.
 
-    Gated by ``AUTOMOX_MCP_ALLOW_REMOTE_CONTROL`` (default off). Controls the
-    ``splashtop_bulk_install_uninstall`` tool, which installs/uninstalls the
-    Splashtop RMM client across an entire server group in one call — a
-    fleet-scale change that per-call confirmation cannot meaningfully vet, so it
-    is opt-in even when write mode is enabled. Single-device Splashtop actions
-    (install/uninstall/force-disconnect one device) remain confirmation-gated
-    only, not env-gated.
+    Gated by ``AUTOMOX_MCP_ALLOW_SPLASHTOP_BULK_INSTALL_UNINSTALL`` (default
+    off). Controls the ``splashtop_bulk_install_uninstall`` tool, which
+    installs/uninstalls the Splashtop RMM client across an entire server group
+    in one call — a fleet-scale change that per-call confirmation cannot
+    meaningfully vet, so it is opt-in even when write mode is enabled. The flag
+    name mirrors the tool: this gates *deploying/removing the client software*
+    fleet-wide, not starting remote-control sessions (that is
+    ``splashtop_initiate_connection``, which is not env-gated). Single-device
+    Splashtop actions (install/uninstall/force-disconnect one device) remain
+    confirmation-gated only, not env-gated.
     """
-    value = os.environ.get("AUTOMOX_MCP_ALLOW_REMOTE_CONTROL", "")
+    value = os.environ.get("AUTOMOX_MCP_ALLOW_SPLASHTOP_BULK_INSTALL_UNINSTALL", "")
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def is_device_deletion_allowed() -> bool:
+    """Return True when device deletion is explicitly enabled.
+
+    Gated by ``AUTOMOX_MCP_ALLOW_DELETE_DEVICE`` (default off). Controls the
+    ``delete_device`` tool (``DELETE /servers/{id}``), which permanently
+    destroys a device record and its history. There is no create-device
+    counterpart (agents self-register), so a wrongly deleted record is not
+    reconstructable through the MCP and per-call confirmation cannot restore it
+    — opt-in even when write mode is enabled (category B, see
+    ``docs/api-coverage.md``).
+    """
+    value = os.environ.get("AUTOMOX_MCP_ALLOW_DELETE_DEVICE", "")
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 

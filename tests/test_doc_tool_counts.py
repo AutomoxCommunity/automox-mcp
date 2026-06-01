@@ -37,8 +37,9 @@ _TOOL_REFERENCE = _REPO_ROOT / "docs" / "tool-reference.md"
 # independent of the ambient shell.
 _GATING_ENV = (
     "AUTOMOX_MCP_READ_ONLY",
-    "AUTOMOX_MCP_ALLOW_REMEDIATION",
-    "AUTOMOX_MCP_ALLOW_REMOTE_CONTROL",
+    "AUTOMOX_MCP_ALLOW_APPLY_REMEDIATION_ACTIONS",
+    "AUTOMOX_MCP_ALLOW_SPLASHTOP_BULK_INSTALL_UNINSTALL",
+    "AUTOMOX_MCP_ALLOW_DELETE_DEVICE",
     "AUTOMOX_MCP_MODULES",
     "AUTOMOX_MCP_TOOL_PREFIX",
 )
@@ -60,8 +61,9 @@ def registered_counts(monkeypatch: pytest.MonkeyPatch) -> dict[str, int]:
     """Tool counts under the full / read-only gate configurations."""
     full = _register(
         monkeypatch,
-        AUTOMOX_MCP_ALLOW_REMEDIATION="true",
-        AUTOMOX_MCP_ALLOW_REMOTE_CONTROL="true",
+        AUTOMOX_MCP_ALLOW_APPLY_REMEDIATION_ACTIONS="true",
+        AUTOMOX_MCP_ALLOW_SPLASHTOP_BULK_INSTALL_UNINSTALL="true",
+        AUTOMOX_MCP_ALLOW_DELETE_DEVICE="true",
     )
     read_only = _register(monkeypatch, AUTOMOX_MCP_READ_ONLY="true")
     return {
@@ -74,8 +76,9 @@ def registered_counts(monkeypatch: pytest.MonkeyPatch) -> dict[str, int]:
 def _full_tool_names(monkeypatch: pytest.MonkeyPatch) -> set[str]:
     return _register(
         monkeypatch,
-        AUTOMOX_MCP_ALLOW_REMEDIATION="true",
-        AUTOMOX_MCP_ALLOW_REMOTE_CONTROL="true",
+        AUTOMOX_MCP_ALLOW_APPLY_REMEDIATION_ACTIONS="true",
+        AUTOMOX_MCP_ALLOW_SPLASHTOP_BULK_INSTALL_UNINSTALL="true",
+        AUTOMOX_MCP_ALLOW_DELETE_DEVICE="true",
     )
 
 

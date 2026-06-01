@@ -272,13 +272,13 @@ def test_apply_remediation_tool_gated_by_env(monkeypatch) -> None:
     from automox_mcp.tools import vuln_sync_tools
 
     # default off -> not registered
-    monkeypatch.delenv("AUTOMOX_MCP_ALLOW_REMEDIATION", raising=False)
+    monkeypatch.delenv("AUTOMOX_MCP_ALLOW_APPLY_REMEDIATION_ACTIONS", raising=False)
     off = StubServer()
     vuln_sync_tools.register(off, read_only=False, client=FakeClient())
     assert "apply_remediation_actions" not in off.tools
 
     # explicit opt-in -> registered
-    monkeypatch.setenv("AUTOMOX_MCP_ALLOW_REMEDIATION", "true")
+    monkeypatch.setenv("AUTOMOX_MCP_ALLOW_APPLY_REMEDIATION_ACTIONS", "true")
     on = StubServer()
     vuln_sync_tools.register(on, read_only=False, client=FakeClient())
     assert "apply_remediation_actions" in on.tools

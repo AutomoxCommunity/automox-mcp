@@ -24,6 +24,7 @@ from ..schemas import (
 from ..utils.tooling import (
     call_tool_workflow,
     check_idempotency,
+    is_device_deletion_allowed,
     maybe_format_markdown,
     release_idempotency,
     store_idempotency,
@@ -385,6 +386,50 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 raise
             await store_idempotency(request_id, "update_device", result)
             return result
+
+        # Device deletion is opt-in beyond write mode: DELETE /servers/{id}
+        # destroys the device record and its history with no create-device
+        # counterpart (agents self-register), so a wrongly deleted record is not
+        # reconstructable through the MCP and per-call confirmation cannot
+        # restore it. Gated by AUTOMOX_MCP_ALLOW_DELETE_DEVICE (category B).
+        if is_device_deletion_allowed():
+
+            @server.tool(
+                name="delete_device",
+                description=(
+                    "Permanently delete a device (server) record and its history "
+                    "via DELETE /servers/{id}. Irreversible and not reconstructable "
+                    "through the MCP — there is no create-device counterpart "
+                    "(agents self-register). Requires "
+                    "AUTOMOX_MCP_ALLOW_DELETE_DEVICE=true."
+                ),
+                annotations={
+                    "readOnlyHint": False,
+                    "destructiveHint": True,
+                    "idempotentHint": False,
+                    "openWorldHint": True,
+                },
+            )
+            async def delete_device(
+                device_id: int,
+                request_id: str | None = None,
+            ) -> dict[str, Any]:
+                cached = await check_idempotency(request_id, "delete_device")
+                if cached is not None:
+                    return cached
+
+                try:
+                    result = await call_tool_workflow(
+                        client,
+                        workflows.delete_device,
+                        {"device_id": device_id},
+                        params_model=DeviceIdOnlyParams,
+                    )
+                except BaseException:
+                    await release_idempotency(request_id, "delete_device")
+                    raise
+                await store_idempotency(request_id, "delete_device", result)
+                return result
 
 
 __all__ = ["register"]

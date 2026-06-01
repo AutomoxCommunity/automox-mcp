@@ -525,6 +525,79 @@ class TestDeviceToolsDispatch:
         assert released == ["update_device"]
 
     @pytest.mark.asyncio
+    async def test_delete_device_calls_workflow(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        recorded: dict[str, Any] = {}
+
+        async def fake_delete(client, **kwargs):
+            recorded.update(kwargs)
+            return _success()
+
+        monkeypatch.setattr(device_tools.workflows, "delete_device", fake_delete)
+        monkeypatch.setenv("AUTOMOX_MCP_ALLOW_DELETE_DEVICE", "true")
+
+        server = StubServer()
+        device_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+
+        await server.tools["delete_device"](device_id=99)
+
+        assert recorded.get("device_id") == 99
+
+    @pytest.mark.asyncio
+    async def test_delete_device_gated_off_by_default(self) -> None:
+        # Write mode alone is not enough — the gate flag must be set.
+        server = StubServer()
+        device_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+        assert "delete_device" not in server.tools
+
+    @pytest.mark.asyncio
+    async def test_delete_device_cache_hit_short_circuits(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        called: list[bool] = []
+
+        async def fake_check(request_id: str | None, name: str):
+            return {"data": {"cached": True}, "metadata": {"deprecated_endpoint": False}}
+
+        async def fake_wf(client, **_):
+            called.append(True)
+            return _success()
+
+        monkeypatch.setattr(device_tools, "check_idempotency", fake_check)
+        monkeypatch.setattr(device_tools.workflows, "delete_device", fake_wf)
+        monkeypatch.setenv("AUTOMOX_MCP_ALLOW_DELETE_DEVICE", "true")
+
+        server = StubServer()
+        device_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+        result = await server.tools["delete_device"](device_id=99, request_id="del-1")
+        assert result["data"] == {"cached": True}
+        assert called == []
+
+    @pytest.mark.asyncio
+    async def test_delete_device_exception_releases_idempotency(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        released: list[str] = []
+
+        async def fake_release(request_id: str | None, name: str):
+            released.append(name)
+
+        async def fake_wf(client, **_):
+            raise RuntimeError("upstream blew up")
+
+        monkeypatch.setattr(device_tools, "release_idempotency", fake_release)
+        monkeypatch.setattr(device_tools.workflows, "delete_device", fake_wf)
+        monkeypatch.setenv("AUTOMOX_MCP_ALLOW_DELETE_DEVICE", "true")
+
+        server = StubServer()
+        device_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+
+        from fastmcp.exceptions import ToolError
+
+        with pytest.raises((RuntimeError, ToolError)):
+            await server.tools["delete_device"](device_id=99, request_id="del-2")
+        assert released == ["delete_device"]
+
+    @pytest.mark.asyncio
     async def test_execute_device_command_absent_in_read_only(self) -> None:
         server = StubServer()
         device_tools.register(server, read_only=True, client=FakeClient(org_id=42))
@@ -1816,7 +1889,7 @@ class TestSplashtopToolsDispatch:
             return _success()
 
         monkeypatch.setattr(splashtop_tools, "_bulk_install_uninstall", fake)
-        monkeypatch.setenv("AUTOMOX_MCP_ALLOW_REMOTE_CONTROL", "true")
+        monkeypatch.setenv("AUTOMOX_MCP_ALLOW_SPLASHTOP_BULK_INSTALL_UNINSTALL", "true")
 
         server = StubServer()
         splashtop_tools.register(server, read_only=False, client=FakeClient())
@@ -2015,7 +2088,7 @@ class TestSplashtopIdempotencyAndExceptionPaths:
         monkeypatch.setattr(splashtop_tools, "check_idempotency", fake_check)
         monkeypatch.setattr(splashtop_tools, wf_attr, fake_wf)
         # Enable the gated bulk tool so the parametrized bulk case registers.
-        monkeypatch.setenv("AUTOMOX_MCP_ALLOW_REMOTE_CONTROL", "true")
+        monkeypatch.setenv("AUTOMOX_MCP_ALLOW_SPLASHTOP_BULK_INSTALL_UNINSTALL", "true")
 
         server = StubServer()
         splashtop_tools.register(server, read_only=False, client=FakeClient())
@@ -2044,7 +2117,7 @@ class TestSplashtopIdempotencyAndExceptionPaths:
         monkeypatch.setattr(splashtop_tools, "release_idempotency", fake_release)
         monkeypatch.setattr(splashtop_tools, wf_attr, fake_wf)
         # Enable the gated bulk tool so the parametrized bulk case registers.
-        monkeypatch.setenv("AUTOMOX_MCP_ALLOW_REMOTE_CONTROL", "true")
+        monkeypatch.setenv("AUTOMOX_MCP_ALLOW_SPLASHTOP_BULK_INSTALL_UNINSTALL", "true")
 
         server = StubServer()
         splashtop_tools.register(server, read_only=False, client=FakeClient())
@@ -2215,7 +2288,7 @@ class TestVulnSyncRemediationDispatch:
     async def test_apply_remediation_actions_dispatch(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        monkeypatch.setenv("AUTOMOX_MCP_ALLOW_REMEDIATION", "true")
+        monkeypatch.setenv("AUTOMOX_MCP_ALLOW_APPLY_REMEDIATION_ACTIONS", "true")
         recorded: dict[str, Any] = {}
 
         async def fake(client, **kwargs):

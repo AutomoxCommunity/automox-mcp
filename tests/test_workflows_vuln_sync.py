@@ -191,17 +191,45 @@ async def test_formats_returns_list() -> None:
 
 
 @pytest.mark.asyncio
-async def test_upload_submits_request() -> None:
-    response = {"id": 3, "status": "pending"}
+async def test_upload_submits_multipart_request() -> None:
+    response = {"id": 3, "status": "building", "organization_id": 42}
     client = StubClient(post_responses={"/orgs/42/remediations/action-sets/upload": [response]})
     result = await upload_action_set(
         cast(AutomoxClient, client),
         org_id=42,
-        action_set_data={"format": "qualys", "csv_data": "..."},
+        csv_content="Hostname,CVE ID\nhost1,CVE-2021-1234",
+        source="qualys",
+        filename="qualys-export.csv",
     )
     assert result["data"]["id"] == 3
-    assert result["data"]["status"] == "pending"
-    assert client.calls[0][0] == "POST"
+    assert result["data"]["status"] == "building"
+
+    method, path, payload = client.calls[0]
+    assert method == "POST_MULTIPART"
+    assert path == "/orgs/42/remediations/action-sets/upload"
+    # source rides the query string; format mirrors it in the body.
+    assert payload["params"] == {"source": "qualys"}
+    assert payload["data"] == {"format": "qualys"}
+    fname, content, ctype = payload["files"]["file"]
+    assert fname == "qualys-export.csv"
+    assert content == b"Hostname,CVE ID\nhost1,CVE-2021-1234"
+    assert ctype == "text/csv"
+
+
+@pytest.mark.asyncio
+async def test_upload_handles_array_response() -> None:
+    # The spec types the 201 body as a one-element array; handle that shape too.
+    client = StubClient(
+        post_responses={
+            "/orgs/42/remediations/action-sets/upload": [[{"id": 9, "status": "building"}]]
+        }
+    )
+    result = await upload_action_set(
+        cast(AutomoxClient, client),
+        org_id=42,
+        csv_content="a,b\n1,2",
+    )
+    assert result["data"]["id"] == 9
 
 
 # ---------------------------------------------------------------------------

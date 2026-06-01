@@ -23,6 +23,10 @@ console-api.yaml
 # Live-tenant probe harnesses — manual debugging, never commit (not in CI)
 tests/probe_*.py
 
+# Local OpenAPI spec exports — reference only, never commit (5+ MB dumps)
+Automox Console API.json
+*.openapi.json
+
 # MCP Registry tooling — local only, never commit
 mcp-publisher
 mcp-registry-key.pem

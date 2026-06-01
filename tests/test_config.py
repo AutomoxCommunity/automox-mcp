@@ -223,6 +223,23 @@ def test_main_raises_on_unsupported_transport(monkeypatch):
         main([])
 
 
+def test_main_refuses_remote_transport_when_upload_flag_set(monkeypatch):
+    # upload_policy_file is local-only: main() must refuse to start a network
+    # transport while AUTOMOX_MCP_ALLOW_UPLOAD_POLICY_FILE is on, even when the
+    # transport comes from the CLI flag (which registration can't see).
+    from automox_mcp import main
+
+    monkeypatch.setenv("AUTOMOX_API_KEY", "env-key")
+    monkeypatch.setenv("AUTOMOX_ACCOUNT_UUID", "account-uuid")
+    monkeypatch.setenv("AUTOMOX_ORG_ID", "17")
+    monkeypatch.setenv("AUTOMOX_MCP_SKIP_DOTENV", "1")
+    monkeypatch.delenv("AUTOMOX_MCP_TRANSPORT", raising=False)
+    monkeypatch.setenv("AUTOMOX_MCP_ALLOW_UPLOAD_POLICY_FILE", "true")
+
+    with pytest.raises(SystemExit, match="upload_policy_file"):
+        main(["--transport", "http"])
+
+
 def test_main_stdio_transport_calls_run(monkeypatch):
     import automox_mcp as init_mod
 

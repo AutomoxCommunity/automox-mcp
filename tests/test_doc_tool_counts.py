@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import re
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -40,9 +41,25 @@ _GATING_ENV = (
     "AUTOMOX_MCP_ALLOW_APPLY_REMEDIATION_ACTIONS",
     "AUTOMOX_MCP_ALLOW_SPLASHTOP_BULK_INSTALL_UNINSTALL",
     "AUTOMOX_MCP_ALLOW_DELETE_DEVICE",
+    "AUTOMOX_MCP_ALLOW_UPLOAD_POLICY_FILE",
+    "AUTOMOX_MCP_UPLOAD_ALLOWED_DIRS",
+    "AUTOMOX_MCP_TRANSPORT",
     "AUTOMOX_MCP_MODULES",
     "AUTOMOX_MCP_TOOL_PREFIX",
 )
+
+# upload_policy_file registers only with a non-empty, existing allowlist dir.
+_TMP_DIR = tempfile.gettempdir()
+
+# The opt-in gate flags the "full" configuration must set so every gated tool
+# registers (matches the "N tools" headline the docs advertise).
+_FULL_GATES = {
+    "AUTOMOX_MCP_ALLOW_APPLY_REMEDIATION_ACTIONS": "true",
+    "AUTOMOX_MCP_ALLOW_SPLASHTOP_BULK_INSTALL_UNINSTALL": "true",
+    "AUTOMOX_MCP_ALLOW_DELETE_DEVICE": "true",
+    "AUTOMOX_MCP_ALLOW_UPLOAD_POLICY_FILE": "true",
+    "AUTOMOX_MCP_UPLOAD_ALLOWED_DIRS": _TMP_DIR,
+}
 
 
 def _register(monkeypatch: pytest.MonkeyPatch, **env: str) -> set[str]:
@@ -59,12 +76,7 @@ def _register(monkeypatch: pytest.MonkeyPatch, **env: str) -> set[str]:
 @pytest.fixture
 def registered_counts(monkeypatch: pytest.MonkeyPatch) -> dict[str, int]:
     """Tool counts under the full / read-only gate configurations."""
-    full = _register(
-        monkeypatch,
-        AUTOMOX_MCP_ALLOW_APPLY_REMEDIATION_ACTIONS="true",
-        AUTOMOX_MCP_ALLOW_SPLASHTOP_BULK_INSTALL_UNINSTALL="true",
-        AUTOMOX_MCP_ALLOW_DELETE_DEVICE="true",
-    )
+    full = _register(monkeypatch, **_FULL_GATES)
     read_only = _register(monkeypatch, AUTOMOX_MCP_READ_ONLY="true")
     return {
         "total": len(full),
@@ -74,12 +86,7 @@ def registered_counts(monkeypatch: pytest.MonkeyPatch) -> dict[str, int]:
 
 
 def _full_tool_names(monkeypatch: pytest.MonkeyPatch) -> set[str]:
-    return _register(
-        monkeypatch,
-        AUTOMOX_MCP_ALLOW_APPLY_REMEDIATION_ACTIONS="true",
-        AUTOMOX_MCP_ALLOW_SPLASHTOP_BULK_INSTALL_UNINSTALL="true",
-        AUTOMOX_MCP_ALLOW_DELETE_DEVICE="true",
-    )
+    return _register(monkeypatch, **_FULL_GATES)
 
 
 # ---------------------------------------------------------------------------

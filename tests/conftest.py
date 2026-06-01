@@ -109,6 +109,18 @@ class FakeClient:
     ) -> Any:
         return self._post_response
 
+    async def post_multipart(
+        self,
+        path: str,
+        *,
+        files: Any = None,
+        data: Any = None,
+        params: Any = None,
+        headers: Any = None,
+        timeout: Any = None,  # noqa: ASYNC109 - mirrors client.post_multipart (httpx timeout)
+    ) -> Any:
+        return self._post_response
+
 
 # ---------------------------------------------------------------------------
 # Shared StubClient for workflow tests
@@ -167,6 +179,22 @@ class StubClient:
         self, path: str, *, json_data: Any = None, params: Any = None, headers: Any = None
     ) -> Any:
         self.calls.append(("POST", path, json_data))
+        return self._pop(self._post, path)
+
+    async def post_multipart(
+        self,
+        path: str,
+        *,
+        files: Any = None,
+        data: Any = None,
+        params: Any = None,
+        headers: Any = None,
+        timeout: Any = None,  # noqa: ASYNC109 - mirrors client.post_multipart (httpx timeout)
+    ) -> Any:
+        # Record the multipart shape so tests can assert query/body/file parts.
+        self.calls.append(
+            ("POST_MULTIPART", path, {"params": params, "data": data, "files": files})
+        )
         return self._pop(self._post, path)
 
     async def put(

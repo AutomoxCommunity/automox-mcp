@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`upload_policy_file` tool (#106), gated + local-only.** Uploads a local installer file (up to 10 GB) to a Required Software policy via `POST /policies/{id}/files`. Mechanism: `file_path` (server reads a local file) — `base64` is impractical at GB scale and `file_url` was rejected to avoid building SSRF defense from scratch. Confined by a new default-off gate `AUTOMOX_MCP_ALLOW_UPLOAD_POLICY_FILE`, a **required** directory allowlist `AUTOMOX_MCP_UPLOAD_ALLOWED_DIRS` (paths canonicalized; `..`/symlink escape rejected), a size cap `AUTOMOX_MCP_UPLOAD_MAX_BYTES` (default 10 GB), and **stdio-only** registration — `main()` refuses to start a remote transport while the flag is on, so it can never be served over a network. The installer streams to Automox and never passes through the model. Tool count **131 → 132** (84 read / 48 write). *(Spec-derived; the simple `file`-only multipart shape is unverified against a live tenant — smoke-test before relying on it.)*
+
+### Fixed
+
+- **`upload_action_set` now works — sends real `multipart/form-data` (#106).** The previous implementation POSTed JSON and was non-functional; the live endpoint requires a multipart file. Added `AutomoxClient.post_multipart`, which overrides the client's default `application/json` content-type with the boundary httpx encodes. Contract confirmed against the live tenant (2026-05-31): `source` is a **query parameter** (enum `generic|qualys|tenable|crowd-strike|rapid7`) and the multipart body carries `file` + `format` (same enum) — the earlier opaque `500` was `source` sent as a form field with an empty query string.
+
+### Changed
+
+- **`upload_action_set` tool signature.** Replaces the freeform `action_set_data` dict with `csv_content` (raw CSV text), `source` (format enum), and `filename` (becomes the action set's display name). CSV arrives inline as text — no URL fetch or local-file read, so no SSRF/file-read surface. (The Required-Software installer upload, the other half of #106, ships as `upload_policy_file` — see Added.)
+
 ## [1.3.0] - 2026-05-31
 
 Establishes and documents the server's capability model: a categorical policy for what the MCP server exposes, omits, and gates.

@@ -9,7 +9,7 @@ import os
 import re
 import time
 from collections.abc import Mapping, Sequence
-from typing import Any
+from typing import Any, NoReturn
 
 import httpx
 
@@ -232,11 +232,7 @@ class AutomoxClient:
         json_data: Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
     ) -> AutomoxResponse:
-        merged_headers: dict[str, str] = dict(headers) if headers else {}
-        correlation_id = get_correlation_id()
-        if correlation_id:
-            merged_headers["X-Correlation-ID"] = correlation_id
-
+        merged_headers, correlation_id = self._prepare_headers(headers)
         logger.debug(
             "Request: %s %s%s correlation_id=%s",
             method,
@@ -255,20 +251,100 @@ class AutomoxClient:
                 headers=merged_headers or None,
             )
         except httpx.RequestError as exc:
-            latency_ms = (time.monotonic() - start) * 1000.0
-            logger.warning(
-                "upstream request failed: %s %s exc=%s:%s latency_ms=%.1f correlation_id=%s",
-                method,
-                path,
-                type(exc).__name__,
-                exc,
-                latency_ms,
-                correlation_id,
-            )
-            raise AutomoxAPIError(
-                f"network error calling Automox API at {self._base_url_str}", status_code=0
-            ) from exc
+            self._raise_network_error(exc, method, path, start, correlation_id)
+        return self._process_response(
+            response, method=method, path=path, correlation_id=correlation_id, start=start
+        )
 
+    async def post_multipart(
+        self,
+        path: str,
+        *,
+        files: Mapping[str, Any],
+        data: Mapping[str, Any] | None = None,
+        params: Mapping[str, Any] | None = None,
+        headers: Mapping[str, str] | None = None,
+        timeout: float | None = None,  # noqa: ASYNC109 - httpx request timeout, not an asyncio scope
+    ) -> AutomoxResponse:
+        """POST ``multipart/form-data`` (file uploads).
+
+        The client sets a default ``Content-Type: application/json`` header,
+        which clobbers the boundary httpx computes for a multipart body. We build
+        the request (so httpx encodes the parts and derives the boundary), then
+        force the multipart content-type from the encoded stream before sending.
+
+        ``timeout`` (seconds) overrides the client default for large uploads; the
+        connect timeout stays short while read/write/pool scale to ``timeout``.
+        """
+        merged_headers, correlation_id = self._prepare_headers(headers)
+        logger.debug(
+            "Request: POST %s%s (multipart) correlation_id=%s",
+            self._base_url_str,
+            path,
+            correlation_id,
+        )
+
+        start = time.monotonic()
+        build_kwargs: dict[str, Any] = {}
+        if timeout is not None:
+            build_kwargs["timeout"] = httpx.Timeout(timeout, connect=min(15.0, timeout))
+        try:
+            request = self._http.build_request(
+                "POST",
+                path,
+                params=params,  # type: ignore[arg-type]
+                data=dict(data) if data else None,
+                files=files,
+                headers=merged_headers or None,
+                **build_kwargs,
+            )
+            # Override the client-level application/json default with the
+            # boundary-bearing multipart content-type httpx just encoded.
+            stream_content_type = getattr(request.stream, "content_type", None)
+            if stream_content_type:
+                request.headers["Content-Type"] = stream_content_type
+            response = await self._http.send(request)
+        except httpx.RequestError as exc:
+            self._raise_network_error(exc, "POST", path, start, correlation_id)
+        return self._process_response(
+            response, method="POST", path=path, correlation_id=correlation_id, start=start
+        )
+
+    def _prepare_headers(
+        self, headers: Mapping[str, str] | None
+    ) -> tuple[dict[str, str], str | None]:
+        merged_headers: dict[str, str] = dict(headers) if headers else {}
+        correlation_id = get_correlation_id()
+        if correlation_id:
+            merged_headers["X-Correlation-ID"] = correlation_id
+        return merged_headers, correlation_id
+
+    def _raise_network_error(
+        self, exc: Exception, method: str, path: str, start: float, correlation_id: str | None
+    ) -> NoReturn:
+        latency_ms = (time.monotonic() - start) * 1000.0
+        logger.warning(
+            "upstream request failed: %s %s exc=%s:%s latency_ms=%.1f correlation_id=%s",
+            method,
+            path,
+            type(exc).__name__,
+            exc,
+            latency_ms,
+            correlation_id,
+        )
+        raise AutomoxAPIError(
+            f"network error calling Automox API at {self._base_url_str}", status_code=0
+        ) from exc
+
+    def _process_response(
+        self,
+        response: httpx.Response,
+        *,
+        method: str,
+        path: str,
+        correlation_id: str | None,
+        start: float,
+    ) -> AutomoxResponse:
         latency_ms = (time.monotonic() - start) * 1000.0
         retry_after = response.headers.get("Retry-After")
         log_extra = {

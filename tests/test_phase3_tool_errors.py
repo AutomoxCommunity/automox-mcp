@@ -334,9 +334,11 @@ async def test_vs_formats_success() -> None:
 @pytest.mark.asyncio
 async def test_vs_upload_success() -> None:
     client = FakeClient()
-    client._post_response = {"id": 3, "status": "pending"}
+    client._post_response = {"id": 3, "status": "building"}
     server = _register(vuln_sync_tools, client, read_only=False)
-    result = await server.tools["upload_action_set"](action_set_data={"format": "qualys"})
+    result = await server.tools["upload_action_set"](
+        csv_content="a,b\n1,2", source="qualys", filename="q.csv"
+    )
     assert result["data"]["id"] == 3
 
 
@@ -345,8 +347,8 @@ async def test_vs_upload_idempotent() -> None:
     client = FakeClient()
     client._post_response = {"id": 3}
     server = _register(vuln_sync_tools, client, read_only=False)
-    r1 = await server.tools["upload_action_set"](action_set_data={}, request_id="dup-1")
-    r2 = await server.tools["upload_action_set"](action_set_data={}, request_id="dup-1")
+    r1 = await server.tools["upload_action_set"](csv_content="a,b\n1,2", request_id="dup-1")
+    r2 = await server.tools["upload_action_set"](csv_content="a,b\n1,2", request_id="dup-1")
     assert r1 == r2
 
 

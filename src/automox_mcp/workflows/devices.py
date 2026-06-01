@@ -1334,3 +1334,28 @@ async def update_device(
         },
         "metadata": {"deprecated_endpoint": False, "org_id": resolved_org_id},
     }
+
+
+async def delete_device(
+    client: AutomoxClient,
+    *,
+    org_id: int | None = None,
+    device_id: int,
+) -> dict[str, Any]:
+    """Permanently delete a device record.
+
+    Wraps ``DELETE /servers/{id}`` (``deleteDevice``). Destroys the device
+    record and its history. There is no create-device counterpart — agents
+    self-register — so a wrongly deleted record is not reconstructable through
+    the MCP. The tool layer additionally gates this behind
+    ``AUTOMOX_MCP_ALLOW_DELETE_DEVICE`` (category B, see
+    ``docs/api-coverage.md``); the workflow itself is the plain upstream call.
+    """
+    resolved_org_id = require_org_id(client, org_id)
+
+    await client.delete(f"/servers/{device_id}", params={"o": resolved_org_id})
+
+    return {
+        "data": {"device_id": device_id, "deleted": True},
+        "metadata": {"deprecated_endpoint": False, "org_id": resolved_org_id},
+    }

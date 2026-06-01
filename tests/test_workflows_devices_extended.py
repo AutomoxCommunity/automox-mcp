@@ -22,6 +22,7 @@ from automox_mcp.workflows.devices import (
     _summarize_policy_assignments,
     _summarize_policy_status,
     batch_update_devices,
+    delete_device,
     list_device_inventory,
     list_devices_needing_attention,
     search_devices,
@@ -1628,3 +1629,26 @@ async def test_update_device_sends_falsey_exception_flag() -> None:
     _method, _path, body = client.calls[0]
     # exception=False is a meaningful value and must be sent, not dropped.
     assert body == {"exception": False, "tags": ["a", "b"]}
+
+
+# ---------------------------------------------------------------------------
+# delete_device (gated DELETE /servers/{id})
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_delete_device_issues_scoped_delete() -> None:
+    client = StubClient(delete_responses={"/servers/99": [{}]})
+    client.org_id = 555
+    result = await delete_device(
+        cast(AutomoxClient, client),
+        org_id=555,
+        device_id=99,
+    )
+    method, path, scope = client.calls[0]
+    assert method == "DELETE"
+    assert path == "/servers/99"
+    # Org scoping must ride along as the `o` query param.
+    assert scope == {"o": 555}
+    assert result["data"] == {"device_id": 99, "deleted": True}
+    assert result["metadata"]["org_id"] == 555

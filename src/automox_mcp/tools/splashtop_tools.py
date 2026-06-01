@@ -5,8 +5,9 @@ Exposes the ten ``/remotecontrol-st/...`` endpoints Automox shipped on
 access lookup) are always registered; write tools are gated by
 ``read_only=False`` and carry ``destructiveHint: true``. The fleet-scale
 ``splashtop_bulk_install_uninstall`` is additionally env-gated behind
-``AUTOMOX_MCP_ALLOW_REMOTE_CONTROL`` (default off): one call touches an
-entire server group, a blast radius per-call confirmation cannot vet.
+``AUTOMOX_MCP_ALLOW_SPLASHTOP_BULK_INSTALL_UNINSTALL`` (default off): one
+call touches an entire server group, a blast radius per-call confirmation
+cannot vet.
 
 Why initiate_connection isn't gated more strictly: the API only returns
 a ``splashtop-sos://...`` deeplink. The actual session does not start
@@ -40,7 +41,7 @@ from ..schemas import (
 from ..utils.tooling import (
     call_tool_workflow,
     check_idempotency,
-    is_remote_control_allowed,
+    is_splashtop_bulk_allowed,
     maybe_format_markdown,
     release_idempotency,
     store_idempotency,
@@ -211,12 +212,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             await store_idempotency(request_id, "splashtop_install", result)
             return result
 
-        # Fleet-scale remote-control execution is opt-in beyond write mode: a
+        # Fleet-scale Splashtop client deployment is opt-in beyond write mode: a
         # single call installs/uninstalls the Splashtop client across an entire
         # server group, a blast radius per-call confirmation cannot meaningfully
-        # vet. Gated by AUTOMOX_MCP_ALLOW_REMOTE_CONTROL. Single-device Splashtop
-        # actions stay confirmation-gated only.
-        if is_remote_control_allowed():
+        # vet. Gated by AUTOMOX_MCP_ALLOW_SPLASHTOP_BULK_INSTALL_UNINSTALL.
+        # Single-device Splashtop actions stay confirmation-gated only.
+        if is_splashtop_bulk_allowed():
 
             @server.tool(
                 name="splashtop_bulk_install_uninstall",
@@ -224,7 +225,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                     "Asynchronously install or uninstall the Splashtop RMM client "
                     "across an entire server group in one call. Returns 200 when the "
                     "operation is queued (not when complete). Requires "
-                    "AUTOMOX_MCP_ALLOW_REMOTE_CONTROL=true."
+                    "AUTOMOX_MCP_ALLOW_SPLASHTOP_BULK_INSTALL_UNINSTALL=true."
                 ),
                 annotations={
                     "readOnlyHint": False,

@@ -37,7 +37,7 @@ def test_humanize_tool_name(name: str, expected: str) -> None:
 
 def _build_full_server(monkeypatch: pytest.MonkeyPatch, *, remediation: bool = True) -> FastMCP:
     if remediation:
-        monkeypatch.setenv("AUTOMOX_MCP_ALLOW_REMEDIATION", "true")
+        monkeypatch.setenv("AUTOMOX_MCP_ALLOW_APPLY_REMEDIATION_ACTIONS", "true")
     server = FastMCP("test")
     register_tools(server, client=FakeClient())
     return server

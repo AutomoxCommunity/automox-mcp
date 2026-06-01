@@ -4,7 +4,7 @@ This document records what the Automox MCP server deliberately does **not** expo
 
 Audited against the Automox Console API OpenAPI bundle (`ax-console-bundle.yaml`, version `2026-05-28`): **115 documented operations**. Coverage verified by registering the server and reading the live tool set, not by reading prose. Undocumented-but-wrapped paths (endpoints the live tenant serves that the spec omits) are tracked separately in [#95](https://github.com/AutomoxCommunity/automox-mcp/issues/95) and are **not** coverage gaps.
 
-The server exposes 130 tools (84 read / 46 write). Effectively every documented **read** operation is covered; the omissions below are all writes, deletes, or secret-exposing endpoints.
+The server exposes 131 tools (84 read / 47 write). Effectively every documented **read** operation is covered; the omissions below are all secret-exposing endpoints (every documented write/delete is now either wrapped or gated).
 
 ## Three categories
 
@@ -59,14 +59,13 @@ Note: *bulk alone is not a gate.* `batch_update_devices` is bulk but only applie
 
 | Tool | Flag | Trigger |
 |---|---|---|
-| `apply_remediation_actions` | `AUTOMOX_MCP_ALLOW_REMEDIATION` | **(C)** `patch-with-worklet` runs a model-selected worklet (arbitrary script) on endpoints; a confirmation dialog can't convey the payload. (Triggering a *human-built* worklet policy via `execute_policy_now` stays Tier 1 — a human vetted that payload.) |
-| `splashtop_bulk_install_uninstall` | `AUTOMOX_MCP_ALLOW_REMOTE_CONTROL` | **(A)** one call installs/uninstalls the Splashtop client across an entire server group. |
+| `apply_remediation_actions` | `AUTOMOX_MCP_ALLOW_APPLY_REMEDIATION_ACTIONS` | **(C)** `patch-with-worklet` runs a model-selected worklet (arbitrary script) on endpoints; a confirmation dialog can't convey the payload. (Triggering a *human-built* worklet policy via `execute_policy_now` stays Tier 1 — a human vetted that payload.) |
+| `splashtop_bulk_install_uninstall` | `AUTOMOX_MCP_ALLOW_SPLASHTOP_BULK_INSTALL_UNINSTALL` | **(A)** one call installs/uninstalls the Splashtop client across an entire server group. The flag name mirrors the tool: it gates *deploying/removing the client software* fleet-wide, not starting remote-control sessions (`splashtop_initiate_connection`, which is not env-gated). |
+| `delete_device` | `AUTOMOX_MCP_ALLOW_DELETE_DEVICE` | **(B)** `DELETE /servers/{id}` destroys the device record and its history — not reconstructable through the MCP, and there is no create-device counterpart (agents self-register), so a wrongly deleted record has no MCP-side undo. Per-call confirmation cannot restore it. |
 
 ### Omitted on destructive grounds
 
-| Omitted | Operation | Rationale |
-|---|---|---|
-| `deleteDevice` | `DELETE /servers/{id}` | **(B)** destroys the device record and its history — not reconstructable through the MCP — and there is no create-device counterpart (agents self-register), so it fails the value test. Documented rather than gated. If a concrete need arises, it would ship gated, not ask-first. |
+None currently. `deleteDevice` (`DELETE /servers/{id}`) was the sole candidate and, after verified demand ([#123](https://github.com/AutomoxCommunity/automox-mcp/issues/123)), now ships **gated** behind `AUTOMOX_MCP_ALLOW_DELETE_DEVICE` (category B above) — not ask-first, consistent with the earlier statement that if a concrete need arose it would ship gated.
 
 ---
 

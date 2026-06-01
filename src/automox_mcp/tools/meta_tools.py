@@ -20,6 +20,7 @@ _DOMAIN_CATALOG: dict[str, list[tuple[str, str]]] = {
         ("execute_device_command", "Issue scan/patch/reboot command"),
         ("batch_update_devices", "Bulk attribute actions (e.g. tags) on many devices"),
         ("update_device", "Update one device: name, group, exception, tags, IPs"),
+        ("delete_device", "Delete a device record (requires AUTOMOX_MCP_ALLOW_DELETE_DEVICE)"),
         ("get_device_full_profile", "Complete profile: detail + inventory + packages"),
     ],
     "device_search": [
@@ -122,7 +123,7 @@ _DOMAIN_CATALOG: dict[str, list[tuple[str, str]]] = {
         ("delete_action_sets_bulk", "Delete multiple action sets by ID"),
         (
             "apply_remediation_actions",
-            "Execute remediations now (requires AUTOMOX_MCP_ALLOW_REMEDIATION)",
+            "Execute remediations now (requires AUTOMOX_MCP_ALLOW_APPLY_REMEDIATION_ACTIONS)",
         ),
     ],
     "account": [
@@ -164,7 +165,7 @@ _DOMAIN_CATALOG: dict[str, list[tuple[str, str]]] = {
         (
             "splashtop_bulk_install_uninstall",
             "Bulk install/uninstall across a server group "
-            "(requires AUTOMOX_MCP_ALLOW_REMOTE_CONTROL)",
+            "(requires AUTOMOX_MCP_ALLOW_SPLASHTOP_BULK_INSTALL_UNINSTALL)",
         ),
         ("splashtop_initiate_connection", "Generate a splashtop-sos:// deeplink for an operator"),
         ("splashtop_force_disconnect", "Force-disconnect all active sessions on a device"),

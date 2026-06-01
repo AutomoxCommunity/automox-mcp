@@ -78,6 +78,7 @@ from .device_search import (
 )
 from .devices import (
     batch_update_devices,
+    delete_device,
     describe_device,
     list_device_inventory,
     list_devices_needing_attention,
@@ -212,6 +213,7 @@ __all__ = [
     "audit_events_ocsf",
     "audit_trail_user_activity",
     "batch_update_devices",
+    "delete_device",
     "update_device",
     "clone_policy",
     "create_data_extract",

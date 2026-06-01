@@ -1,6 +1,6 @@
 # Tool Reference
 
-Complete reference for all 130 tools, 6 workflow prompts, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
+Complete reference for all 131 tools, 6 workflow prompts, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
 
 > **Tip:** You don't need to memorize this. Call `discover_capabilities` from your AI assistant to get a live summary of available tools organized by domain.
 
@@ -31,7 +31,7 @@ Complete reference for all 130 tools, 6 workflow prompts, MCP resources, paramet
 
 ---
 
-## Device Management (10 tools)
+## Device Management (11 tools)
 
 - **`list_devices`** - Summarize device inventory and policy status across the organization. Returns each device's `uuid` (needed by policy windows tools). Includes unmanaged devices by default and supports `policy_status`/`managed` filters so you can zero in on, for example, non-compliant managed endpoints.
 - **`device_detail`** - Return curated device context (recent policy status, assignments, queued commands, key facts). Pass `include_raw_details=true` only when you explicitly need a sanitized slice of the raw Automox payload.
@@ -43,6 +43,7 @@ Complete reference for all 130 tools, 6 workflow prompts, MCP resources, paramet
 - **`execute_device_command`** - Issue an immediate command to a device (scan, patch_all, patch_specific, reboot).
 - **`batch_update_devices`** *(write)* - Apply bulk attribute actions to up to 500 devices at once (currently tag apply/remove, e.g. `{"attribute": "tags", "action": "apply", "value": ["env:prod"]}`).
 - **`update_device`** *(write)* - Update a single device's mutable attributes (`custom_name`, `server_group_id`, `exception`, `tags`, `ip_addrs`); supply at least one. Fills the single-device gap that `batch_update_devices` (tags-only, bulk) does not cover — e.g. renaming a device or moving it to a server group.
+- **`delete_device`** *(write, gated)* - Permanently delete a device record and its history via `DELETE /servers/{id}`. Irreversible and not reconstructable through the MCP (no create-device counterpart — agents self-register). **Registered only when `AUTOMOX_MCP_ALLOW_DELETE_DEVICE=true`** and write mode is enabled (see [API Coverage & Omissions](api-coverage.md), category B).
 
 ## Advanced Device Search (18 tools)
 
@@ -143,7 +144,7 @@ Manage vulnerability remediation workflows via the Vuln Sync API. Supports CSV-b
 - **`upload_action_set`** *(write)* - Upload a CSV-based vulnerability remediation action set.
 - **`delete_action_set`** *(write)* - Delete a single remediation action set by ID. Console metadata, reconstructable via re-upload.
 - **`delete_action_sets_bulk`** *(write)* - Delete multiple action sets by ID (up to 100) in one atomic call. Console metadata, reconstructable via re-upload.
-- **`apply_remediation_actions`** *(write, gated)* - Execute remediations now (`patch-now` / `patch-with-worklet`) on explicit devices for an action set. Immediately changes endpoint state (async, returns 202). **Registered only when `AUTOMOX_MCP_ALLOW_REMEDIATION=true`** and write mode is enabled.
+- **`apply_remediation_actions`** *(write, gated)* - Execute remediations now (`patch-now` / `patch-with-worklet`) on explicit devices for an action set. Immediately changes endpoint state (async, returns 202). **Registered only when `AUTOMOX_MCP_ALLOW_APPLY_REMEDIATION_ACTIONS=true`** and write mode is enabled.
 
 ## Compound Workflows (3 tools)
 
@@ -208,7 +209,7 @@ Manage maintenance/exclusion windows that prevent policy execution during schedu
 
 ## Splashtop Remote Control (10 tools)
 
-Wraps the ten `/remotecontrol-st/...` endpoints Automox shipped on 2026-01-14 (Splashtop partnership GA). Read-only tools (`splashtop_device_status`, `splashtop_session_status`, `splashtop_get_attended_access`) are always registered; write tools are gated by `read_only=False` and carry `destructiveHint: true`. The fleet-scale `splashtop_bulk_install_uninstall` is additionally gated behind `AUTOMOX_MCP_ALLOW_REMOTE_CONTROL` (see [API Coverage & Omissions](api-coverage.md)).
+Wraps the ten `/remotecontrol-st/...` endpoints Automox shipped on 2026-01-14 (Splashtop partnership GA). Read-only tools (`splashtop_device_status`, `splashtop_session_status`, `splashtop_get_attended_access`) are always registered; write tools are gated by `read_only=False` and carry `destructiveHint: true`. The fleet-scale `splashtop_bulk_install_uninstall` is additionally gated behind `AUTOMOX_MCP_ALLOW_SPLASHTOP_BULK_INSTALL_UNINSTALL` (see [API Coverage & Omissions](api-coverage.md)).
 
 Tenants without an active Remote Control subscription (Core bundled with Automate Enterprise, or Resolve as a paid add-on) will receive 4XX errors from the upstream — tools surface these as standard `AutomoxApiError`. Module loads only when `splashtop` is included in `AUTOMOX_MCP_MODULES` (or no module filter is set).
 
@@ -216,7 +217,7 @@ Tenants without an active Remote Control subscription (Core bundled with Automat
 - **`splashtop_session_status`** - Active session count, max sessions, and whether a new session can be started.
 - **`splashtop_get_attended_access`** - Returns whether end-user consent is required before remote sessions can start.
 - **`splashtop_install`** *(write)* - Install the Splashtop RMM client on a device (asynchronous). `request_permission` controls install-time consent (`not_needed` or `ask_reject_on_timeout`), distinct from per-session attended access.
-- **`splashtop_bulk_install_uninstall`** *(write, gated)* - Bulk install or uninstall across a server group. Returns 200 when queued, not when complete. Fleet-scale, so **registered only when `AUTOMOX_MCP_ALLOW_REMOTE_CONTROL=true`** and write mode is enabled.
+- **`splashtop_bulk_install_uninstall`** *(write, gated)* - Bulk install or uninstall across a server group. Returns 200 when queued, not when complete. Fleet-scale, so **registered only when `AUTOMOX_MCP_ALLOW_SPLASHTOP_BULK_INSTALL_UNINSTALL=true`** and write mode is enabled.
 - **`splashtop_initiate_connection`** *(write)* - Generate a `splashtop-sos://...` deeplink for an operator. The API does NOT start the session — the operator opens the URL in their local Splashtop RMM App, and end-user consent still applies when attended access is enabled.
 - **`splashtop_force_disconnect`** *(write)* - Force-disconnect all active Splashtop sessions on a device. Interrupts any in-progress operator work.
 - **`splashtop_set_attended_access`** *(write)* - Enable or disable the end-user-consent requirement for a device. Setting to `false` allows unattended sessions — review your organization's policy.

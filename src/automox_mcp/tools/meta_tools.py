@@ -102,6 +102,7 @@ _DOMAIN_CATALOG: dict[str, list[tuple[str, str]]] = {
         ("list_webhook_event_types", "Available webhook event types"),
         ("list_webhooks", "All webhook subscriptions"),
         ("get_webhook", "Details for a specific webhook"),
+        ("list_webhook_deliveries", "Recent delivery attempts for a webhook"),
         ("create_webhook", "Create a new webhook subscription"),
         ("update_webhook", "Update an existing webhook"),
         ("delete_webhook", "Delete a webhook"),

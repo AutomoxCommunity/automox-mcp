@@ -162,6 +162,15 @@ class GetWebhookParams(ForbidExtraModel):
     webhook_id: UUID
 
 
+class ListWebhookDeliveriesParams(ForbidExtraModel):
+    org_uuid: UUID
+    webhook_id: UUID
+    limit: int | None = Field(None, ge=1, le=100)
+    cursor: str | None = Field(None, max_length=2000)
+    start_date: str | None = Field(None, max_length=64)
+    end_date: str | None = Field(None, max_length=64)
+
+
 class CreateWebhookParams(ForbidExtraModel):
     org_uuid: UUID
     name: str = Field(max_length=200)
@@ -291,6 +300,47 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             params_model=GetWebhookParams,
             org_uuid_field="org_uuid",
         )
+
+    @server.tool(
+        name="list_webhook_deliveries",
+        description=(
+            "List recent delivery attempts (status, latency, error) for a webhook "
+            "-- delivery troubleshooting. Results are newest-first and "
+            "cursor-paginated; optional startDate/endDate filters."
+        ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
+    )
+    async def list_webhook_deliveries(
+        webhook_id: str,
+        org_uuid: str | None = None,
+        limit: int | None = None,
+        cursor: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        output_format: str | None = "json",
+    ) -> dict[str, Any]:
+        params = {
+            "org_uuid": org_uuid,
+            "webhook_id": webhook_id,
+            "limit": limit,
+            "cursor": cursor,
+            "start_date": start_date,
+            "end_date": end_date,
+        }
+        result = await call_tool_workflow(
+            client,
+            workflows.list_webhook_deliveries,
+            params,
+            params_model=ListWebhookDeliveriesParams,
+            org_uuid_field="org_uuid",
+        )
+
+        return maybe_format_markdown(result, output_format)
 
     # ------ Write tools (gated by read_only) ------
 

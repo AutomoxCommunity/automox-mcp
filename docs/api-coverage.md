@@ -4,7 +4,9 @@ This document records what the Automox MCP server deliberately does **not** expo
 
 Audited against the Automox Console API OpenAPI bundle (`ax-console-bundle.yaml`, version `2026-05-28`): **115 documented operations**. Coverage verified by registering the server and reading the live tool set, not by reading prose. Undocumented-but-wrapped paths (endpoints the live tenant serves that the spec omits) are tracked separately in [#95](https://github.com/AutomoxCommunity/automox-mcp/issues/95) and are **not** coverage gaps.
 
-The server exposes 132 tools (84 read / 48 write). Effectively every documented **read** operation is covered; the omissions below are all secret-exposing endpoints (every documented write/delete/upload is now either wrapped or gated).
+The server exposes 133 tools (85 read / 48 write). Effectively every documented **read** operation is covered; the omissions below are all secret-exposing endpoints (every documented write/delete/upload is now either wrapped or gated).
+
+The **Webhooks API** is a *separate* published OpenAPI document (`Automox Webhooks API` v1.0.0), not part of the Console API bundle above. The server now wraps **all 9** of its paths — see [Webhooks API coverage](#webhooks-api-coverage) below. Taken together, the server can assert it wraps **100% of the published Automox Console API and Webhooks API**, with the single deliberate exception of secret-exposing endpoints (Section 1).
 
 ## Three categories
 
@@ -87,6 +89,28 @@ The documented-surface build items from [#111](https://github.com/AutomoxCommuni
 |---|---|---|
 | `POST /orgs/{org}/remediations/action-sets/upload` (`uploadRemediationCSV`) | `upload_action_set` | **Covered.** `AutomoxClient.post_multipart` now sends real `multipart/form-data`. Contract confirmed live 2026-05-31: `source` is a **query param** (enum); the body carries `file` + `format` (same enum). The earlier 500 was `source` sent as a form field with an empty query string. CSV arrives as inline `csv_content` text — no SSRF/file-read surface. |
 | `POST /policies/{policyID}/files` (`uploadPolicyFile`) | `upload_policy_file` | **Covered, gated, local-only.** Required-Software installer upload (up to 10 GB). Mechanism decision: **`file_path`** (server reads a local file) — `base64` is impractical at GB scale and `file_url` was rejected (would require building SSRF defense from scratch for marginal value). Confined by: env-gate `AUTOMOX_MCP_ALLOW_UPLOAD_POLICY_FILE` (default off) + a required directory allowlist `AUTOMOX_MCP_UPLOAD_ALLOWED_DIRS` (paths canonicalized; `..`/symlink escape rejected) + **stdio-only** (the tool isn't registered under a remote transport, and `main()` refuses to start a remote transport while the flag is on). The installer streams to Automox and never passes through the model. |
+
+---
+
+## Webhooks API coverage
+
+The Webhooks API (`Automox Webhooks API` v1.0.0) is published as a **separate** OpenAPI document from the Console API bundle. It defines 9 paths; the server now wraps **all of them**:
+
+| Path | Tool |
+|---|---|
+| `GET /webhooks/event-types` | `list_webhook_event_types` |
+| `GET /organizations/{org_uuid}/webhooks` | `list_webhooks` |
+| `POST /organizations/{org_uuid}/webhooks` | `create_webhook` |
+| `GET /organizations/{org_uuid}/webhooks/{id}` | `get_webhook` |
+| `PUT /organizations/{org_uuid}/webhooks/{id}` | `update_webhook` (uses `PATCH` — see below) |
+| `DELETE /organizations/{org_uuid}/webhooks/{id}` | `delete_webhook` |
+| `POST /organizations/{org_uuid}/webhooks/{id}/test` | `test_webhook` |
+| `POST /organizations/{org_uuid}/webhooks/{id}/secret/rotate` | `rotate_webhook_secret` |
+| `GET /organizations/{org_uuid}/webhooks/{id}/deliveries` | `list_webhook_deliveries` |
+
+**No webhook DTO returns secret material.** The signing secret is write/rotate-only — surfaced once on `create_webhook`/`rotate_webhook_secret` and never returned by any read. The `DeliveryLog` projection (`id, eventType, success, statusCode, error, durationMs, timestamp`) carries no credentials.
+
+**Spec drift (cross-ref [#95](https://github.com/AutomoxCommunity/automox-mcp/issues/95)):** the doc documents the update operation as `PUT`, but `update_webhook` issues a `PATCH` (partial update) — which the live API accepts. Tracked with the other API-team spec gaps.
 
 ---
 

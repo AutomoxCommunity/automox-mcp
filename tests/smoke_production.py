@@ -1189,8 +1189,13 @@ async def run_readonly_tools() -> None:
         if webhook_id:
             resp = await _safe_call(session, "get_webhook", {"webhook_id": webhook_id})
             record("get_webhook", resp is not None, f"id={webhook_id}")
+            resp = await _safe_call(
+                session, "list_webhook_deliveries", {"webhook_id": webhook_id, "limit": 5}
+            )
+            record("list_webhook_deliveries", resp is not None, _count_or_err(resp))
         else:
             record("get_webhook", True, "skipped — no webhooks in org (OK)")
+            record("list_webhook_deliveries", True, "skipped — no webhooks in org (OK)")
 
         # ---- Splashtop read-only status ----
         log.info(f"\n{BOLD}Phase 4: Splashtop status (read-only){RESET}")

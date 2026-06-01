@@ -1,6 +1,6 @@
 # Tool Reference
 
-Complete reference for all 132 tools, 6 workflow prompts, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
+Complete reference for all 133 tools, 6 workflow prompts, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
 
 > **Tip:** You don't need to memorize this. Call `discover_capabilities` from your AI assistant to get a live summary of available tools organized by domain.
 
@@ -12,7 +12,7 @@ Complete reference for all 132 tools, 6 workflow prompts, MCP resources, paramet
 - [Policy History v2 (7 tools)](#policy-history-v2-7-tools)
 - [Package Management (2 tools)](#package-management-2-tools)
 - [Group Management (5 tools)](#group-management-5-tools)
-- [Webhook Management (8 tools)](#webhook-management-8-tools)
+- [Webhook Management (9 tools)](#webhook-management-9-tools)
 - [Worklet Catalog (2 tools)](#worklet-catalog-2-tools)
 - [Data Extracts (3 tools)](#data-extracts-3-tools)
 - [Vulnerability Sync (7 tools)](#vulnerability-sync-7-tools)
@@ -111,11 +111,12 @@ Richer policy execution reporting via the `/policy-history` API with UUID-based 
 - **`update_server_group`** - Update an existing server group.
 - **`delete_server_group`** - Delete a server group permanently.
 
-## Webhook Management (8 tools)
+## Webhook Management (9 tools)
 
 - **`list_webhook_event_types`** - List all available webhook event types with descriptions. Use this to discover which events can trigger webhook deliveries.
 - **`list_webhooks`** - List all webhook subscriptions for the organization. Supports cursor-based pagination.
 - **`get_webhook`** - Retrieve details for a specific webhook subscription.
+- **`list_webhook_deliveries`** - List recent delivery attempts (status, latency, error) for a webhook -- delivery troubleshooting. Newest-first, cursor-paginated; optional `start_date`/`end_date` filters.
 - **`create_webhook`** - Create a new webhook subscription. The response includes a signing secret that is **only shown once** -- save it immediately. Max 5 webhooks per organization; URL must be HTTPS.
 - **`update_webhook`** - Update an existing webhook (partial update). Can change name, URL, enabled status, or event types.
 - **`delete_webhook`** - Delete a webhook subscription permanently.
@@ -350,7 +351,7 @@ Most tools accept optional parameters for filtering and pagination:
 - **Search tools**: `hostname_contains`, `ip_address`, `tag`, `patch_status`, `severity` (string or list)
 - **Package tools**: `device_id`, `include_unmanaged`, `awaiting`, `page`, `limit`
 - **Group tools**: `group_id`, `name`, `refresh_interval`, `parent_server_group_id`, `policies`, `page`, `limit`
-- **Webhook tools**: `org_uuid` (optional; auto-resolved), `webhook_id`, `name`, `url`, `event_types`, `enabled`, `cursor`, `limit`
+- **Webhook tools**: `org_uuid` (optional; auto-resolved), `webhook_id`, `name`, `url`, `event_types`, `enabled`, `cursor`, `limit`, `start_date`, `end_date`
 - **Event tools**: `policy_id`, `server_id`, `user_id`, `event_name`, `start_date`, `end_date`, `page`, `limit`
 - **Report tools**: `group_id`, `limit`, `offset`
 - **Compound tools**: `group_id`, `device_id`, `max_packages`

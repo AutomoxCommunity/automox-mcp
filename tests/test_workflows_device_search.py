@@ -133,15 +133,44 @@ async def test_advanced_search_passes_body() -> None:
     client = _make_client(post_responses={path: [{"data": []}]})
     await advanced_device_search(
         cast(AutomoxClient, client),
-        query={"hostname": "test*"},
+        query={"filters": [{"AND": [{"scope": "DEVICE", "field": "name"}]}]},
         page=2,
         limit=25,
     )
 
     _, _, json_data = client.calls[0]
-    assert json_data["query"] == {"hostname": "test*"}
+    # organizationUuids is required in the body (path UUID is not enough);
+    # filters merge into the body root (NOT under `query`); page size is `size`.
+    assert json_data["organizationUuids"] == [_ORG_UUID]
+    assert json_data["filters"] == [{"AND": [{"scope": "DEVICE", "field": "name"}]}]
+    assert "query" not in json_data
     assert json_data["page"] == 2
-    assert json_data["limit"] == 25
+    assert json_data["size"] == 25
+    assert "limit" not in json_data
+
+
+@pytest.mark.asyncio
+async def test_advanced_search_parses_spring_page_envelope() -> None:
+    """Live search returns a Spring Page (`content`/`total_elements`), not `data`."""
+    path = f"/server-groups-api/v1/organizations/{_ORG_UUID}/device/search"
+    envelope = {
+        "content": [{"id": 1, "name": "host-1"}, {"id": 2, "name": "host-2"}],
+        "total_elements": 227,
+        "total_pages": 10,
+        "number": 0,
+        "size": 25,
+        "first": True,
+        "last": False,
+    }
+    client = _make_client(post_responses={path: [envelope]})
+    result = await advanced_device_search(
+        cast(AutomoxClient, client),
+        query={"filters": []},
+    )
+
+    assert result["data"]["total_devices"] == 227
+    assert len(result["data"]["devices"]) == 2
+    assert result["metadata"]["pagination"]["has_more"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -372,9 +401,11 @@ async def test_create_saved_search_posts_body() -> None:
     method, called_path, body = client.calls[0]
     assert method == "POST"
     assert called_path == path
+    # Upstream needs the spec wrapped in a `search` envelope carrying
+    # organizationUuids — a top-level `query` key returns HTTP 500.
     assert body == {
         "name": "All Windows",
-        "query": {"os_family": "Windows"},
+        "search": {"os_family": "Windows", "organizationUuids": [_ORG_UUID]},
         "description": "Windows devices",
     }
     assert result["data"]["id"] == "ss-new"
@@ -411,6 +442,36 @@ async def test_update_saved_search_sends_partial_body() -> None:
     assert body == {"name": "Renamed"}
     assert result["data"]["updated"] is True
     assert result["data"]["saved_search_id"] == "ss-001"
+
+
+@pytest.mark.asyncio
+async def test_update_saved_search_wraps_query_in_search_envelope() -> None:
+    path = f"/server-groups-api/v1/organizations/{_ORG_UUID}/device/saved-search/ss-001"
+    client = _make_client(put_responses={path: [{"id": "ss-001"}]})
+    await update_saved_search(
+        cast(AutomoxClient, client),
+        saved_search_id="ss-001",
+        query={"filters": [{"AND": []}]},
+    )
+
+    _, _, body = client.calls[0]
+    assert body == {"search": {"filters": [{"AND": []}], "organizationUuids": [_ORG_UUID]}}
+    assert "query" not in body
+
+
+@pytest.mark.asyncio
+async def test_create_saved_search_preserves_caller_org_uuids() -> None:
+    """If the caller pre-supplies organizationUuids, we don't clobber them."""
+    path = f"/server-groups-api/v1/organizations/{_ORG_UUID}/device/saved-search"
+    client = _make_client(post_responses={path: [{"id": "ss-x"}]})
+    await create_saved_search(
+        cast(AutomoxClient, client),
+        name="Cross-org",
+        query={"filters": [], "organizationUuids": ["other-org"]},
+    )
+
+    _, _, body = client.calls[0]
+    assert body["search"]["organizationUuids"] == ["other-org"]
 
 
 @pytest.mark.asyncio

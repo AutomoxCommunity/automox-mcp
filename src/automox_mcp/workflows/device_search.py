@@ -57,34 +57,79 @@ async def advanced_device_search(
     page: int | None = None,
     limit: int | None = None,
 ) -> dict[str, Any]:
-    """Execute an advanced device search using the Server Groups API v2."""
+    """Execute an advanced device search using the Server Groups API v2.
+
+    Three upstream contract details, verified live against the tenant, that
+    earlier revisions got wrong and which silently broke this tool:
+
+    1. ``organizationUuids`` is **required in the request body** even though
+       the org UUID is already in the path — without it the endpoint returns
+       ``400 "organizationUuids required"`` for every call.
+    2. The filter criteria live at the body **top level** (under ``filters``),
+       *not* nested under a ``query`` key. A nested query is silently ignored
+       and the endpoint returns the entire fleet — so we merge the caller's
+       ``query`` dict into the body root rather than wrapping it.
+    3. The page size parameter is ``size``, not ``limit``.
+
+    The response is a Spring ``Page`` envelope (``content`` + ``total_elements``),
+    not a ``data`` list — ``extract_list`` would otherwise wrap the whole
+    envelope as a single bogus "device".
+    """
     org_uuid = await _resolve_org(client, org_id)
 
-    body: dict[str, Any] = {}
+    body: dict[str, Any] = {"organizationUuids": [org_uuid]}
     if query:
-        body["query"] = query
+        body.update(query)
     if page is not None:
         body["page"] = page
     if limit is not None:
-        body["limit"] = limit
+        body["size"] = limit
 
     response = await client.post(
         f"/server-groups-api/v1/organizations/{org_uuid}/device/search",
         json_data=body,
     )
 
-    devices = _extract_list(response)
+    devices: list[Any]
+    total: Any = None
+    pagination: dict[str, Any] | None = None
+    if isinstance(response, Mapping) and "content" in response:
+        content = response.get("content")
+        devices = (
+            list(content)
+            if isinstance(content, Sequence) and not isinstance(content, (str, bytes))
+            else []
+        )
+        total = response.get("total_elements")
+        if total is None:
+            total = response.get("totalElements")
+        is_last = response.get("last")
+        pagination = (
+            build_pagination_metadata(
+                page=response.get("number"),
+                page_size=response.get("size"),
+                total_elements=total,
+                total_pages=response.get("total_pages") or response.get("totalPages"),
+                has_more=(not is_last) if is_last is not None else None,
+                extra={"first": response.get("first"), "last": is_last},
+            )
+            or None
+        )
+    else:
+        devices = _extract_list(response)
+        if isinstance(response, Mapping):
+            total = response.get("total") or response.get("totalCount")
 
-    total = None
-    if isinstance(response, Mapping):
-        total = response.get("total") or response.get("totalCount")
+    metadata: dict[str, Any] = {"deprecated_endpoint": False}
+    if pagination:
+        metadata["pagination"] = pagination
 
     return {
         "data": {
             "total_devices": total if total is not None else len(devices),
             "devices": devices,
         },
-        "metadata": {"deprecated_endpoint": False},
+        "metadata": metadata,
     }
 
 
@@ -293,10 +338,19 @@ async def create_saved_search(
     query: dict[str, Any],
     description: str | None = None,
 ) -> dict[str, Any]:
-    """Create a new saved device search."""
+    """Create a new saved device search.
+
+    Upstream expects the search spec wrapped in a ``search`` envelope that
+    carries ``organizationUuids`` — a top-level ``query`` key returns
+    ``500 Internal Server Error``. We wrap the caller's ``query`` dict (which
+    should carry ``filters`` — same syntax as ``advanced_device_search``) and
+    inject ``organizationUuids`` unless the caller already supplied them.
+    """
     org_uuid = await _resolve_org(client, org_id)
 
-    body: dict[str, Any] = {"name": name, "query": query}
+    search: dict[str, Any] = dict(query)
+    search.setdefault("organizationUuids", [org_uuid])
+    body: dict[str, Any] = {"name": name, "search": search}
     if description is not None:
         body["description"] = description
 
@@ -323,14 +377,21 @@ async def update_saved_search(
     query: dict[str, Any] | None = None,
     description: str | None = None,
 ) -> dict[str, Any]:
-    """Update an existing saved device search."""
+    """Update an existing saved device search.
+
+    Like ``create_saved_search``, the query spec must be wrapped in a
+    ``search`` envelope carrying ``organizationUuids`` — a top-level ``query``
+    key returns ``500``.
+    """
     org_uuid = await _resolve_org(client, org_id)
 
     body: dict[str, Any] = {}
     if name is not None:
         body["name"] = name
     if query is not None:
-        body["query"] = query
+        search: dict[str, Any] = dict(query)
+        search.setdefault("organizationUuids", [org_uuid])
+        body["search"] = search
     if description is not None:
         body["description"] = description
 

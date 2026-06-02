@@ -115,10 +115,14 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         description=(
             "Execute an advanced device search using the Automox Advanced Device "
             "Search API's structured query language. Enables complex queries like "
-            "'find all Windows devices not seen in 30 days' using field-based "
-            "filtering. Pass the query as a dict with filter conditions; use "
-            "`get_device_metadata_fields` and `device_search_typeahead` to discover "
-            "valid fields and values."
+            "'find all Windows devices not seen in 30 days' or 'devices with nginx "
+            "installed' using field-based filtering. Pass `query` as a dict with a "
+            "`filters` list of AND/OR groups, each a list of conditions: "
+            '`{"filters": [{"AND": [{"scope": "SOFTWARE", "field": '
+            '"pkgDisplayName", "operator": "IN", "values": ["nginx"]}]}]}`. '
+            "Use `get_searchable_fields` for valid scope/field/operator combos "
+            "and `device_search_typeahead` to discover values. The org is scoped "
+            "automatically. `limit` sets the page size."
         ),
         annotations={
             "readOnlyHint": True,
@@ -415,8 +419,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             name="create_saved_search",
             description=(
                 "Create a new saved device search. Provide a name, a structured "
-                "query dict (Automox Advanced Device Search API query syntax — see "
-                "`advanced_device_search`), and an optional description."
+                "query dict carrying a `filters` list (same syntax as "
+                "`advanced_device_search` — e.g. "
+                '`{"filters": [{"AND": [{"scope": "SOFTWARE", "field": '
+                '"pkgDisplayName", "operator": "IN", "values": ["nginx"]}]}]}`), '
+                "and an optional description. The org is scoped automatically."
             ),
             annotations={
                 "readOnlyHint": False,

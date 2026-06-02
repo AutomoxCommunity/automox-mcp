@@ -48,6 +48,7 @@ Unit tests here stub the upstream via `StubClient`: you feed a canned response a
 ## Release safety
 
 - **Never push a tag without an explicit go-ahead.** A `vX.Y.Z` tag push starts the publish run for irreversible PyPI / registry / MCPB publishing. Releasing = merge PR → tag-push (never the GitHub "Publish release" UI).
+- **Run the smoke suite before tagging.** CI cannot — it has no live credentials by design (the tenant API key is never given to CI). The smoke suite is the only layer that exercises the real API, so it is a manual pre-tag gate: `set -a && . ~/automox/.env && set +a && uv run python tests/smoke_production.py` and confirm **0 failures** before pushing the tag. (This is how the #132 contract bugs would have been caught — the suite existed but nothing prompted a run.)
 - **The publish run pauses for manual approval** — the `release` GitHub environment requires a reviewer (`ax-jkikta`). A tag push that "hangs" is waiting on that approval click, not broken; nothing publishes until it's approved. After publish, the `verify-publish` job installs the new version from PyPI and boots it.
 - Versions must match across `pyproject.toml`, `server.json` (incl. `packages[].version`), `mcpb/manifest.json` — the `manifests` CI job enforces this.
 - Capability/destructive-gating policy lives in `docs/api-coverage.md`; read it before adding any write/delete tool to pick the right safety tier.

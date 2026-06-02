@@ -140,10 +140,23 @@ async def device_search_typeahead(
     field: str,
     prefix: str,
 ) -> dict[str, Any]:
-    """Get typeahead suggestions for device search fields."""
+    """Get typeahead suggestions for device search fields.
+
+    Two upstream contract details (verified live) that the earlier body got
+    wrong, both yielding ``400``: the field selector is ``fields`` (an array),
+    not ``field`` (singular — "At least one field is required for typeahead"),
+    and ``organizationUuids`` is required in the body (same as
+    ``advanced_device_search``). The model-facing ``field`` stays singular and
+    is wrapped into the one-element array the endpoint expects. The response
+    is a Spring ``Page`` envelope whose ``content`` holds the suggestions.
+    """
     org_uuid = await _resolve_org(client, org_id)
 
-    body: dict[str, Any] = {"field": field, "prefix": prefix}
+    body: dict[str, Any] = {
+        "fields": [field],
+        "prefix": prefix,
+        "organizationUuids": [org_uuid],
+    }
 
     response = await client.post(
         f"/server-groups-api/v1/organizations/{org_uuid}/search/typeahead",
@@ -154,7 +167,9 @@ async def device_search_typeahead(
     if isinstance(response, Sequence) and not isinstance(response, (str, bytes)):
         suggestions = list(response)
     elif isinstance(response, Mapping):
-        suggestions = list(response.get("suggestions") or response.get("data") or [])
+        suggestions = list(
+            response.get("content") or response.get("suggestions") or response.get("data") or []
+        )
     else:
         suggestions = []
 

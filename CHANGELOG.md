@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-06-02
+
 ### Fixed
 
 - **`advanced_device_search` was broken three ways — now filters correctly.** (1) The Server Groups v2 search endpoint requires `organizationUuids` in the request *body* (the org UUID in the path is not enough); without it every call returned `400 "organizationUuids required"`. (2) Filter criteria must sit at the body top level under `filters` — the wrapper nested them under a `query` key, which the endpoint *silently ignores*, returning the entire fleet instead of the filtered set. (3) The page-size parameter is `size`, not `limit`. The response is also a Spring `Page` envelope (`content`/`total_elements`), so `extract_list` was wrapping the whole envelope as one bogus device. All verified live (e.g. an `osFamilyName EQ Linux` filter now returns 1 device, not the unfiltered 227). The model-facing `query` dict now carries a `filters` list — see the updated tool description.

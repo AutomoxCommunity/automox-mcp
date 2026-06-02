@@ -1424,26 +1424,46 @@ def _extract_list(data: Any) -> list[dict[str, Any]]:
 _TOLERATED = object()
 
 
+# Substrings that mark a transient upstream blip (connection reset/refused
+# before headers, gateway disconnect) rather than a real tool failure. The
+# Automox gateway intermittently resets connections; retrying briefly rides it
+# out. Without this, a network hiccup fails the pre-tag gate on an unrelated
+# tool and the run looks broken when nothing is.
+_TRANSIENT_MARKERS = (
+    "connect error",
+    "connection refused",
+    "disconnect/reset before headers",
+    "remote connection failure",
+    "transport failure",
+)
+
+
 async def _safe_call(
     session: ClientSession,
     name: str,
     arguments: dict[str, Any],
     *,
-    retries: int = 1,
+    retries: int = 2,
     tolerate: tuple[int, ...] = (),
 ) -> dict[str, Any] | None | object:
     """Call a tool, returning None on any exception (the caller records the failure).
 
-    Retries once on rate-limit errors after a brief pause. If the tool errors
-    with an HTTP status in ``tolerate``, returns the ``_TOLERATED`` sentinel
-    (the caller records skip-OK) instead of None.
+    Retries on rate-limit errors (60s pause) and on transient upstream
+    connection resets (short pause). If the tool errors with an HTTP status in
+    ``tolerate``, returns the ``_TOLERATED`` sentinel (the caller records
+    skip-OK) instead of None.
     """
     for attempt in range(1 + retries):
         try:
             result = await session.call_tool(name, arguments=arguments)
             if result.isError:
                 text = _collect_text(result)
-                if "rate limit" in text.lower() and attempt < retries:
+                low = text.lower()
+                if attempt < retries and any(m in low for m in _TRANSIENT_MARKERS):
+                    log.info(f"    transient on {name}, retrying in 3s…")
+                    await asyncio.sleep(3)
+                    continue
+                if "rate limit" in low and attempt < retries:
                     log.info(f"    rate-limited on {name}, waiting 60s…")
                     await asyncio.sleep(60)
                     continue
@@ -1454,6 +1474,10 @@ async def _safe_call(
                 return None
             return _parse_tool_result(result)
         except Exception as exc:
+            if attempt < retries and any(m in str(exc).lower() for m in _TRANSIENT_MARKERS):
+                log.info(f"    transient on {name} ({exc}), retrying in 3s…")
+                await asyncio.sleep(3)
+                continue
             log.warning(f"    {YELLOW}WARN{RESET} {name}: {exc}")
             return None
     return None

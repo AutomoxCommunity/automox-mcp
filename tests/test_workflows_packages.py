@@ -130,6 +130,35 @@ async def test_list_packages_passes_pagination() -> None:
 
 
 @pytest.mark.asyncio
+async def test_list_packages_auto_paginates_until_short_page() -> None:
+    """Default (no page) walks every page so 'is X installed?' is not truncated."""
+    page0 = [{"id": 1, "name": "a"}, {"id": 2, "name": "b"}]  # full page (size 2)
+    page1 = [{"id": 3, "name": "nginx"}]  # short page → end of data
+    client = StubClient(get_responses={"/servers/101/packages": [page0, page1]})
+    result = await list_device_packages(
+        cast(AutomoxClient, client), org_id=555, device_id=101, limit=2
+    )
+
+    assert result["data"]["total_packages"] == 3
+    names = [p["name"] for p in result["data"]["packages"]]
+    assert "nginx" in names  # the package on the second page is not lost
+    assert result["metadata"]["complete"] is True
+
+
+@pytest.mark.asyncio
+async def test_list_packages_explicit_page_signals_more() -> None:
+    """A full explicit page flags has_more — the endpoint gives no total."""
+    full_page = [{"id": i} for i in range(50)]
+    client = StubClient(get_responses={"/servers/101/packages": [full_page]})
+    result = await list_device_packages(
+        cast(AutomoxClient, client), org_id=555, device_id=101, page=0, limit=50
+    )
+
+    assert result["data"]["total_packages"] == 50
+    assert result["metadata"]["pagination"] == {"page": 0, "page_size": 50, "has_more": True}
+
+
+@pytest.mark.asyncio
 async def test_list_packages_handles_non_list_response() -> None:
     client = StubClient(get_responses={"/servers/101/packages": ["unexpected"]})
     result = await list_device_packages(cast(AutomoxClient, client), org_id=555, device_id=101)

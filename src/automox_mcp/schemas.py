@@ -1070,7 +1070,15 @@ class AuditEventsOcsfParams(OrgIdRequiredMixin, ForbidExtraModel):
 
 
 class AdvancedDeviceSearchParams(ForbidExtraModel):
-    query: dict[str, Any] | None = Field(None, description="Structured query for device search")
+    query: dict[str, Any] | None = Field(
+        None,
+        description=(
+            "Structured device-search spec. Carries a `filters` list of AND/OR "
+            'groups, e.g. {"filters": [{"AND": [{"scope": "SOFTWARE", "field": '
+            '"pkgDisplayName", "operator": "IN", "values": ["nginx"]}]}]}. '
+            "May also include `sort`/`fields`. org scoping is added automatically."
+        ),
+    )
 
     @model_validator(mode="after")
     def _limit_query_size(self) -> AdvancedDeviceSearchParams:
@@ -1101,7 +1109,12 @@ class GetSavedSearchParams(ForbidExtraModel):
 
 class CreateSavedSearchParams(ForbidExtraModel):
     name: str = Field(description="Saved search name", min_length=1, max_length=200)
-    query: dict[str, Any] = Field(description="Structured device-search query")
+    query: dict[str, Any] = Field(
+        description=(
+            "Structured device-search spec carrying a `filters` list (same syntax "
+            "as advanced_device_search). org scoping is added automatically."
+        )
+    )
     description: str | None = Field(None, description="Optional description", max_length=1000)
 
     @model_validator(mode="after")

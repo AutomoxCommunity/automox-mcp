@@ -28,7 +28,10 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         name="list_device_packages",
         description=(
             "List software packages installed on a specific Automox device. "
-            "Returns package names, versions, patch status, and severity."
+            "Returns package names, versions, patch status, and severity. By "
+            "default returns the complete package set (auto-paginated), so it is "
+            "reliable for 'is package X installed?' checks. Pass an explicit "
+            "`page` to fetch a single page instead."
         ),
         annotations={
             "readOnlyHint": True,

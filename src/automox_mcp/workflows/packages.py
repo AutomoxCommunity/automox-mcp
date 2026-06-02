@@ -2,10 +2,29 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from ..client import AutomoxClient
+from ..utils.pagination import parallel_paginate
+
+# `/servers/{id}/packages` returns a bare list with no `total` field and pages
+# 0-indexed by `limit`. A single call therefore silently truncates at the page
+# size and the caller cannot tell more pages exist — so by default we walk
+# every page until a short one. The cap bounds a runaway loop: 20 × 500 =
+# 10 000 packages, comfortably above any real host's inventory.
+_DEFAULT_PACKAGE_PAGE_SIZE = 500
+_MAX_PACKAGE_PAGES = 20
+
+
+def _coerce_package_list(raw: Any) -> list[Any]:
+    """Normalize a `/servers/{id}/packages` response into a list of packages."""
+    if isinstance(raw, Sequence) and not isinstance(raw, (str, bytes)):
+        return list(raw)
+    if isinstance(raw, Mapping):
+        data = raw.get("data")
+        return list(data) if isinstance(data, list) else []
+    return []
 
 
 async def list_device_packages(
@@ -16,28 +35,38 @@ async def list_device_packages(
     page: int | None = None,
     limit: int | None = None,
 ) -> dict[str, Any]:
-    """List software packages installed on a specific device."""
-    params: dict[str, Any] = {"o": org_id}
-    if page is not None:
-        params["page"] = page
-    if limit is not None:
-        params["limit"] = limit
+    """List software packages installed on a specific device.
 
-    raw_response = await client.get(f"/servers/{device_id}/packages", params=params)
+    Default behavior auto-paginates the full installed-package set so callers
+    asking "is X installed?" get a complete, non-truncated answer. Passing an
+    explicit ``page`` returns just that single 0-indexed page (``limit``
+    controls the page size, default 500), for callers that page deliberately.
+    """
+    page_size = _DEFAULT_PACKAGE_PAGE_SIZE
+    if limit is not None:
+        page_size = max(1, min(limit, _DEFAULT_PACKAGE_PAGE_SIZE))
 
     packages: list[Any]
-    total: int
-    if isinstance(raw_response, Mapping):
-        packages = (
-            raw_response.get("data", []) if isinstance(raw_response.get("data"), list) else []
-        )
-        total = raw_response.get("total", len(packages))
-    elif isinstance(raw_response, list):
-        packages = raw_response
-        total = len(packages)
+    auto_paginated = page is None
+    if page is not None:
+        params: dict[str, Any] = {"o": org_id, "page": page, "limit": page_size}
+        raw_response = await client.get(f"/servers/{device_id}/packages", params=params)
+        packages = _coerce_package_list(raw_response)
     else:
-        packages = []
-        total = 0
+
+        async def _fetch_page(page_num: int) -> Sequence[Any]:
+            page_params = {"o": org_id, "page": page_num, "limit": page_size}
+            return _coerce_package_list(
+                await client.get(f"/servers/{device_id}/packages", params=page_params)
+            )
+
+        packages = await parallel_paginate(
+            _fetch_page,
+            page_size=page_size,
+            max_pages=_MAX_PACKAGE_PAGES,
+        )
+
+    total = len(packages)
     summary: list[dict[str, Any]] = []
     for pkg in packages:
         if not isinstance(pkg, Mapping):
@@ -60,15 +89,27 @@ async def list_device_packages(
             entry["is_managed"] = is_managed
         summary.append(entry)
 
+    metadata: dict[str, Any] = {"deprecated_endpoint": False}
+    if auto_paginated:
+        # The auto-paginate path walked every page; the count is exhaustive
+        # unless we hit the safety cap (a host with >10k packages).
+        metadata["complete"] = len(packages) < _MAX_PACKAGE_PAGES * page_size
+    else:
+        # Single explicit page: a full page means more may exist. The upstream
+        # returns no total, so this is the only truncation signal available.
+        metadata["pagination"] = {
+            "page": page,
+            "page_size": page_size,
+            "has_more": total >= page_size,
+        }
+
     return {
         "data": {
             "device_id": device_id,
             "total_packages": total,
             "packages": summary,
         },
-        "metadata": {
-            "deprecated_endpoint": False,
-        },
+        "metadata": metadata,
     }
 
 

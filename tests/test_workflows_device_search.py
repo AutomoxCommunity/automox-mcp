@@ -211,6 +211,28 @@ async def test_typeahead_handles_list_response() -> None:
     assert result["data"]["total_suggestions"] == 2
 
 
+@pytest.mark.asyncio
+async def test_typeahead_sends_fields_array_and_org_and_parses_content() -> None:
+    """Upstream needs `fields` (array) + organizationUuids; returns a `content` page.
+
+    The singular `field` / no-org body returned 400 ("At least one field is
+    required for typeahead"); verified live the array+org body works.
+    """
+    path = f"/server-groups-api/v1/organizations/{_ORG_UUID}/search/typeahead"
+    client = _make_client(post_responses={path: [{"content": ["alice-mac", "alan-pc"]}]})
+    result = await device_search_typeahead(
+        cast(AutomoxClient, client),
+        field="name",
+        prefix="al",
+    )
+
+    _, _, body = client.calls[0]
+    assert body == {"fields": ["name"], "prefix": "al", "organizationUuids": [_ORG_UUID]}
+    assert "field" not in body
+    assert result["data"]["total_suggestions"] == 2  # parsed from `content`
+    assert result["data"]["suggestions"] == ["alice-mac", "alan-pc"]
+
+
 # ---------------------------------------------------------------------------
 # get_device_metadata_fields (no org in path)
 # ---------------------------------------------------------------------------

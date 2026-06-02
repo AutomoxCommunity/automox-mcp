@@ -37,6 +37,14 @@ uv run pytest --cov=automox_mcp --cov-fail-under=90
 
 Coverage sits near the 90% floor — new branches (e.g. idempotency cache-hit / exception-release handlers on write tools) need their own tests or the floor breaks. `bandit` (`-r src/ -c pyproject.toml`) runs at **pre-push and in the CI `lint` job**; existing findings are `# nosec`-justified inline (B104 bind-host string compares in `transport_security.py`; B613 sanitizer scan-target chars in `utils/sanitize.py`). A new bandit finding blocks the push and CI — `# nosec BXXX` it with a one-line reason only when genuinely safe.
 
+## Testing conventions — fixtures must be real, smoke must assert correctness
+
+Unit tests here stub the upstream via `StubClient`: you feed a canned response and assert on the request body. **A stub authored from the same wrong mental model as the code will agree with the code and pass while both are wrong** — this is exactly how three live-contract bugs shipped (#132: a search filter sent under the wrong body key, a saved-search body missing its `search` envelope, a packages list that truncates). Stub-based unit tests verify internal consistency, **not** conformance to the live API. So:
+
+- **Wrapper unit-test fixtures must be captured (sanitized) real payloads, not invented shapes.** Before asserting "the wrapper sends body X / parses response Y", confirm X and Y against the live tenant (`tests/verify_reported_bugs.py` or an ad-hoc probe with `~/automox/.env`). A fixture like `{"data": [...], "total": N}` for an endpoint that actually returns a Spring `Page` (`content`/`total_elements`) tests fiction.
+- **Smoke (`tests/smoke_production.py`) must assert correctness, not just "got a response".** `_safe_call` returns `None` on a tool error (caught → FAIL), but a tool that returns `200` with the *wrong* data passes any `resp is not None` check. For tools where wrong-but-200 is possible, assert a property that only holds when the call is correct: a filter *narrows* the result vs. unfiltered; an auto-paginated list reports `metadata.complete`; a write round-trips create→delete.
+- Smoke is **manual and not in CI** — it only catches regressions if someone runs it. Gating it is tracked separately (see the smoke-in-CI issue / `docs/api-coverage.md`).
+
 ## Release safety
 
 - **Never push a tag without an explicit go-ahead.** A `vX.Y.Z` tag push starts the publish run for irreversible PyPI / registry / MCPB publishing. Releasing = merge PR → tag-push (never the GitHub "Publish release" UI).

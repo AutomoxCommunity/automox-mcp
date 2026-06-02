@@ -377,28 +377,37 @@ async def update_saved_search(
     query: dict[str, Any] | None = None,
     description: str | None = None,
 ) -> dict[str, Any]:
-    """Update an existing saved device search.
+    """Update an existing saved device search (read-modify-write).
 
-    Like ``create_saved_search``, the query spec must be wrapped in a
-    ``search`` envelope carrying ``organizationUuids`` — a top-level ``query``
-    key returns ``500``.
+    The upstream ``PUT`` is a **full replace**, not a partial update: a body
+    missing the ``search`` object returns ``500`` (verified live — a name-only
+    or description-only update fails). So we fetch the existing record, overlay
+    the provided ``name``/``query``/``description``, and ``PUT`` the complete
+    object. When ``query`` is given it is wrapped in the ``search`` envelope
+    (carrying ``organizationUuids``, same as ``create_saved_search``);
+    otherwise the existing ``search`` is preserved.
     """
     org_uuid = await _resolve_org(client, org_id)
+    base = f"/server-groups-api/v1/organizations/{org_uuid}/device/saved-search"
 
-    body: dict[str, Any] = {}
-    if name is not None:
-        body["name"] = name
+    existing_raw = await client.get(f"{base}/{saved_search_id}")
+    existing: Mapping[str, Any] = existing_raw if isinstance(existing_raw, Mapping) else {}
+
     if query is not None:
         search: dict[str, Any] = dict(query)
-        search.setdefault("organizationUuids", [org_uuid])
-        body["search"] = search
+    else:
+        existing_search = existing.get("search")
+        search = dict(existing_search) if isinstance(existing_search, Mapping) else {}
+    search.setdefault("organizationUuids", [org_uuid])
+
+    body: dict[str, Any] = {
+        "name": name if name is not None else existing.get("name"),
+        "search": search,
+    }
     if description is not None:
         body["description"] = description
 
-    response = await client.put(
-        f"/server-groups-api/v1/organizations/{org_uuid}/device/saved-search/{saved_search_id}",
-        json_data=body,
-    )
+    response = await client.put(f"{base}/{saved_search_id}", json_data=body)
 
     data: dict[str, Any] = dict(response) if isinstance(response, Mapping) else {}
     data["saved_search_id"] = saved_search_id

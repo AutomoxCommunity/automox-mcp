@@ -39,6 +39,11 @@ _SAVED_SEARCHES = [
     {"id": "ss-002", "name": "Windows Servers", "query": {"os_family": "Windows"}},
 ]
 
+# NB: this is the FALLBACK (non-Spring) response shape — a `data`/`total`
+# envelope. The live `/device/search` endpoint returns a Spring `Page`
+# (`content`/`total_elements`); that real shape is exercised by
+# test_advanced_search_parses_spring_page_envelope. Keep both: this one
+# guards the `extract_list` fallback branch, not the live contract.
 _SEARCH_RESULTS = {
     "total": 100,
     "data": [
@@ -428,34 +433,57 @@ async def test_create_saved_search_omits_description_when_none() -> None:
 
 
 @pytest.mark.asyncio
-async def test_update_saved_search_sends_partial_body() -> None:
+async def test_update_saved_search_name_only_is_read_modify_write() -> None:
+    """Name-only update must GET the existing record and re-PUT the full object.
+
+    The upstream PUT is full-replace and 500s on a partial (name-only) body
+    (verified live, #132 follow-up), so a partial update must preserve the
+    existing `search`.
+    """
     path = f"/server-groups-api/v1/organizations/{_ORG_UUID}/device/saved-search/ss-001"
-    client = _make_client(put_responses={path: [{"id": "ss-001", "name": "Renamed"}]})
+    existing = {
+        "id": "ss-001",
+        "name": "Old Name",
+        "search": {"filters": [{"AND": []}], "size": 25},
+    }
+    client = _make_client(
+        get_responses={path: [existing]},
+        put_responses={path: [{"id": "ss-001", "name": "Renamed"}]},
+    )
     result = await update_saved_search(
         cast(AutomoxClient, client),
         saved_search_id="ss-001",
         name="Renamed",
     )
 
-    method, _, body = client.calls[0]
-    assert method == "PUT"
-    assert body == {"name": "Renamed"}
+    assert client.calls[0][0] == "GET"  # read
+    put_method, _, body = client.calls[1]  # modify-write
+    assert put_method == "PUT"
+    assert body["name"] == "Renamed"  # overlaid
+    assert body["search"]["filters"] == [{"AND": []}]  # existing search preserved
+    assert body["search"]["size"] == 25
+    assert body["search"]["organizationUuids"] == [_ORG_UUID]  # org scoping injected
     assert result["data"]["updated"] is True
     assert result["data"]["saved_search_id"] == "ss-001"
 
 
 @pytest.mark.asyncio
-async def test_update_saved_search_wraps_query_in_search_envelope() -> None:
+async def test_update_saved_search_query_rebuilds_search_and_keeps_name() -> None:
     path = f"/server-groups-api/v1/organizations/{_ORG_UUID}/device/saved-search/ss-001"
-    client = _make_client(put_responses={path: [{"id": "ss-001"}]})
+    existing = {"id": "ss-001", "name": "Keep Me", "search": {"filters": [{"OLD": []}]}}
+    client = _make_client(
+        get_responses={path: [existing]},
+        put_responses={path: [{"id": "ss-001"}]},
+    )
     await update_saved_search(
         cast(AutomoxClient, client),
         saved_search_id="ss-001",
         query={"filters": [{"AND": []}]},
     )
 
-    _, _, body = client.calls[0]
-    assert body == {"search": {"filters": [{"AND": []}], "organizationUuids": [_ORG_UUID]}}
+    _, _, body = client.calls[1]
+    assert body["name"] == "Keep Me"  # name preserved from existing record
+    assert body["search"] == {"filters": [{"AND": []}], "organizationUuids": [_ORG_UUID]}
     assert "query" not in body
 
 

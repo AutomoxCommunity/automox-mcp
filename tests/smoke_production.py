@@ -615,12 +615,20 @@ async def run_readonly_tools() -> None:
         record("list_events", resp is not None, _count_or_err(resp))
 
         # ---- Packages ----
-        # 21. list_device_packages
+        # 21. list_device_packages — assert COMPLETENESS, not just "got a response".
+        # The endpoint returns a bare list with no total and pages 0-indexed by
+        # `limit`; a single page silently truncates (the #132 bug). Calling with
+        # no `limit` auto-paginates the full set and sets metadata.complete — so
+        # we assert that flag rather than accepting any non-empty page.
         if device_id:
-            resp = await _safe_call(
-                session, "list_device_packages", {"device_id": device_id, "limit": 2}
+            resp = await _safe_call(session, "list_device_packages", {"device_id": device_id})
+            complete = (resp or {}).get("metadata", {}).get("complete")
+            total = (resp or {}).get("data", {}).get("total_packages")
+            record(
+                "list_device_packages",
+                resp is not None and complete is True,
+                f"total={total} complete={complete}",
             )
-            record("list_device_packages", resp is not None, _count_or_err(resp))
         else:
             record("list_device_packages", False, "skipped — no device_id")
 
@@ -1019,9 +1027,45 @@ async def run_readonly_tools() -> None:
         # ---- Device-search enrichment ----
         log.info(f"\n{BOLD}Phase 4: Device-search enrichment{RESET}")
 
-        # 69. advanced_device_search
-        resp = await _safe_call(session, "advanced_device_search", {"limit": 2})
-        record("advanced_device_search", resp is not None, _count_or_err(resp))
+        # 69. advanced_device_search — assert the filter NARROWS the result.
+        # The #132 bug returned 200 with the *whole fleet* because the filter was
+        # placed under the wrong body key and silently ignored; a "got a response"
+        # check sails right past that. We compare an unfiltered count against a
+        # filter that matches nothing when honored (a bogus OS value): if the
+        # filter is honored the count drops to ~0; if ignored it equals the fleet.
+        resp_all = await _safe_call(session, "advanced_device_search", {"query": {}, "limit": 1})
+        total_all = (resp_all or {}).get("data", {}).get("total_devices")
+        no_match_query = {
+            "filters": [
+                {
+                    "AND": [
+                        {
+                            "scope": "DEVICE",
+                            "field": "osFamilyName",
+                            "operator": "EQ",
+                            "values": ["__no_such_os__smoke_probe__"],
+                        }
+                    ]
+                }
+            ]
+        }
+        resp_filtered = await _safe_call(
+            session, "advanced_device_search", {"query": no_match_query, "limit": 1}
+        )
+        total_filtered = (resp_filtered or {}).get("data", {}).get("total_devices")
+        narrows = (
+            resp_all is not None
+            and resp_filtered is not None
+            and isinstance(total_all, int)
+            and isinstance(total_filtered, int)
+            and total_all > 0
+            and total_filtered < total_all
+        )
+        record(
+            "advanced_device_search",
+            narrows,
+            f"unfiltered={total_all} filtered={total_filtered}",
+        )
 
         # 70. device_search_typeahead
         resp = await _safe_call(
@@ -1098,6 +1142,67 @@ async def run_readonly_tools() -> None:
             True,
             "skipped — needs a prior search-execution id (OK)",
         )
+
+        # 78b. Saved-search WRITE round-trip (create → update → delete).
+        # create_saved_search / update_saved_search returned HTTP 500 on every
+        # structured query (#132) — invisible to the read-only path. This is a
+        # self-cleaning write: a uniquely-named throwaway search is always
+        # deleted (best-effort) even if an assertion fails, so it leaves no
+        # residue in the tenant.
+        ss_name = f"mcp-smoke-delete-me-{uuid.uuid4().hex[:8]}"
+        ss_query = {
+            "filters": [
+                {
+                    "AND": [
+                        {
+                            "scope": "SOFTWARE",
+                            "field": "pkgDisplayName",
+                            "operator": "IN",
+                            "values": ["nginx"],
+                        }
+                    ]
+                }
+            ]
+        }
+        created = await _safe_call(
+            session, "create_saved_search", {"name": ss_name, "query": ss_query}
+        )
+        # The saved-search id is a UUID *string*; read it directly (don't use
+        # _extract_id, which coerces to int and would raise on a UUID).
+        new_id = created.get("data", {}).get("id") if created else None
+        record(
+            "create_saved_search",
+            bool(created and created.get("data", {}).get("created") and new_id),
+            f"id={new_id}",
+        )
+        try:
+            if new_id:
+                # Name-only update exercises the read-modify-write path: the
+                # upstream PUT is full-replace and 500s on a partial body.
+                updated = await _safe_call(
+                    session,
+                    "update_saved_search",
+                    {"saved_search_id": new_id, "name": f"{ss_name}-renamed"},
+                )
+                record(
+                    "update_saved_search",
+                    bool(updated and updated.get("data", {}).get("updated")),
+                    f"id={new_id}",
+                )
+            else:
+                record("update_saved_search", False, "skipped — create failed")
+        finally:
+            if new_id:
+                deleted = await _safe_call(
+                    session, "delete_saved_search", {"saved_search_id": new_id}
+                )
+                record(
+                    "delete_saved_search",
+                    bool(deleted and deleted.get("data", {}).get("deleted")),
+                    f"id={new_id}",
+                )
+            else:
+                record("delete_saved_search", False, "skipped — create failed")
 
         # ---- Policy device-targeting ----
         log.info(f"\n{BOLD}Phase 4: Policy device-targeting{RESET}")

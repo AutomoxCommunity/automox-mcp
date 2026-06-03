@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Awaitable, Callable
+from contextlib import asynccontextmanager
 from importlib import import_module
 from types import ModuleType
 from typing import Any, cast
@@ -38,7 +39,6 @@ def _patch_stdio_transport() -> None:  # pragma: no cover - patches MCP internal
         return
 
     import sys
-    from contextlib import asynccontextmanager
     from io import TextIOWrapper
 
     import anyio
@@ -168,8 +168,6 @@ def create_server() -> FastMCP:
     from .utils.logging import configure_logging
 
     configure_logging()
-
-    from contextlib import asynccontextmanager
 
     client = AutomoxClient()
 

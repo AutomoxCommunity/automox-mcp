@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from fastmcp import FastMCP
@@ -54,8 +53,6 @@ from ..workflows.vuln_sync import (
 from ..workflows.vuln_sync import (
     upload_action_set as _upload_action_set,
 )
-
-logger = logging.getLogger(__name__)
 
 
 def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient) -> None:

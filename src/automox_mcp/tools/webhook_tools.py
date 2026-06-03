@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
-import logging
 import socket
 from typing import Any
 from urllib.parse import urlparse
@@ -211,9 +210,6 @@ class TestWebhookParams(ForbidExtraModel):
 class RotateWebhookSecretParams(ForbidExtraModel):
     org_uuid: UUID
     webhook_id: UUID
-
-
-logger = logging.getLogger(__name__)
 
 
 def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient) -> None:

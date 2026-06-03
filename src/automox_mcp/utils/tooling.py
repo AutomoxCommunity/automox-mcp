@@ -436,8 +436,6 @@ def format_error(exc: AutomoxAPIError) -> str:
     # injections like `IMPORTANT: ...`. Sanitizing first puts each value at its
     # own logical line start where the anchor can fire.
     if is_sanitization_enabled() and safe_payload:
-        from .sanitize import sanitize_dict
-
         safe_payload = sanitize_dict(safe_payload)
     try:
         payload_block = json.dumps(safe_payload, indent=2, sort_keys=True) if safe_payload else None

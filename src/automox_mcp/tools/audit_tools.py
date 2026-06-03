@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from fastmcp import FastMCP
@@ -14,8 +13,6 @@ from ..utils.tooling import (
     call_tool_workflow,
     maybe_format_markdown,
 )
-
-logger = logging.getLogger(__name__)
 
 
 def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient) -> None:

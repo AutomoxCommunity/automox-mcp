@@ -294,7 +294,7 @@ def _expand_day_alias(value: str) -> list[str]:
             return [day_name]
     raise ValueError(
         f"Unrecognized day name '{value}'. Use values like 'monday', 'wed', "
-        "'weekdays', or provide numeric day indexes (0-6 or 1-7)."
+        "'weekdays', or provide numeric day indexes (0-6)."
     )
 
 

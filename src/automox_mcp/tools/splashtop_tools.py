@@ -20,7 +20,6 @@ require a human in the loop.
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from fastmcp import FastMCP
@@ -76,8 +75,6 @@ from ..workflows.splashtop import (
 from ..workflows.splashtop import (
     uninstall_splashtop as _uninstall_splashtop,
 )
-
-logger = logging.getLogger(__name__)
 
 
 def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient) -> None:

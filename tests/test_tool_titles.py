@@ -11,8 +11,7 @@ import pytest
 from conftest import FakeClient
 from fastmcp import FastMCP
 
-import automox_mcp.tools as tools_mod
-from automox_mcp.tools import _humanize_tool_name, register_tools
+from automox_mcp.tools import _apply_tool_titles, _humanize_tool_name, register_tools
 
 
 @pytest.mark.parametrize(
@@ -75,4 +74,4 @@ def test_apply_titles_noop_on_stub_without_local_provider() -> None:
         pass
 
     # Should return silently rather than AttributeError.
-    tools_mod._apply_tool_titles(Bare())
+    _apply_tool_titles(Bare())

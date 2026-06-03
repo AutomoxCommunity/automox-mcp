@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from fastmcp import FastMCP
@@ -42,8 +41,6 @@ from ..workflows.policy_history import (
 from ..workflows.policy_history import (
     policy_runs_by_policy as _policy_runs_by_policy,
 )
-
-logger = logging.getLogger(__name__)
 
 
 def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient) -> None:

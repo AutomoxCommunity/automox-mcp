@@ -66,25 +66,39 @@ def register(server: FastMCP) -> None:
             },
             "policy_device_filters": {
                 "description": (
-                    "Advanced device filter syntax used in policy device_filters field "
-                    "to target specific devices beyond server group membership"
+                    "Advanced device filter syntax used in the policy configuration."
+                    "device_filters field to target specific devices beyond server "
+                    "group membership. Each clause is a {field, op, value} object; "
+                    "multiple clauses are ANDed together. Also set "
+                    "configuration.device_filters_enabled=true for the filters to "
+                    "take effect (the MCP auto-sets this when filters are present)."
                 ),
-                "structure": [
-                    {
-                        "type": "group",
-                        "server_group_id": "<integer>",
-                        "description": "Target devices in a specific server group",
-                    },
-                    {
-                        "type": "tag",
-                        "tag_name": "<string>",
-                        "description": "Target devices with a specific tag",
-                    },
+                "clause_shape": {
+                    "field": "<one of the field names below>",
+                    "op": "<one of the operators below>",
+                    "value": "list of values to match",
+                },
+                "fields": [
+                    "tag",
+                    "ip_addr",
+                    "hostname",
+                    "os_family",
+                    "os_version_id",
+                    "serial_number",
+                    "organizational_unit",
                 ],
+                "operators": ["in", "not_in", "like_any"],
                 "example": [
-                    {"type": "group", "server_group_id": 12345},
-                    {"type": "tag", "tag_name": "production"},
+                    {"field": "tag", "op": "in", "value": ["production"]},
+                    {"field": "os_family", "op": "in", "value": ["Mac"]},
                 ],
+                "notes": (
+                    "Field names are snake_case and singular (it is 'tag', not "
+                    "'tags'). The legacy {type, tag_name}/{type, group} shape is "
+                    "NOT accepted by the API (returns HTTP 400) — use {field, op, "
+                    "value}. To target by server group, use the policy's "
+                    "server_groups list, not a device_filters clause."
+                ),
             },
             "list_devices_filters": {
                 "description": "Query parameters accepted by the list_devices tool",
@@ -97,7 +111,7 @@ def register(server: FastMCP) -> None:
                 },
             },
             "source_url": "https://developer.automox.com/openapi/axconsole/operation/getServers/",
-            "last_verified": "2026-03-20",
+            "last_verified": "2026-06-03",
         }
 
     @server.resource(

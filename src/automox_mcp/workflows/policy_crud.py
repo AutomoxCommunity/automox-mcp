@@ -392,10 +392,39 @@ def _normalize_device_filters(config: dict[str, Any]) -> None:
             "configuration.device_filters must be a list of filter definitions or device IDs."
         )
 
+    # Structured {field, op, value} clauses: validate the shape instead of
+    # silently forwarding it. The live API rejects the legacy {type, tag_name}
+    # shape with an opaque HTTP 400 (this is how tag filters were silently
+    # dropped — see device targeting docs), so catch it here with an actionable
+    # message and enable filtering so the clauses actually take effect.
+    if any(isinstance(item, Mapping) for item in filters):
+        for item in filters:
+            if not isinstance(item, Mapping):
+                raise ValueError(
+                    "configuration.device_filters must be either all "
+                    "{field, op, value} clauses or all device IDs, not a mix."
+                )
+            if "type" in item or "tag_name" in item or "server_group_id" in item:
+                raise ValueError(
+                    "device_filters uses {field, op, value} clauses, not the legacy "
+                    "{type, tag_name}/{type, server_group_id} shape (the API rejects "
+                    "it with HTTP 400). Example: "
+                    "{'field': 'tag', 'op': 'in', 'value': ['Nginx']}. To target a "
+                    "server group use the policy's server_groups list, not a "
+                    "device_filters clause."
+                )
+            if not {"field", "op", "value"} <= item.keys():
+                raise ValueError(
+                    "each device_filters clause requires 'field', 'op', and 'value'. "
+                    "Valid fields: tag, ip_addr, hostname, os_family, os_version_id, "
+                    "serial_number, organizational_unit. Valid ops: in, not_in, "
+                    "like_any."
+                )
+        config["device_filters_enabled"] = True
+        return
+
     filter_values: list[int] = []
     for item in filters:
-        if isinstance(item, Mapping):
-            return  # Already structured filter definitions
         if isinstance(item, bool):
             raise ValueError(
                 "configuration.device_filters cannot include boolean values. "
@@ -544,10 +573,16 @@ def _coerce_policy_payload_defaults(payload: dict[str, Any]) -> list[str]:
             config_dict.pop("filter_names", None)
 
         _normalize_device_filters(config_dict)
-        if "device_filters_enabled" not in config_dict:
-            config_dict["device_filters_enabled"] = bool(config_dict.get("device_filters"))
     else:
         _normalize_device_filters(config_dict)
+
+    # device_filters_enabled is load-bearing: the live API silently ignores an
+    # otherwise-valid device_filters list when this flag is unset (verified — every
+    # stored policy filter carries enabled=True). Apply for ALL policy types, not
+    # just patch, so structured filters on worklets/custom policies take effect
+    # instead of being silently dropped.
+    if "device_filters_enabled" not in config_dict:
+        config_dict["device_filters_enabled"] = bool(config_dict.get("device_filters"))
 
     # Clean up empty scheduled_timezone when not needed
     if not payload["use_scheduled_timezone"]:

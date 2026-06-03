@@ -943,3 +943,74 @@ def test_deep_merge_dicts_does_not_mutate_base() -> None:
     overrides = {"a": {"nested": 2}}
     _deep_merge_dicts(base, overrides)
     assert base["a"]["nested"] == 1
+
+
+# ===========================================================================
+# device_filters contract (verified against the live tenant 2026-06-03):
+# real shape is {field, op, value}; the legacy {type, tag_name} shape is
+# rejected by the API with a 400 and must be caught locally; and
+# device_filters_enabled is load-bearing for ALL policy types, not just patch.
+# ===========================================================================
+
+
+async def _preview_create_body(policy: dict[str, Any]) -> dict[str, Any]:
+    """Run a create through preview mode and return the request body."""
+    client = StubClient()
+    result = await apply_policy_changes(
+        cast(AutomoxClient, client),
+        org_id=555,
+        operations=[{"action": "create", "policy": policy}],
+        preview=True,
+    )
+    return result["data"]["operations"][0]["request"]["body"]
+
+
+@pytest.mark.asyncio
+async def test_worklet_structured_filter_auto_enables_device_filters() -> None:
+    """A custom (worklet) policy with a structured tag filter must ship with
+    device_filters_enabled=True and the clause preserved verbatim — otherwise
+    the filter is silently dropped and the policy targets every assigned group."""
+    body = await _preview_create_body(
+        {
+            "name": "Nginx mitigation worklet",
+            "policy_type_name": "custom",
+            "schedule": {"days": ["monday"], "time": "21:00"},
+            "configuration": {
+                "device_filters": [{"field": "tag", "op": "in", "value": ["Nginx"]}],
+            },
+        }
+    )
+    config = body["configuration"]
+    assert config["device_filters"] == [{"field": "tag", "op": "in", "value": ["Nginx"]}]
+    assert config["device_filters_enabled"] is True
+
+
+@pytest.mark.asyncio
+async def test_legacy_type_tag_name_filter_shape_rejected() -> None:
+    """The legacy {type, tag_name} shape (which the API 400s) is rejected
+    locally with an actionable message instead of being forwarded."""
+    with pytest.raises(ValueError, match="field.*op.*value"):
+        await _preview_create_body(
+            {
+                "name": "Bad filter worklet",
+                "policy_type_name": "custom",
+                "configuration": {
+                    "device_filters": [{"type": "tag", "tag_name": "Nginx"}],
+                },
+            }
+        )
+
+
+@pytest.mark.asyncio
+async def test_device_filter_clause_missing_keys_rejected() -> None:
+    """A clause missing field/op/value is rejected before hitting the API."""
+    with pytest.raises(ValueError, match="requires 'field', 'op', and 'value'"):
+        await _preview_create_body(
+            {
+                "name": "Incomplete filter worklet",
+                "policy_type_name": "custom",
+                "configuration": {
+                    "device_filters": [{"field": "tag", "value": ["Nginx"]}],
+                },
+            }
+        )

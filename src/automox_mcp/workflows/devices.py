@@ -921,8 +921,6 @@ async def search_devices(
         # Handle JSON-encoded arrays like '["critical", "high"]'
         stripped = severity.strip()
         if stripped.startswith("["):
-            import json
-
             try:
                 parsed = json.loads(stripped)
                 if isinstance(parsed, list):

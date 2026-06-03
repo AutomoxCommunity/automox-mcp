@@ -6,6 +6,7 @@ import os
 from unittest.mock import patch
 
 from automox_mcp.utils.sanitize import (
+    _strip_html,
     is_sanitization_enabled,
     sanitize_dict,
     sanitize_for_llm,
@@ -367,3 +368,47 @@ class TestFastPath:
         text = "ＩＭＰＯＲＴＡＮＴ:　test"
         result = sanitize_for_llm(text, field_name="notes")
         assert "IMPORTANT:" not in result
+
+
+# ---------------------------------------------------------------------------
+# _strip_html — HTML tag / dangerous-element removal
+# ---------------------------------------------------------------------------
+
+
+class TestStripHTML:
+    def test_drops_tags_keeps_benign_text(self):
+        assert _strip_html('<a href="https://example.com">Link text</a>') == "Link text"
+
+    def test_suppresses_script_content(self):
+        assert _strip_html("<script>alert(1)</script>safe") == "safe"
+
+    def test_suppresses_style_content(self):
+        assert _strip_html("<style>.x{color:red}</style>kept") == "kept"
+
+    def test_cdata_inner_close_tag_does_not_desync(self):
+        # <script> is parsed in CDATA mode: the inner </a> is body text, not a
+        # real end tag, so it must not pop the script frame and leak "tail".
+        assert _strip_html("<script>a</a>b</script>tail") == "tail"
+
+    def test_suppresses_text_of_event_handler_element(self):
+        assert _strip_html('<a onclick="steal()">Click me</a>') == ""
+
+    def test_suppresses_text_of_javascript_url_element(self):
+        # The element's text is dropped AND trailing text after the close tag is
+        # preserved — i.e. skip state is released, not leaked, by the end tag.
+        assert _strip_html('<a href="javascript:alert(1)">Click</a> Trailing.') == " Trailing."
+
+    def test_dangerous_void_element_does_not_leak(self):
+        # <img> is a void element (no end tag); a naive depth counter would stay
+        # elevated and swallow the caption. The stack must not push void tags.
+        assert _strip_html('<img src="javascript:bad()"> Visible caption.') == " Visible caption."
+        assert _strip_html('<img src="javascript:bad()"/> Caption2.') == " Caption2."
+
+    def test_nested_dangerous_element_scopes_suppression(self):
+        assert _strip_html('<div><a onclick="x">bad</a>good</div>') == "good"
+
+    def test_unclosed_inner_tag_tolerated(self):
+        assert _strip_html("<div><span>unclosed</div>after") == "unclosedafter"
+
+    def test_data_uri_src_suppressed(self):
+        assert _strip_html('<a href="data:text/html,evil">x</a>tail') == "tail"

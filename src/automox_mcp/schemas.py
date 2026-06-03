@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import date as Date
 from typing import Annotated, Any, Literal
 from uuid import UUID
@@ -936,8 +937,6 @@ class CreateDataExtractParams(OrgIdRequiredMixin, ForbidExtraModel):
 
     @model_validator(mode="after")
     def _limit_extract_data_size(self) -> CreateDataExtractParams:
-        import json
-
         raw = json.dumps(self.extract_data, default=str)
         if len(raw) > 50_000:
             raise ValueError("extract_data payload exceeds 50 KB limit")
@@ -1083,8 +1082,6 @@ class AdvancedDeviceSearchParams(ForbidExtraModel):
     @model_validator(mode="after")
     def _limit_query_size(self) -> AdvancedDeviceSearchParams:
         if self.query is not None:
-            import json
-
             raw = json.dumps(self.query, default=str)
             if len(raw) > 50_000:
                 raise ValueError("query payload exceeds 50 KB limit")
@@ -1119,8 +1116,6 @@ class CreateSavedSearchParams(ForbidExtraModel):
 
     @model_validator(mode="after")
     def _limit_query_size(self) -> CreateSavedSearchParams:
-        import json
-
         raw = json.dumps(self.query, default=str)
         if len(raw) > 50_000:
             raise ValueError("query payload exceeds 50 KB limit")
@@ -1138,8 +1133,6 @@ class UpdateSavedSearchParams(ForbidExtraModel):
         if self.name is None and self.query is None and self.description is None:
             raise ValueError("at least one of name/query/description must be provided")
         if self.query is not None:
-            import json
-
             raw = json.dumps(self.query, default=str)
             if len(raw) > 50_000:
                 raise ValueError("query payload exceeds 50 KB limit")

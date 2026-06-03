@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **HTML sanitizer now suppresses the text content of elements carrying a dangerous attribute.** `_HTMLTextExtractor` detected `on*` event handlers and `javascript:`/`data:` URLs in `href`/`src`/`action` but took no action — it dropped the tag (as it does for any tag) while still emitting the element's inner text. The dangerous *value* never reached output (attributes are never emitted), so impact was limited to defence-in-depth, but the detection was effectively dead. The extractor now tracks suppression with a `(tag, skipping)` stack that correctly releases on the matching end tag, skips void elements (`<img>`, `<br>`, …) that have no end tag, tolerates unclosed inner tags, and relies on `HTMLParser` CDATA mode for `<script>`/`<style>`. (The obvious one-line `_skip_depth += 1` fix was rejected — it leaks skip state on non-`script`/`style` tags and self-closing tags, silently swallowing all trailing text.)
+
+### Fixed
+
+- **`docs/tool-reference.md` Table of Contents counts and anchors corrected.** The TOC listed Device Management as 9 tools (header says 11) and Vulnerability Sync as 7 (header says 9); the stale counts also broke the in-page anchor links. The section headers — validated against the registered tool set by `test_doc_tool_counts.py` — were already correct.
+- **`create_policy`/`update_policy` schedule-days error message no longer advertises an unsupported range.** The "Unrecognized day name" message offered numeric indexes "0-6 or 1-7", but `_normalize_schedule_days_input` accepts 0–6 only (1–7 was intentionally removed for its ambiguous Monday/Sunday mapping). Dropped the "or 1-7" clause.
+
+### Changed
+
+- **Code-quality cleanup (CodeQL + AI code-scanning findings), no behavior change.** Removed unused module-level `logger` bindings across 18 tool modules and a dead instruction-strip allowlist superseded by the preserve-list denylist; consolidated redundant/duplicate imports (`json` hoisted in `schemas.py`, `asynccontextmanager` in `server.py`, dead local re-imports in `utils/tooling.py` and `workflows/devices.py`); parenthesized two implicitly-concatenated multi-line strings inside reference list literals to make intent explicit. Added a regression test for the `list_device_packages` auto-pagination safety cap (`_MAX_PACKAGE_PAGES`) — the `metadata.complete = False` truncation signal was previously unverified.
+
 ## [2.0.1] - 2026-06-02
 
 ### Fixed

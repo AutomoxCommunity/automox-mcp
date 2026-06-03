@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
 from fastmcp import FastMCP
@@ -18,8 +17,6 @@ from ..utils.tooling import (
 )
 from ..workflows.worklets import get_worklet_detail as _get_worklet_detail
 from ..workflows.worklets import search_worklet_catalog as _search_worklet_catalog
-
-logger = logging.getLogger(__name__)
 
 
 def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient) -> None:

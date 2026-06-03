@@ -85,33 +85,89 @@ _INSTRUCTION_PREFIX_PROBE = re.compile(
 
 
 class _HTMLTextExtractor(HTMLParser):
-    """Extract safe text from HTML, dropping tags and dangerous content."""
+    """Extract safe text from HTML, dropping tags and dangerous content.
+
+    Text inside a dangerous *element* is suppressed. An element is dangerous if
+    its tag is in ``_DANGEROUS_TAGS`` (``script``/``style``) **or** it carries a
+    dangerous attribute (an ``on*`` event handler, or a ``javascript:``/``data:``
+    URL in ``href``/``src``/``action``). In every case the tag and its attributes
+    are dropped; only text nodes survive, so the dangerous attribute value itself
+    never reaches the output — suppressing the element's text is defence in depth.
+
+    Suppression is tracked with a stack of ``(tag, skipping)`` frames rather than a
+    bare depth counter so that:
+
+    * a dangerous attribute on an arbitrary tag (e.g. ``<a onclick=...>``) is
+      released by its matching end tag — a counter keyed on ``_DANGEROUS_TAGS``
+      alone would never decrement and would silently swallow all trailing text;
+    * **void** elements (``<img>``, ``<br>``, ...) emit a start tag with no end
+      tag, so they are never pushed (they have no text content to suppress and a
+      pushed frame would leak);
+    * unclosed inner tags are tolerated — an end tag pops down to its matching
+      frame.
+
+    ``<script>``/``<style>`` are parsed by ``HTMLParser`` in CDATA mode, so their
+    raw body (including any ``</a>``-looking text) arrives as a single data event
+    and cannot desynchronise the stack.
+    """
+
+    # Elements with no end tag in the HTML spec — never pushed onto the stack.
+    _VOID_ELEMENTS = frozenset(
+        {
+            "area",
+            "base",
+            "br",
+            "col",
+            "embed",
+            "hr",
+            "img",
+            "input",
+            "link",
+            "meta",
+            "param",
+            "source",
+            "track",
+            "wbr",
+        }
+    )
 
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self._pieces: list[str] = []
-        self._skip_depth: int = 0
+        # Stack of (tag_name, skipping) for currently-open non-void elements.
+        self._stack: list[tuple[str, bool]] = []
 
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+    def _skipping(self) -> bool:
+        return bool(self._stack and self._stack[-1][1])
+
+    def _is_dangerous(self, tag: str, attrs: list[tuple[str, str | None]]) -> bool:
         if tag.lower() in _DANGEROUS_TAGS:
-            self._skip_depth += 1
-            return
+            return True
         for attr_name, attr_value in attrs:
             if _EVENT_HANDLER_RE.match(attr_name):
-                return
+                return True
             if (
                 attr_value
                 and attr_name.lower() in ("href", "src", "action")
                 and _DANGEROUS_PROTOCOL_RE.match(attr_value)
             ):
-                return
+                return True
+        return False
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        skipping = self._skipping() or self._is_dangerous(tag, attrs)
+        if tag.lower() not in self._VOID_ELEMENTS:
+            self._stack.append((tag.lower(), skipping))
 
     def handle_endtag(self, tag: str) -> None:
-        if tag.lower() in _DANGEROUS_TAGS and self._skip_depth > 0:
-            self._skip_depth -= 1
+        t = tag.lower()
+        for i in range(len(self._stack) - 1, -1, -1):
+            if self._stack[i][0] == t:
+                del self._stack[i:]
+                return
 
     def handle_data(self, data: str) -> None:
-        if self._skip_depth == 0:
+        if not self._skipping():
             self._pieces.append(data)
 
     def get_text(self) -> str:
@@ -156,33 +212,6 @@ _INSTRUCTION_PREFIX_RE = re.compile(
 # ---------------------------------------------------------------------------
 # Field classification
 # ---------------------------------------------------------------------------
-
-# Fields where instruction-prefix stripping is safe to apply.
-# These are free-text fields where users write descriptions/notes.
-_INSTRUCTION_STRIP_FIELDS: frozenset[str] = frozenset(
-    {
-        "notes",
-        "description",
-        "details",
-        "data",
-        "message",
-        "result_reason",
-        "stdout",
-        "stderr",
-        "comments",
-        "reason",
-        "summary",
-        "output",
-        "body",
-        "content",
-        "text",
-        "value",
-        "result",
-        "response",
-        "log",
-        "error",
-    }
-)
 
 # Fields where instruction-prefix stripping should NOT apply because
 # users commonly use words like "IMPORTANT" or "SYSTEM" in names/tags.

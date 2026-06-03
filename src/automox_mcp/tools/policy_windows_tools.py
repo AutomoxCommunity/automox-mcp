@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Any, Literal
 from uuid import UUID
 
@@ -162,9 +161,6 @@ class UpdatePolicyWindowParams(ForbidExtraModel):
 class DeletePolicyWindowParams(ForbidExtraModel):
     org_uuid: UUID
     window_uuid: UUID
-
-
-logger = logging.getLogger(__name__)
 
 
 def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient) -> None:

@@ -6,7 +6,7 @@ Complete reference for all 133 tools, 6 workflow prompts, MCP resources, paramet
 
 ## Table of Contents
 
-- [Device Management (9 tools)](#device-management-9-tools)
+- [Device Management (11 tools)](#device-management-11-tools)
 - [Advanced Device Search (18 tools)](#advanced-device-search-18-tools)
 - [Policy Management (15 tools)](#policy-management-15-tools)
 - [Policy History v2 (7 tools)](#policy-history-v2-7-tools)
@@ -15,7 +15,7 @@ Complete reference for all 133 tools, 6 workflow prompts, MCP resources, paramet
 - [Webhook Management (9 tools)](#webhook-management-9-tools)
 - [Worklet Catalog (2 tools)](#worklet-catalog-2-tools)
 - [Data Extracts (3 tools)](#data-extracts-3-tools)
-- [Vulnerability Sync (7 tools)](#vulnerability-sync-7-tools)
+- [Vulnerability Sync (9 tools)](#vulnerability-sync-9-tools)
 - [Compound Workflows (3 tools)](#compound-workflows-3-tools)
 - [Events (1 tool)](#events-1-tool)
 - [Reports (2 tools)](#reports-2-tools)

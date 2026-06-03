@@ -7,6 +7,7 @@ from conftest import StubClient
 
 from automox_mcp.client import AutomoxAPIError, AutomoxClient
 from automox_mcp.workflows.packages import (
+    _MAX_PACKAGE_PAGES,
     list_device_packages,
     search_org_packages,
 )
@@ -143,6 +144,30 @@ async def test_list_packages_auto_paginates_until_short_page() -> None:
     names = [p["name"] for p in result["data"]["packages"]]
     assert "nginx" in names  # the package on the second page is not lost
     assert result["metadata"]["complete"] is True
+
+
+@pytest.mark.asyncio
+async def test_list_packages_auto_paginate_hits_safety_cap() -> None:
+    """A host with more pages than the cap stops at _MAX_PACKAGE_PAGES and flags incomplete.
+
+    With page_size 2 and every page full, pagination never sees a short page,
+    so it walks exactly _MAX_PACKAGE_PAGES pages and reports complete=False —
+    the signal that the result is truncated, not exhaustive.
+    """
+    # One full page (size 2) per cap slot — never a short page to end early.
+    full_pages = [
+        [{"id": 2 * n, "name": f"pkg{2 * n}"}, {"id": 2 * n + 1, "name": f"pkg{2 * n + 1}"}]
+        for n in range(_MAX_PACKAGE_PAGES)
+    ]
+    client = StubClient(get_responses={"/servers/101/packages": full_pages})
+    result = await list_device_packages(
+        cast(AutomoxClient, client), org_id=555, device_id=101, limit=2
+    )
+
+    assert result["data"]["total_packages"] == _MAX_PACKAGE_PAGES * 2
+    assert result["metadata"]["complete"] is False
+    # The cap bounds the loop: exactly _MAX_PACKAGE_PAGES fetches, no over-run.
+    assert len(client.calls) == _MAX_PACKAGE_PAGES
 
 
 @pytest.mark.asyncio

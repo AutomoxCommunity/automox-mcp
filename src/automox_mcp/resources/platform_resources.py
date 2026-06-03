@@ -332,8 +332,10 @@ def register(server: FastMCP) -> None:
                     "HTTP 429 (Too Many Requests). The MCP server surfaces this as an error."
                 ),
                 "recommendations": [
-                    "Use compound tools (get_patch_tuesday_readiness, get_compliance_snapshot) "
-                    "to reduce the number of individual API calls",
+                    (
+                        "Use compound tools (get_patch_tuesday_readiness, get_compliance_snapshot) "
+                        "to reduce the number of individual API calls"
+                    ),
                     "Use pagination (limit/page parameters) to fetch manageable result sets",
                     "Avoid polling the same endpoint in tight loops",
                 ],

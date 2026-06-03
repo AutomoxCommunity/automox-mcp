@@ -64,6 +64,7 @@ try:
             load_dotenv(env_path)
             break
 except ImportError:
+    # python-dotenv is optional; env vars can be supplied directly in the shell.
     pass
 
 # ---------------------------------------------------------------------------
@@ -316,6 +317,7 @@ async def run_http_tests() -> None:
                         uuid.UUID(cid)
                         valid_uuid = True
                     except ValueError:
+                        # Malformed correlation id — leave valid_uuid False.
                         pass
                 record(
                     "correlation_id present and valid UUID",

@@ -406,6 +406,8 @@ def _coerce_datetime(value: Any, depth: int = 0) -> datetime | None:
         try:
             int_value = int(text)
         except ValueError:
+            # Not an integer timestamp — intentionally fall through to the
+            # ISO-8601 parsing attempt below.
             pass
         else:
             return _coerce_datetime(int_value, depth + 1)

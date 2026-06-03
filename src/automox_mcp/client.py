@@ -406,6 +406,8 @@ class AutomoxClient:
             if isinstance(data, Mapping):
                 return data
         except json.JSONDecodeError:
+            # Non-JSON error body (e.g. an HTML gateway page) — intentionally
+            # fall through to returning the raw truncated text below.
             pass
         # Truncate raw text to avoid leaking verbose upstream error pages.
         raw = response.text[:500] if response.text else ""

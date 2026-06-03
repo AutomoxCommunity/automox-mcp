@@ -574,16 +574,20 @@ def register_policy_resources(server: FastMCP) -> None:
                     "example": {"server_groups": [101, 102, 103]},
                 },
                 "device_filters": {
-                    "description": "Advanced filtering using Automox filter syntax",
+                    "description": (
+                        "Advanced filtering: a list of {field, op, value} clauses "
+                        "(ANDed) under configuration.device_filters. Valid fields: "
+                        "tag, ip_addr, hostname, os_family, os_version_id, "
+                        "serial_number, organizational_unit. Valid ops: in, not_in, "
+                        "like_any. Field names are singular ('tag', not 'tags'). The "
+                        "legacy {type, tag_name} shape is rejected by the API (400). "
+                        "Set device_filters_enabled=true (auto-set by the MCP when "
+                        "filters are present). For server groups use server_groups, "
+                        "not a device_filters clause."
+                    ),
                     "structure": [
-                        {
-                            "type": "group",
-                            "server_group_id": 101,
-                        },
-                        {
-                            "type": "tag",
-                            "tag_name": "production",
-                        },
+                        {"field": "tag", "op": "in", "value": ["production"]},
+                        {"field": "os_family", "op": "in", "value": ["Mac"]},
                     ],
                 },
             },

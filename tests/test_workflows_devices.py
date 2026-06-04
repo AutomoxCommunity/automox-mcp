@@ -51,16 +51,65 @@ def device_payload() -> dict[str, Any]:
         "server_group_id": 456,
         "managed": True,
         "patch_status": "missing",
-        "status": {"policy_status": "success"},
+        "compliant": False,
+        "uptime": "8077",
+        "status": {
+            "device_status": "active",
+            "agent_status": "active",
+            "policy_status": "active",
+            "policy_statuses": [
+                {"id": 1, "compliant": True},
+                {"id": 2, "compliant": False},
+                {"id": 3, "compliant": False},
+            ],
+        },
+        # Shape captured from a live GET /servers/{id} payload (sanitized):
+        # `status` is the integer enum (0 needs_remediation / 1 up_to_date /
+        # 2 pending), `result` is "{}" when empty, `uptime` above is a bare
+        # numeric string of minutes.
         "policy_status": [
             {
+                "id": 910001,
+                "organization_id": 9000,
                 "policy_id": 1,
+                "server_id": 42,
                 "policy_name": "Monthly Patching",
-                "status": "success",
-                "create_time": "2024-05-10T12:00:00Z",
+                "policy_type_name": "patch",
+                "status": 1,
+                "result": "{}",
+                "create_time": "2024-05-10T12:00:00+0000",
+                "next_remediation": "2024-05-12T01:00:00+0000",
                 "pending_count": 0,
                 "will_reboot": False,
-            }
+            },
+            {
+                "id": 910002,
+                "organization_id": 9000,
+                "policy_id": 2,
+                "server_id": 42,
+                "policy_name": "Third Party Patching",
+                "policy_type_name": "patch",
+                "status": 0,
+                "result": "{}",
+                "create_time": "2024-05-10T12:00:00+0000",
+                "next_remediation": "2024-05-12T01:00:00+0000",
+                "pending_count": 0,
+                "will_reboot": False,
+            },
+            {
+                "id": 910003,
+                "organization_id": 9000,
+                "policy_id": 3,
+                "server_id": 42,
+                "policy_name": "Disk Encryption Check",
+                "policy_type_name": "custom",
+                "status": 2,
+                "result": "{}",
+                "create_time": "2024-05-10T12:00:00+0000",
+                "next_remediation": "2024-05-12T01:00:00+0000",
+                "pending_count": 0,
+                "will_reboot": False,
+            },
         ],
         "server_policies": [
             {
@@ -124,7 +173,28 @@ async def test_describe_device_trims_large_payload(device_payload: dict[str, Any
     assert core["server_group_id"] == 456
     assert "group" not in core
     assert core["policy_status"][0]["policy_name"] == "Monthly Patching"
+    # Integer status codes are translated, not passed through raw.
+    assert [entry["status"] for entry in core["policy_status"]] == [
+        "up_to_date",
+        "needs_remediation",
+        "pending",
+    ]
+    # `uptime` is renamed with its (verified) unit and parsed to an int.
+    assert "uptime" not in core
+    assert core["uptime_minutes"] == 8077
     assert "evaluation_code" not in result["data"]["policy_assignments"]["policies"][0]
+
+    compliance = result["data"]["compliance"]
+    assert compliance["device_compliant"] is False
+    assert compliance["policy_status_counts"] == {
+        "up_to_date": 1,
+        "needs_remediation": 1,
+        "pending": 1,
+    }
+    assert compliance["needs_remediation_policies"] == [
+        {"policy_id": 2, "policy_name": "Third Party Patching"}
+    ]
+    assert "note" in compliance
 
     raw_details = result["data"]["raw_details"]
     assert raw_details["included"] is False
@@ -138,7 +208,7 @@ async def test_describe_device_trims_large_payload(device_payload: dict[str, Any
     assert device_facts["last_user_logon"]["user"] == "admin"
 
     metadata = result["metadata"]
-    assert metadata["policy_status_total"] == 1
+    assert metadata["policy_status_total"] == 3
     assert metadata["policy_assignments_total"] == 1
     assert metadata["include_raw_details"] is False
 

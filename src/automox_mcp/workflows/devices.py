@@ -175,6 +175,18 @@ def _count_failed_policies(device: Mapping[str, Any]) -> int:
     return failures
 
 
+# Integer status codes on GET /servers `policy_status[]` entries. Confirmed
+# against the Console API spec (ServerWithPolicies.policy_status[].status) and
+# cross-checked live (2026-06-04) against the `status.policy_statuses[]`
+# `compliant` booleans: code 1 is the only value paired with compliant=true.
+# Mapped here rather than in normalize_status because other Automox enums
+# reuse these integers with different meanings (e.g. OCSF status_id).
+_POLICY_STATUS_CODE_LABELS = {
+    0: "needs_remediation",
+    1: "up_to_date",
+    2: "pending",
+}
+
 _POLICY_STATUS_LIMIT = 12
 _POLICY_ASSIGNMENTS_LIMIT = 10
 _SANITIZED_SEQUENCE_LIMIT = 5
@@ -225,6 +237,73 @@ def _truncate_string(value: str, *, limit: int = _SANITIZED_STRING_LIMIT) -> str
     return f"{trimmed}... ({remaining} chars truncated)"
 
 
+def _policy_entry_status(item: Mapping[str, Any]) -> str:
+    """Translate one policy_status entry's status into a readable label.
+
+    Live entries carry the integer enum (see ``_POLICY_STATUS_CODE_LABELS``);
+    note that 0 (needs_remediation) is falsy, so a truthiness chain over the
+    alternate keys would misreport it as unknown. Non-integer values fall
+    through to the generic normalizer.
+    """
+    raw = item.get("status")
+    if isinstance(raw, bool):
+        raw = None
+    if isinstance(raw, int):
+        return _POLICY_STATUS_CODE_LABELS.get(raw, str(raw))
+    if raw in (None, ""):
+        raw = item.get("policy_status") or item.get("result_status")
+    return _normalize_status(raw)
+
+
+def _build_compliance_summary(device_data: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Roll up per-policy statuses into a device-level compliance view.
+
+    Gives the model the context it cannot infer from raw codes: how many
+    policies sit in each state, which specific policies need remediation,
+    and the rule (verified live) that pending policies alone do not make a
+    device non-compliant.
+    """
+    entries = device_data.get("policy_status")
+    device_compliant = device_data.get("compliant")
+    has_entries = isinstance(entries, Sequence) and not isinstance(entries, (str, bytes, bytearray))
+    if not has_entries and not isinstance(device_compliant, bool):
+        return None
+
+    counts: Counter[str] = Counter()
+    needs_remediation: list[dict[str, Any]] = []
+    if has_entries:
+        for item in cast(Sequence[Any], entries):
+            if not isinstance(item, Mapping):
+                continue
+            label = _policy_entry_status(item)
+            counts[label] += 1
+            if label == "needs_remediation" and len(needs_remediation) < _POLICY_STATUS_LIMIT:
+                needs_remediation.append(
+                    {
+                        "policy_id": item.get("policy_id") or item.get("id"),
+                        "policy_name": item.get("policy_name") or item.get("name"),
+                    }
+                )
+
+    summary: dict[str, Any] = {}
+    if isinstance(device_compliant, bool):
+        summary["device_compliant"] = device_compliant
+    if counts:
+        summary["policy_status_counts"] = dict(counts)
+    if needs_remediation:
+        summary["needs_remediation_policies"] = needs_remediation
+        if counts["needs_remediation"] > len(needs_remediation):
+            summary["needs_remediation_truncated"] = True
+    if not summary:
+        return None
+    summary["note"] = (
+        "A device is non-compliant when at least one policy is in "
+        "needs_remediation; pending policies (awaiting evaluation or their "
+        "next window) do not count against compliance."
+    )
+    return summary
+
+
 def _summarize_policy_status(
     entries: Any, *, limit: int = _POLICY_STATUS_LIMIT
 ) -> tuple[list[dict[str, Any]], int]:
@@ -248,9 +327,7 @@ def _summarize_policy_status(
         summary_item = {
             "policy_id": item.get("policy_id") or item.get("id"),
             "policy_name": item.get("policy_name") or item.get("name"),
-            "status": _normalize_status(
-                item.get("status") or item.get("policy_status") or item.get("result_status")
-            ),
+            "status": _policy_entry_status(item),
             "execution_time": item.get("create_time") or item.get("updated_at"),
             "pending_count": item.get("pending_count"),
             "will_reboot": item.get("will_reboot"),
@@ -647,13 +724,23 @@ def _build_device_core(
 
     # Fields that must preserve falsy values like 0 or False (None-check only).
     _NONE_CHECK_FIELDS: list[tuple[str, str]] = [
-        ("uptime", "uptime"),
         ("managed", "managed"),
     ]
     for out_key, src_key in _NONE_CHECK_FIELDS:
         value = device_data.get(src_key)
         if value is not None:
             core[out_key] = value
+
+    # Automox reports `uptime` as a bare numeric string of MINUTES sampled at
+    # the device's last full scan (verified live 2026-06-04 against known boot
+    # times; the public spec's "measured in seconds" claim is wrong). Rename
+    # so the model knows the unit, and note it can lag the current session.
+    uptime_raw = device_data.get("uptime")
+    if uptime_raw is not None:
+        try:
+            core["uptime_minutes"] = int(uptime_raw)
+        except (TypeError, ValueError):
+            core["uptime_minutes"] = uptime_raw
 
     display_name = _format_device_display_name(device_data)
     if display_name:
@@ -842,6 +929,10 @@ async def describe_device(
         },
         "raw_details": raw_details,
     }
+
+    compliance_summary = _build_compliance_summary(device_data)
+    if compliance_summary:
+        data["compliance"] = compliance_summary
 
     if detail_facts:
         data["device_facts"] = detail_facts

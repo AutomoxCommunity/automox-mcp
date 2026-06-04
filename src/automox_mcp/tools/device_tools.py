@@ -74,7 +74,14 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
 
     @server.tool(
         name="device_detail",
-        description="Return detailed information and recent activity for a device.",
+        description=(
+            "Return detailed information and recent activity for a device. "
+            "Includes a compliance rollup (per-policy status counts: up_to_date / "
+            "pending / needs_remediation, plus the policies needing remediation — "
+            "only needs_remediation policies make a device non-compliant). "
+            "`uptime_minutes` is sampled at the device's last full scan, so it "
+            "can lag the current boot session."
+        ),
         annotations={
             "readOnlyHint": True,
             "destructiveHint": False,

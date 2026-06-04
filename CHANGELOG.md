@@ -7,7 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`device_detail` now emits a device-level `compliance` rollup.** Counts per policy state plus the named policies in `needs_remediation`, and a note encoding the rule (verified live across ~20 devices): a device is non-compliant when at least one policy needs remediation — pending policies alone do not count against compliance. Previously the model had to derive all of this from raw per-policy entries.
+
 ### Fixed
+
+- **Per-policy status codes in `device_detail` are now translated instead of passed through raw.** `GET /servers` `policy_status[].status` is an integer enum — `0 = needs_remediation`, `1 = up_to_date`, `2 = pending` (confirmed against the Console API spec and cross-checked live against the `status.policy_statuses[].compliant` booleans: code 1 is the only value paired with `compliant: true`). The summarizer previously stringified the integers verbatim (`"1"`/`"2"`), forcing the model to guess a mapping — and in observed use it guessed one that inverted compliant and non-compliant. Worse, code 0 (needs remediation — falsy) fell through a truthiness chain to absent alternate keys and surfaced as `"unknown"`, so the one state that demands action was the one reported least clearly. The mapping is applied in the policy-entry summarizer, not in the generic status normalizer, because other Automox enums reuse these integers with different meanings.
+- **`uptime` renamed to `uptime_minutes` in `device_detail` — the public spec's unit is wrong.** The Console API spec describes `Server.uptime` as "measured in seconds", but live verification against known device boot times (2026-06-04) shows the value is **minutes**, sampled at the device's last full scan — so it can also lag the current boot session. The unit-less raw key invited bad inferences (an observed session read ~6.7k minutes ≈ 4.7 days as possibly "~9 months of uptime"). The projection now emits `uptime_minutes` as an integer, and the tool description carries the sampled-at-last-scan caveat.
 
 - **`verify-publish` no longer loses the race to PyPI index propagation (CI only).** The v2.0.3 run failed despite a healthy publish, for two compounding reasons: uv caches simple-index responses, so after a too-early first attempt every retry replayed the cached "no such version" miss instead of re-checking PyPI; and the retry window (6×20s ≈ 2 min) was shorter than occasional index-propagation lag. The install check now passes `--refresh-package automox-mcp` and retries for up to ~15 minutes (30×30s; job timeout raised 10→20 min). The loop still exits on the first success, so a normal release pays nothing — the ceiling only spends free runner minutes on slow days, instead of attended minutes diagnosing and rerunning a red release.
 

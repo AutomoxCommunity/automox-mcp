@@ -29,11 +29,19 @@ You need three values from the [Automox Console](https://console.automox.com):
 
 | Value | Where to find it |
 |---|---|
-| **API Key** | Settings > Secrets & Keys > Add API Key ([docs](https://docs.automox.com/product/Product_Documentation/Settings/Managing_Keys.htm)) |
+| **API Key** | Use an **org-scoped** key — zone **Settings > Secrets & Keys > Add API Key** ([docs](https://docs.automox.com/product/Product_Documentation/Settings/Managing_Keys.htm)); see key types below |
 | **Account UUID** | Settings > Secrets & Keys (shown on the page) |
 | **Org ID** | The numeric ID in the URL when viewing your organization |
 
-> **Use an org-scoped API key.** Most tools accept either key type, but the Advanced Device Search family (`advanced_device_search`, `device_search_typeahead`, saved-search create/read/update/delete, `list_searches_for_device`, `get_device_assignments`) returns `403` with a global/account-scoped key — the upstream Server Groups API only accepts org-scoped keys for those endpoints (verified live). API Key and Account UUID are always required. Org ID is recommended but optional — some tools that don't require org context will work without it.
+Automox has **two API key types**, and the difference matters here:
+
+| | **Org-scoped key** (recommended) | **Global / account key** |
+|---|---|---|
+| Scope | One organization — the zone it was created in | Every org in the account; inherits the key owner's role per org |
+| Created at | Zone **Settings > Secrets & Keys** | Account **Global Access Management > Keys** (Full Administrator) |
+| Tool coverage | **All tools** | All *except* the Advanced Device Search family — `advanced_device_search`, `device_search_typeahead`, saved-search create/read/update/delete, `list_searches_for_device`, `get_device_assignments` — which return `403` (the upstream Server Groups API only accepts org-scoped keys for those endpoints; verified live) |
+
+> **Symptom of the wrong key type:** `403` on the search tools while reads work everywhere else — that's the key scope, not your permissions. API Key and Account UUID are always required. Org ID is recommended but optional — some tools that don't require org context will work without it.
 
 ### 2. Create a `.env` file
 
@@ -100,7 +108,7 @@ For the full list of tools, parameters, and MCP resources, see the **[Tool Refer
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `AUTOMOX_API_KEY` | Yes | — | Automox API key |
+| `AUTOMOX_API_KEY` | Yes | — | Automox API key (org-scoped recommended — see [key types](#1-get-your-automox-credentials)) |
 | `AUTOMOX_ACCOUNT_UUID` | Yes | — | Account UUID from Secrets & Keys |
 | `AUTOMOX_ORG_ID` | Recommended | — | Numeric organization ID (required by most tools) |
 | `AUTOMOX_MCP_READ_ONLY` | No | `false` | Disable all write operations (85 of 133 tools remain) |

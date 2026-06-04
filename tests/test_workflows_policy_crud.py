@@ -4,6 +4,7 @@ import copy
 from typing import Any, cast
 
 import pytest
+from fastmcp.exceptions import ToolError
 
 from automox_mcp.client import AutomoxClient
 from automox_mcp.workflows.policy import get_policy_compliance_stats
@@ -489,6 +490,49 @@ async def test_preview_policy_device_filters_returns_devices() -> None:
     assert params == {"o": 555}
     assert body["device_filters"][0]["field"] == "tag"
     assert body["server_groups"] == [10]
+
+
+@pytest.mark.asyncio
+async def test_preview_parses_results_size_envelope() -> None:
+    """The live endpoint returns {"results": [...], "size": N}, not a bare list /
+    {"data": [...]}. Parsing must read results/size, not wrap the envelope as one
+    device (which would report total_devices=1 for any result set)."""
+    envelope = {
+        "results": [{"id": 1, "name": "host-a"}, {"id": 2, "name": "host-b"}],
+        "size": 2,
+    }
+    client = StubClient(post_responses={"/policies/device-filters-preview": [envelope]})
+    result = await preview_policy_device_filters(
+        cast(AutomoxClient, client),
+        org_id=555,
+        device_filters=[{"field": "tag", "op": "in", "value": ["prod"]}],
+        server_groups=[10],
+    )
+    assert result["data"]["total_devices"] == 2
+    assert [d["id"] for d in result["data"]["devices"]] == [1, 2]
+
+
+@pytest.mark.asyncio
+async def test_preview_requires_server_groups_when_filtering() -> None:
+    """A filter-only target 500s upstream; the wrapper pre-empts it with guidance."""
+    client = StubClient()
+    with pytest.raises(ToolError, match="requires server_groups"):
+        await preview_policy_device_filters(
+            cast(AutomoxClient, client),
+            org_id=555,
+            device_filters=[{"field": "tag", "op": "in", "value": ["prod"]}],
+        )
+    # no upstream call should have been made
+    assert client.calls == []
+
+
+@pytest.mark.asyncio
+async def test_preview_rejects_empty_request() -> None:
+    """An empty preview request also 500s upstream — rejected locally."""
+    client = StubClient()
+    with pytest.raises(ToolError, match="server_groups and/or device_filters"):
+        await preview_policy_device_filters(cast(AutomoxClient, client), org_id=555)
+    assert client.calls == []
 
 
 @pytest.mark.asyncio

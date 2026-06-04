@@ -5,7 +5,7 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.0.2] - 2026-06-03
 
 ### Security
 
@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`preview_policy_device_filters` description and smoke coverage now reflect the verified contract.** The tool description and `docs/tool-reference.md` state that `server_groups` is required when `device_filters` is provided (pass the groups the policy targets; clauses apply within that scope). The smoke suite's preview check now asserts correctness instead of "got a response": the reported `total_devices` must match the returned device list (catches the envelope-wrapped-as-one-device regression), and a filter for a nonexistent tag must narrow the group scope to exactly 0 devices (catches a silently-ignored filter).
 - **Code-quality cleanup (CodeQL + AI code-scanning findings), no behavior change.** Removed unused module-level `logger` bindings across 18 tool modules and a dead instruction-strip allowlist superseded by the preserve-list denylist; consolidated redundant/duplicate imports (`json` hoisted in `schemas.py`, `asynccontextmanager` in `server.py`, dead local re-imports in `utils/tooling.py` and `workflows/devices.py`); parenthesized two implicitly-concatenated multi-line strings inside reference list literals to make intent explicit. Added a regression test for the `list_device_packages` auto-pagination safety cap (`_MAX_PACKAGE_PAGES`) — the `metadata.complete = False` truncation signal was previously unverified.
 
 ## [2.0.1] - 2026-06-02

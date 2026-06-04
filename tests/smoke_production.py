@@ -1228,17 +1228,44 @@ async def run_readonly_tools() -> None:
         # ---- Policy device-targeting ----
         log.info(f"\n{BOLD}Phase 4: Policy device-targeting{RESET}")
 
-        # 79. preview_policy_device_filters — must pass a VALID target. An empty
-        # body 500s upstream ("garbage in"); a real server_groups id exercises
-        # the working path (verified live). device_filters also works but each
-        # field accepts only specific operators, so a real group is simplest.
+        # 79. preview_policy_device_filters — assert CORRECTNESS, not just 200.
+        # The {results, size} envelope was once mis-parsed as ONE device
+        # (total_devices=1 for any result set), and a wrong-but-200 preview
+        # defeats the tool's purpose as a blast-radius check. Two assertions:
+        # the reported total matches the returned device list, and a filter for
+        # a nonexistent tag narrows the group scope to exactly 0 devices.
+        # (server_groups is required alongside device_filters — a filter-only
+        # body 500s upstream and is now rejected client-side.)
         if group_id:
-            resp = await _safe_call(
+            base = await _safe_call(
                 session,
                 "preview_policy_device_filters",
-                {"server_groups": [group_id], "limit": 2},
+                {"server_groups": [group_id]},
             )
-            record("preview_policy_device_filters", resp is not None, _data_keys(resp))
+            filt = await _safe_call(
+                session,
+                "preview_policy_device_filters",
+                {
+                    "server_groups": [group_id],
+                    "device_filters": [
+                        {"field": "tag", "op": "in", "value": ["smoke-no-such-tag-zzz"]}
+                    ],
+                },
+            )
+            base_data = (base or {}).get("data", {})
+            filt_data = (filt or {}).get("data", {})
+            base_total = base_data.get("total_devices")
+            filt_total = filt_data.get("total_devices")
+            ok = (
+                isinstance(base_total, int)
+                and base_total == len(base_data.get("devices") or [])
+                and filt_total == 0
+            )
+            record(
+                "preview_policy_device_filters",
+                ok,
+                f"group scope={base_total}, impossible-tag filter={filt_total} (expect 0)",
+            )
         else:
             record("preview_policy_device_filters", True, "skipped — no server group (OK)")
 

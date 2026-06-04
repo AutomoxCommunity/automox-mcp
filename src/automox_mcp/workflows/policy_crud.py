@@ -1202,6 +1202,25 @@ async def preview_policy_device_filters(
     """
     resolved_org_id = require_org_id(client, org_id)
 
+    # The upstream preview returns HTTP 500 for a filter-only target (device_filters
+    # with no server_groups) and for an empty request. Pre-empt both with actionable
+    # guidance rather than surfacing an opaque 500. Verified live: device_filters ARE
+    # applied within a server_groups scope (a tag clause narrows the group set to
+    # exactly the tagged devices), so the fix is to pass the groups the policy targets.
+    if device_filters and not server_groups:
+        raise ToolError(
+            "preview_policy_device_filters requires server_groups when device_filters "
+            "is provided: the upstream preview cannot evaluate a filter-only target and "
+            "returns HTTP 500. Pass the server_groups this policy targets (for an "
+            "org-wide filter, pass all relevant group IDs); the device_filters clauses "
+            "are then applied within that scope."
+        )
+    if not server_groups and not device_filters:
+        raise ToolError(
+            "preview_policy_device_filters needs server_groups and/or device_filters; "
+            "an empty preview request returns HTTP 500 upstream."
+        )
+
     params: dict[str, Any] = {"o": resolved_org_id}
     if page is not None:
         params["page"] = page
@@ -1215,10 +1234,21 @@ async def preview_policy_device_filters(
         body["server_groups"] = server_groups
 
     response = await client.post("/policies/device-filters-preview", json_data=body, params=params)
-    devices = _extract_list(response)
+
+    # The preview endpoint returns a {"results": [...], "size": N} envelope, which
+    # extract_list does not recognize — it would wrap the whole envelope as a single
+    # bogus "device" and report total_devices=1 for any result set. Parse it directly,
+    # falling back to extract_list for the bare-list / {"data": [...]} shapes.
+    if isinstance(response, Mapping) and "results" in response:
+        devices = [d for d in (response.get("results") or []) if isinstance(d, Mapping)]
+        size = response.get("size")
+        total = size if isinstance(size, int) else len(devices)
+    else:
+        devices = _extract_list(response)
+        total = len(devices)
 
     return {
-        "data": {"total_devices": len(devices), "devices": devices},
+        "data": {"total_devices": total, "devices": devices},
         "metadata": {"deprecated_endpoint": False, "org_id": resolved_org_id},
     }
 

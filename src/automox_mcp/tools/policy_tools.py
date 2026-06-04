@@ -252,9 +252,13 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     @server.tool(
         name="preview_policy_device_filters",
         description=(
-            "Dry-run: preview which devices a policy's device filters and/or "
-            "server groups would target, before creating or updating the policy. "
-            "Read-only — nothing is created or changed."
+            "Dry-run: preview which devices a policy's targeting would resolve "
+            "to, before creating or updating the policy. Read-only — nothing is "
+            "created or changed. server_groups is REQUIRED when device_filters "
+            "is provided (the upstream preview cannot evaluate a filter-only "
+            "target): pass the groups the policy will be assigned to, and the "
+            "device_filters clauses ({field, op, value}) are applied within "
+            "that scope."
         ),
         annotations={
             "readOnlyHint": True,

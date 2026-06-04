@@ -77,7 +77,7 @@ Uses the Server Groups API v2 for structured device queries, saved searches, and
 - **`policy_detail`** - Retrieve configuration and recent history for a policy.
 - **`policy_compliance_stats`** - Retrieve per-policy compliance statistics showing compliant vs. non-compliant device counts and compliance rates.
 - **`apply_policy_changes`** - Preview or submit structured policy create/update operations. Automatically normalizes helper fields (`filter_name`, `filter_names`) and friendly schedule blocks into Automox's expected payloads, ensuring required fields (e.g., `schedule_days`, `schedule_time`) are present before submission.
-- **`preview_policy_device_filters`** - Dry-run: preview which devices a policy's device filters and/or server groups would target, before creating or updating the policy. Read-only — nothing is created or changed.
+- **`preview_policy_device_filters`** - Dry-run: preview which devices a policy's targeting would resolve to, before creating or updating the policy. Read-only — nothing is created or changed. `server_groups` is required when `device_filters` is provided (the upstream preview cannot evaluate a filter-only target): pass the groups the policy will be assigned to, and the `device_filters` clauses (`{field, op, value}`) are applied within that scope.
 - **`list_devices_for_policies`** - List the devices currently targeted by one or more policies (by policy UUID) — blast-radius assessment before executing or changing a policy. Read-only.
 - **`patch_approvals_summary`** - Summarize pending patch approvals and their severity.
 - **`decide_patch_approval`** - Approve or reject an Automox patch approval request.

@@ -240,7 +240,7 @@ jobs:
   verify-publish:
     needs: publish
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     permissions: {}
     steps:
       - name: Set up uv
@@ -249,17 +249,25 @@ jobs:
           python-version: "3.13"
           enable-cache: false
 
+      # Two hard-won details (v2.0.3): (1) uv caches simple-index responses,
+      # so without --refresh-package every retry after a too-early first
+      # attempt replays the cached "no such version" miss instead of
+      # re-checking PyPI. (2) Index propagation occasionally exceeds the old
+      # 2-minute window (6x20s), failing the run and costing ~20 attended
+      # minutes to diagnose and rerun. Runner minutes are free; the loop
+      # exits on the first success, so the generous 15-minute ceiling costs
+      # nothing on a normal day.
       - name: Install published package from PyPI and boot it
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           echo "Verifying automox-mcp==${VERSION} installs from PyPI and boots..."
-          for i in $(seq 1 6); do
-            if uvx --from "automox-mcp==${VERSION}" automox-mcp --help > /dev/null 2>&1; then
+          for i in $(seq 1 30); do
+            if uvx --refresh-package automox-mcp --from "automox-mcp==${VERSION}" automox-mcp --help > /dev/null 2>&1; then
               echo "Published package installs and the entry point boots."
               exit 0
             fi
-            echo "  attempt ${i}/6: not installable yet (PyPI CDN propagation?), sleeping 20s..."
-            sleep 20
+            echo "  attempt ${i}/30: not installable yet (PyPI index propagation?), sleeping 30s..."
+            sleep 30
           done
-          echo "::error::Published automox-mcp==${VERSION} failed to install/boot from PyPI."
+          echo "::error::Published automox-mcp==${VERSION} failed to install/boot from PyPI after ~15 minutes."
           exit 1

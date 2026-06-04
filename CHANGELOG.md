@@ -5,6 +5,12 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **`verify-publish` no longer loses the race to PyPI index propagation (CI only).** The v2.0.3 run failed despite a healthy publish, for two compounding reasons: uv caches simple-index responses, so after a too-early first attempt every retry replayed the cached "no such version" miss instead of re-checking PyPI; and the retry window (6×20s ≈ 2 min) was shorter than occasional index-propagation lag. The install check now passes `--refresh-package automox-mcp` and retries for up to ~15 minutes (30×30s; job timeout raised 10→20 min). The loop still exits on the first success, so a normal release pays nothing — the ceiling only spends free runner minutes on slow days, instead of attended minutes diagnosing and rerunning a red release.
+
 ## [2.0.3] - 2026-06-04
 
 ### Changed

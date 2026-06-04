@@ -121,8 +121,9 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             '"field": "tag", "operator": "IN", "values": ["Nginx"]}`. '
             "Use `get_searchable_fields` for valid scope/field/operator combos "
             "and `device_search_typeahead` to discover values. The org is scoped "
-            "automatically. `limit` sets the page size. Requires an org-scoped "
-            "API key — a global/account key gets HTTP 403 on this endpoint."
+            "automatically. `limit` sets the page size. Use an org-scoped API "
+            "key — global/account keys are unreliable on this endpoint and "
+            "often return HTTP 403."
         ),
         annotations={
             "readOnlyHint": True,

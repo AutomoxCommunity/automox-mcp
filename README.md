@@ -39,9 +39,9 @@ Automox has **two API key types**, and the difference matters here:
 |---|---|---|
 | Scope | One organization — the zone it was created in | Every org in the account; inherits the key owner's role per org |
 | Created at | Zone **Settings > Secrets & Keys** | Account **Global Access Management > Keys** (Full Administrator) |
-| Tool coverage | **All tools** | All *except* the Advanced Device Search family — `advanced_device_search`, `device_search_typeahead`, saved-search create/read/update/delete, `list_searches_for_device`, `get_device_assignments` — which return `403` (the upstream Server Groups API only accepts org-scoped keys for those endpoints; verified live) |
+| Tool coverage | **All tools** (verified: works immediately on the search family) | **Unreliable on the Advanced Device Search family** — `advanced_device_search`, `device_search_typeahead`, saved-search create/read/update/delete, `list_searches_for_device`, `get_device_assignments` — observed returning `403` in most orgs even for full administrators, while working in others; the upstream authorization behavior is inconsistent and the mechanism is unconfirmed |
 
-> **Symptom of the wrong key type:** `403` on the search tools while reads work everywhere else — that's the key scope, not your permissions. API Key and Account UUID are always required. Org ID is recommended but optional — some tools that don't require org context will work without it.
+> **Symptom:** `403` on the search tools while reads work everywhere else usually means the key, not your permissions — switch to an org-scoped key for the target org. API Key and Account UUID are always required. Org ID is recommended but optional — some tools that don't require org context will work without it.
 
 ### 2. Create a `.env` file
 

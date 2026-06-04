@@ -92,15 +92,24 @@ The documented-surface build items from [#111](https://github.com/AutomoxCommuni
 
 ---
 
-## API key scope requirement — Advanced Device Search family
+## API key behavior — Advanced Device Search family (mechanism unconfirmed)
 
-The Server Groups API v2 search endpoints **only accept org-scoped API keys**; a global/account-scoped key gets a uniform `403` regardless of the caller's role (verified live 2026-06-04: global-admin account key → 403 on every org; org-scoped key → 200 with correct results on the same org). Affected tools:
+Account/global API keys behave **inconsistently** on the Server Groups API v2 search endpoints; org-scoped keys work reliably. Observed live (an earlier revision of this section claimed the endpoints flatly "only accept org-scoped keys" — that was an overclaim, falsified a day later by the same key working in one org):
+
+| Key | When | Org(s) | Result |
+|---|---|---|---|
+| Account key (full admin, freshly issued) | day 1 | every org it could see | `403`, uniform |
+| Org-scoped key (freshly issued) | day 2 | its org | `200` immediately, correct results |
+| Same account key, untouched | day 2 | the org where the org key had been used | `200` |
+| Same account key, untouched | day 2 | three other orgs | `403` |
+
+Not explained by: key type alone, key age/propagation alone, the owner's org membership (member of all orgs), or any visible per-org role difference. One candidate is lazy per-org provisioning in the search service triggered by a successful org-key access — unconfirmed; raised with the platform team. Affected tools:
 
 `advanced_device_search`, `device_search_typeahead`, `create_saved_search`, `update_saved_search`, `delete_saved_search`, `list_saved_searches`, `list_searches_for_device`, `get_device_assignments`
 
-Other `/server-groups-api/` endpoints (`get_searchable_fields` / metadata, `list_devices_for_policies`) **do** accept either key type — the restriction is endpoint-level, not family-wide. Classic v1 endpoints (`/servers`, `/policies`, …) accept either. The README setup instructions recommend an org-scoped key for this reason. A `403` on these tools is a key-scope symptom, not a permissions/role problem — re-issue the key at the org level.
+Other `/server-groups-api/` endpoints (`get_searchable_fields` / metadata, `list_devices_for_policies`) accepted the account key throughout — the inconsistency is endpoint-level, not family-wide. Classic v1 endpoints (`/servers`, `/policies`, …) accept either key type.
 
-(Automox's public docs don't state this restriction as of 2026-06-04 — the global-keys doc's permission-inheritance language suggests the opposite.)
+**Operational guidance (stands regardless of mechanism):** use an org-scoped key — the README setup instructions say so. A `403` on these tools while reads work elsewhere usually means the key, not the user's permissions.
 
 ---
 

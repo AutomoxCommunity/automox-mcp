@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **README now explains the two API key types, not just which to pick.** Added an org-scoped vs global/account key comparison (scope, where each is created, tool coverage) to the credentials section, a "wrong key type" symptom line (403 on the search family while reads work elsewhere = key scope, not permissions), and a key-type hint in `.env.example` — so a holder of a global key can recognize it and mint the right one instead of just being told "use org-scoped."
 - **Documented the Advanced Device Search key-scope requirement and `TAGS` search scope.** Verified live (2026-06-04): the Server Groups API v2 search endpoints (`advanced_device_search`, `device_search_typeahead`, saved-search CRUD, `list_searches_for_device`, `get_device_assignments`) return a uniform `403` for global/account-scoped API keys regardless of role, and work with org-scoped keys — while other endpoints in the same family (`get_searchable_fields`, `list_devices_for_policies`) accept either. The README previously claimed "both global and org-scoped API keys work"; it now recommends an org-scoped key and lists the affected tools. `docs/api-coverage.md` records the verified behavior. The `advanced_device_search` description also now shows that tag search uses scope `TAGS` (not `DEVICE`): `{"scope": "TAGS", "field": "tag", "operator": "IN", "values": [...]}` — confirmed live against a known tag census.
 
 ## [2.0.2] - 2026-06-03

@@ -11,12 +11,15 @@ from conftest import StubClient
 
 from automox_mcp.client import AutomoxClient
 from automox_mcp.workflows.devices import (
+    _build_compliance_summary,
+    _build_device_core,
     _calculate_days_since_check_in,
     _count_failed_policies,
     _extract_detail_facts,
     _extract_last_check_in,
     _format_device_display_name,
     _normalize_status,
+    _policy_entry_status,
     _sanitize_raw_device_payload,
     _summarize_device_common_fields,
     _summarize_policy_assignments,
@@ -416,6 +419,131 @@ def test_summarize_policy_status_custom_limit() -> None:
     result, total = _summarize_policy_status(entries, limit=3)
     assert len(result) == 3
     assert total == 5
+
+
+# ===========================================================================
+# _policy_entry_status — integer enum mapping (live GET /servers shape)
+# ===========================================================================
+
+
+def test_policy_entry_status_maps_integer_codes() -> None:
+    # Live policy_status entries carry the integer enum; verified against the
+    # spec and the status.policy_statuses[].compliant booleans (2026-06-04).
+    assert _policy_entry_status({"status": 0}) == "needs_remediation"
+    assert _policy_entry_status({"status": 1}) == "up_to_date"
+    assert _policy_entry_status({"status": 2}) == "pending"
+
+
+def test_policy_entry_status_zero_is_not_unknown() -> None:
+    # status 0 is falsy; the old truthiness chain fell through to the absent
+    # alternate keys and misreported needs_remediation devices as "unknown".
+    result, _ = _summarize_policy_status([{"policy_id": 1, "status": 0}])
+    assert result[0]["status"] == "needs_remediation"
+
+
+def test_policy_entry_status_unmapped_int_passes_through_as_string() -> None:
+    assert _policy_entry_status({"status": 7}) == "7"
+
+
+def test_policy_entry_status_bool_is_not_treated_as_int() -> None:
+    # bool is an int subclass; True must not be read as code 1.
+    assert _policy_entry_status({"status": True}) == "unknown"
+
+
+def test_policy_entry_status_string_falls_through_to_normalizer() -> None:
+    assert _policy_entry_status({"status": "success"}) == "success"
+    assert _policy_entry_status({"policy_status": "failed"}) == "failed"
+
+
+# ===========================================================================
+# _build_compliance_summary
+# ===========================================================================
+
+
+def test_build_compliance_summary_counts_and_failing_names() -> None:
+    device = {
+        "compliant": False,
+        "policy_status": [
+            {"policy_id": 1, "policy_name": "Monthly Patching", "status": 1},
+            {"policy_id": 2, "policy_name": "Third Party Patching", "status": 0},
+            {"policy_id": 3, "policy_name": "Disk Encryption Check", "status": 2},
+        ],
+    }
+    summary = _build_compliance_summary(device)
+    assert summary is not None
+    assert summary["device_compliant"] is False
+    assert summary["policy_status_counts"] == {
+        "up_to_date": 1,
+        "needs_remediation": 1,
+        "pending": 1,
+    }
+    assert summary["needs_remediation_policies"] == [
+        {"policy_id": 2, "policy_name": "Third Party Patching"}
+    ]
+    assert "needs_remediation_truncated" not in summary
+    assert "pending policies" in summary["note"]
+
+
+def test_build_compliance_summary_none_without_signal() -> None:
+    assert _build_compliance_summary({}) is None
+    assert _build_compliance_summary({"compliant": "yes"}) is None
+
+
+def test_build_compliance_summary_device_flag_only() -> None:
+    summary = _build_compliance_summary({"compliant": True})
+    assert summary is not None
+    assert summary["device_compliant"] is True
+    assert "policy_status_counts" not in summary
+
+
+def test_build_compliance_summary_truncates_failing_list() -> None:
+    device = {
+        "policy_status": [
+            {"policy_id": i, "policy_name": f"Policy {i}", "status": 0} for i in range(15)
+        ],
+    }
+    summary = _build_compliance_summary(device)
+    assert summary is not None
+    assert summary["policy_status_counts"] == {"needs_remediation": 15}
+    assert len(summary["needs_remediation_policies"]) == 12
+    assert summary["needs_remediation_truncated"] is True
+
+
+def test_build_compliance_summary_skips_non_mapping_entries() -> None:
+    # Nothing usable in the list and no device flag → no summary at all.
+    assert _build_compliance_summary({"policy_status": ["bogus", 3, None]}) is None
+
+
+# ===========================================================================
+# _build_device_core — uptime_minutes
+# ===========================================================================
+
+
+def _build_core(device_data: dict[str, Any]) -> dict[str, Any]:
+    return _build_device_core(
+        device_data,
+        device_id=1,
+        status_value=None,
+        ip_addresses_preview=None,
+        tags_preview=None,
+        policy_status_summary=[],
+    )
+
+
+def test_build_device_core_parses_uptime_minutes() -> None:
+    # Live payloads carry uptime as a numeric string of minutes.
+    core = _build_core({"uptime": "8077"})
+    assert "uptime" not in core
+    assert core["uptime_minutes"] == 8077
+
+
+def test_build_device_core_keeps_unparseable_uptime_verbatim() -> None:
+    core = _build_core({"uptime": "n/a"})
+    assert core["uptime_minutes"] == "n/a"
+
+
+def test_build_device_core_omits_missing_uptime() -> None:
+    assert "uptime_minutes" not in _build_core({})
 
 
 # ===========================================================================

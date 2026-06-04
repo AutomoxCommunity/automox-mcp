@@ -497,11 +497,29 @@ async def run_readonly_tools() -> None:
         # 9. device_detail
         if device_id:
             resp = await _safe_call(session, "device_detail", {"device_id": device_id})
-            record(
-                "device_detail",
-                resp is not None and resp.get("data") is not None,
-                f"id={device_id}",
-            )
+            ok = resp is not None and resp.get("data") is not None
+            note = f"id={device_id}"
+            if ok and resp is not None:
+                # Correctness, not just 200: per-policy statuses must be the
+                # translated vocabulary (raw "0"/"1"/"2" means the integer
+                # enum mapping regressed), and the compliance rollup must
+                # account for every policy_status entry.
+                core = resp["data"].get("core") or {}
+                statuses = {e.get("status") for e in core.get("policy_status") or []}
+                raw_codes = statuses & {"0", "1", "2"}
+                if raw_codes:
+                    ok = False
+                    note = f"raw status codes leaked: {sorted(raw_codes)}"
+                compliance = resp["data"].get("compliance") or {}
+                counts = compliance.get("policy_status_counts")
+                total = (resp.get("metadata") or {}).get("policy_status_total")
+                if ok and counts is not None and sum(counts.values()) != total:
+                    ok = False
+                    note = f"compliance counts {sum(counts.values())} != total {total}"
+                if ok and "uptime" in core:
+                    ok = False
+                    note = "unit-less `uptime` key present (expected uptime_minutes)"
+            record("device_detail", ok, note)
         else:
             record("device_detail", False, "skipped — no device_id")
 

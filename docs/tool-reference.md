@@ -34,7 +34,7 @@ Complete reference for all 133 tools, 6 workflow prompts, MCP resources, paramet
 ## Device Management (11 tools)
 
 - **`list_devices`** - Summarize device inventory and policy status across the organization. Returns each device's `uuid` (needed by policy windows tools). Includes unmanaged devices by default and supports `policy_status`/`managed` filters so you can zero in on, for example, non-compliant managed endpoints.
-- **`device_detail`** - Return curated device context (recent policy status, assignments, queued commands, key facts). Pass `include_raw_details=true` only when you explicitly need a sanitized slice of the raw Automox payload.
+- **`device_detail`** - Return curated device context (recent policy status, assignments, queued commands, key facts). Per-policy status codes are translated (`up_to_date` / `pending` / `needs_remediation`) and a `compliance` rollup names the policies needing remediation — only those make a device non-compliant. `uptime_minutes` is sampled at the device's last full scan, so it can lag the current boot session. Pass `include_raw_details=true` only when you explicitly need a sanitized slice of the raw Automox payload.
 - **`devices_needing_attention`** - Surface Automox devices flagged for immediate action.
 - **`search_devices`** - Search Automox devices by hostname, IP, tag, status, or severity of missing patches. Supports multi-severity filtering (e.g., `["critical", "high"]`).
 - **`device_health_metrics`** - Aggregate device health metrics for the organization. Supply `limit` to sample fewer devices (default 500) and `max_stale_devices` to cap the stale-device list for token-friendly responses.

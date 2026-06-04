@@ -2,13 +2,52 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
-from typing import Any
+import functools
+from collections.abc import Awaitable, Callable, Mapping, Sequence
+from typing import Any, ParamSpec, TypeVar
 
-from ..client import AutomoxClient
+from ..client import AutomoxAPIError, AutomoxClient
 from ..utils import resolve_org_uuid
 from ..utils.response import build_pagination_metadata, require_org_id
 from ..utils.response import extract_list as _extract_list
+
+P = ParamSpec("P")
+T = TypeVar("T")
+
+_KEY_SCOPE_HINT = (
+    "Hint: a 403 from the Advanced Device Search endpoints while other tools "
+    "work is typically the global/account-key signature — these endpoints only "
+    "accept org-scoped API keys (verified live; role does not matter). "
+    "Re-issue the key at the org level (zone Settings > Secrets & Keys; see "
+    "the README 'key types' section). This reflects the key's scope, not the "
+    "user's permissions."
+)
+
+
+def _with_key_scope_hint(func: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:
+    """Append the org-key requirement to 403s from the ADS search endpoints.
+
+    The upstream returns a bare 403 for global/account-scoped keys that is
+    indistinguishable from an RBAC denial; without this hint, callers (and
+    models) chase permissions instead of re-issuing the key at the org level.
+    Applied to the search/saved-search/assignments workflows — NOT to the
+    metadata endpoints (get_searchable_fields, get_search_scopes,
+    get_device_metadata_fields), which accept either key type, so a 403 there
+    means something else.
+    """
+
+    @functools.wraps(func)
+    async def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
+        try:
+            return await func(*args, **kwargs)
+        except AutomoxAPIError as exc:
+            if exc.status_code == 403:
+                raise AutomoxAPIError(
+                    f"{exc} — {_KEY_SCOPE_HINT}", exc.status_code, exc.payload
+                ) from exc
+            raise
+
+    return wrapper
 
 
 async def _resolve_org(client: AutomoxClient, org_id: int | None = None) -> str:
@@ -19,6 +58,7 @@ async def _resolve_org(client: AutomoxClient, org_id: int | None = None) -> str:
     )
 
 
+@_with_key_scope_hint
 async def list_saved_searches(
     client: AutomoxClient,
     *,
@@ -49,6 +89,7 @@ async def list_saved_searches(
     }
 
 
+@_with_key_scope_hint
 async def advanced_device_search(
     client: AutomoxClient,
     *,
@@ -133,6 +174,7 @@ async def advanced_device_search(
     }
 
 
+@_with_key_scope_hint
 async def device_search_typeahead(
     client: AutomoxClient,
     *,
@@ -208,6 +250,7 @@ async def get_device_metadata_fields(
     }
 
 
+@_with_key_scope_hint
 async def get_device_assignments(
     client: AutomoxClient,
     *,
@@ -290,6 +333,7 @@ async def get_device_assignments(
     }
 
 
+@_with_key_scope_hint
 async def get_device_by_uuid(
     client: AutomoxClient,
     *,
@@ -325,6 +369,7 @@ async def get_device_by_uuid(
 # ---------------------------------------------------------------------------
 
 
+@_with_key_scope_hint
 async def get_saved_search(
     client: AutomoxClient,
     *,
@@ -345,6 +390,7 @@ async def get_saved_search(
     }
 
 
+@_with_key_scope_hint
 async def create_saved_search(
     client: AutomoxClient,
     *,
@@ -383,6 +429,7 @@ async def create_saved_search(
     }
 
 
+@_with_key_scope_hint
 async def update_saved_search(
     client: AutomoxClient,
     *,
@@ -434,6 +481,7 @@ async def update_saved_search(
     }
 
 
+@_with_key_scope_hint
 async def delete_saved_search(
     client: AutomoxClient,
     *,
@@ -452,6 +500,7 @@ async def delete_saved_search(
     }
 
 
+@_with_key_scope_hint
 async def get_saved_search_results(
     client: AutomoxClient,
     *,
@@ -491,6 +540,7 @@ async def get_saved_search_results(
     }
 
 
+@_with_key_scope_hint
 async def get_cached_search_results(
     client: AutomoxClient,
     *,
@@ -535,6 +585,7 @@ async def get_cached_search_results(
     }
 
 
+@_with_key_scope_hint
 async def assign_policies_to_saved_search(
     client: AutomoxClient,
     *,
@@ -603,6 +654,7 @@ async def get_searchable_fields(client: AutomoxClient) -> dict[str, Any]:
     }
 
 
+@_with_key_scope_hint
 async def list_searches_for_device(
     client: AutomoxClient,
     *,
@@ -642,6 +694,7 @@ async def list_searches_for_device(
     }
 
 
+@_with_key_scope_hint
 async def run_saved_search(
     client: AutomoxClient,
     *,
@@ -707,6 +760,7 @@ async def run_saved_search(
     }
 
 
+@_with_key_scope_hint
 async def refresh_saved_search_cache(
     client: AutomoxClient,
     *,

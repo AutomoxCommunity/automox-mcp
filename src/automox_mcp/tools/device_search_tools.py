@@ -117,9 +117,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "`filters` list of AND/OR groups, each a list of conditions: "
             '`{"filters": [{"AND": [{"scope": "SOFTWARE", "field": '
             '"pkgDisplayName", "operator": "IN", "values": ["nginx"]}]}]}`. '
+            'Tag search uses scope TAGS (not DEVICE): `{"scope": "TAGS", '
+            '"field": "tag", "operator": "IN", "values": ["Nginx"]}`. '
             "Use `get_searchable_fields` for valid scope/field/operator combos "
             "and `device_search_typeahead` to discover values. The org is scoped "
-            "automatically. `limit` sets the page size."
+            "automatically. `limit` sets the page size. Requires an org-scoped "
+            "API key — a global/account key gets HTTP 403 on this endpoint."
         ),
         annotations={
             "readOnlyHint": True,

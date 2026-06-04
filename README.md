@@ -33,7 +33,7 @@ You need three values from the [Automox Console](https://console.automox.com):
 | **Account UUID** | Settings > Secrets & Keys (shown on the page) |
 | **Org ID** | The numeric ID in the URL when viewing your organization |
 
-> Both global and org-scoped API keys work. API Key and Account UUID are always required. Org ID is recommended but optional — some tools that don't require org context will work without it.
+> **Use an org-scoped API key.** Most tools accept either key type, but the Advanced Device Search family (`advanced_device_search`, `device_search_typeahead`, saved-search create/read/update/delete, `list_searches_for_device`, `get_device_assignments`) returns `403` with a global/account-scoped key — the upstream Server Groups API only accepts org-scoped keys for those endpoints (verified live). API Key and Account UUID are always required. Org ID is recommended but optional — some tools that don't require org context will work without it.
 
 ### 2. Create a `.env` file
 

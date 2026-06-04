@@ -92,6 +92,18 @@ The documented-surface build items from [#111](https://github.com/AutomoxCommuni
 
 ---
 
+## API key scope requirement — Advanced Device Search family
+
+The Server Groups API v2 search endpoints **only accept org-scoped API keys**; a global/account-scoped key gets a uniform `403` regardless of the caller's role (verified live 2026-06-04: global-admin account key → 403 on every org; org-scoped key → 200 with correct results on the same org). Affected tools:
+
+`advanced_device_search`, `device_search_typeahead`, `create_saved_search`, `update_saved_search`, `delete_saved_search`, `list_saved_searches`, `list_searches_for_device`, `get_device_assignments`
+
+Other `/server-groups-api/` endpoints (`get_searchable_fields` / metadata, `list_devices_for_policies`) **do** accept either key type — the restriction is endpoint-level, not family-wide. Classic v1 endpoints (`/servers`, `/policies`, …) accept either. The README setup instructions recommend an org-scoped key for this reason. A `403` on these tools is a key-scope symptom, not a permissions/role problem — re-issue the key at the org level.
+
+(Automox's public docs don't state this restriction as of 2026-06-04 — the global-keys doc's permission-inheritance language suggests the opposite.)
+
+---
+
 ## Webhooks API coverage
 
 The Webhooks API (`Automox Webhooks API` v1.0.0) is published as a **separate** OpenAPI document from the Console API bundle. It defines 9 paths; the server now wraps **all of them**:

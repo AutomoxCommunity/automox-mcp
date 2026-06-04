@@ -5,6 +5,12 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **Documented the Advanced Device Search key-scope requirement and `TAGS` search scope.** Verified live (2026-06-04): the Server Groups API v2 search endpoints (`advanced_device_search`, `device_search_typeahead`, saved-search CRUD, `list_searches_for_device`, `get_device_assignments`) return a uniform `403` for global/account-scoped API keys regardless of role, and work with org-scoped keys — while other endpoints in the same family (`get_searchable_fields`, `list_devices_for_policies`) accept either. The README previously claimed "both global and org-scoped API keys work"; it now recommends an org-scoped key and lists the affected tools. `docs/api-coverage.md` records the verified behavior. The `advanced_device_search` description also now shows that tag search uses scope `TAGS` (not `DEVICE`): `{"scope": "TAGS", "field": "tag", "operator": "IN", "values": [...]}` — confirmed live against a known tag census.
+
 ## [2.0.2] - 2026-06-03
 
 ### Security

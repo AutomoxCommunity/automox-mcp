@@ -684,3 +684,51 @@ async def test_refresh_saved_search_cache_posts_and_flags_refreshed() -> None:
     method, called_path, _ = client.calls[0]
     assert method == "POST"
     assert called_path.endswith("/refresh")
+
+
+# ---------------------------------------------------------------------------
+# 403 key-scope hint (ADS endpoints reject global/account keys with a bare 403
+# indistinguishable from an RBAC denial — verified live 2026-06-04)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_key_scope_hint_decorator_enriches_403() -> None:
+    from automox_mcp.client import AutomoxAPIError
+    from automox_mcp.workflows.device_search import _with_key_scope_hint
+
+    @_with_key_scope_hint
+    async def boom() -> None:
+        raise AutomoxAPIError("automox API error", 403, {"detail": "denied"})
+
+    with pytest.raises(AutomoxAPIError) as excinfo:
+        await boom()
+    assert excinfo.value.status_code == 403
+    assert "org-scoped" in str(excinfo.value)
+    assert excinfo.value.payload == {"detail": "denied"}  # payload preserved
+
+
+@pytest.mark.asyncio
+async def test_key_scope_hint_decorator_leaves_other_errors_alone() -> None:
+    from automox_mcp.client import AutomoxAPIError
+    from automox_mcp.workflows.device_search import _with_key_scope_hint
+
+    @_with_key_scope_hint
+    async def boom() -> None:
+        raise AutomoxAPIError("server error", 500)
+
+    with pytest.raises(AutomoxAPIError) as excinfo:
+        await boom()
+    assert excinfo.value.status_code == 500
+    assert "org-scoped" not in str(excinfo.value)
+
+
+@pytest.mark.asyncio
+async def test_key_scope_hint_decorator_passes_success_through() -> None:
+    from automox_mcp.workflows.device_search import _with_key_scope_hint
+
+    @_with_key_scope_hint
+    async def fine() -> str:
+        return "ok"
+
+    assert await fine() == "ok"

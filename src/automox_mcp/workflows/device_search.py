@@ -16,24 +16,27 @@ T = TypeVar("T")
 
 _KEY_SCOPE_HINT = (
     "Hint: a 403 from the Advanced Device Search endpoints while other tools "
-    "work is typically the global/account-key signature — these endpoints only "
-    "accept org-scoped API keys (verified live; role does not matter). "
-    "Re-issue the key at the org level (zone Settings > Secrets & Keys; see "
-    "the README 'key types' section). This reflects the key's scope, not the "
-    "user's permissions."
+    "work usually means the API key, not the user's permissions. Global/"
+    "account-scoped keys behave inconsistently on these endpoints (observed "
+    "403ing in most orgs even for full administrators, while working in "
+    "others — upstream mechanism unconfirmed); org-scoped keys work reliably. "
+    "Try an org-scoped API key for the target org (zone Settings > Secrets & "
+    "Keys; see the README 'key types' section)."
 )
 
 
 def _with_key_scope_hint(func: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:
-    """Append the org-key requirement to 403s from the ADS search endpoints.
+    """Append key-scope guidance to 403s from the ADS search endpoints.
 
-    The upstream returns a bare 403 for global/account-scoped keys that is
-    indistinguishable from an RBAC denial; without this hint, callers (and
-    models) chase permissions instead of re-issuing the key at the org level.
-    Applied to the search/saved-search/assignments workflows — NOT to the
-    metadata endpoints (get_searchable_fields, get_search_scopes,
-    get_device_metadata_fields), which accept either key type, so a 403 there
-    means something else.
+    The upstream returns a bare 403 that is indistinguishable from an RBAC
+    denial; without this hint, callers (and models) chase permissions instead
+    of the usual fix (an org-scoped key for the target org). Account/global
+    keys behave inconsistently on these endpoints — see docs/api-coverage.md
+    for the observed matrix; mechanism unconfirmed upstream. Applied to the
+    search/saved-search/assignments workflows — NOT to the metadata endpoints
+    (get_searchable_fields, get_search_scopes, get_device_metadata_fields),
+    which accepted either key type throughout, so a 403 there means
+    something else.
     """
 
     @functools.wraps(func)

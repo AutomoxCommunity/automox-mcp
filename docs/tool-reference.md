@@ -50,7 +50,7 @@ Complete reference for all 133 tools, 6 workflow prompts, MCP resources, paramet
 Uses the Server Groups API v2 for structured device queries, saved searches, and UUID-based lookups. Read-only tools are always registered; write tools (create/update/delete/assign) are gated by `read_only=False`.
 
 - **`list_saved_searches`** - List saved device searches with names, queries, and metadata.
-- **`advanced_device_search`** - Execute an advanced device search using structured query language. Enables complex queries like "find all Windows devices not seen in 30 days" using field-based filtering. Tag search uses scope `TAGS` (field `tag`). Requires an org-scoped API key — global/account keys get HTTP 403 (applies to the whole search family; see `docs/api-coverage.md`).
+- **`advanced_device_search`** - Execute an advanced device search using structured query language. Enables complex queries like "find all Windows devices not seen in 30 days" using field-based filtering. Tag search uses scope `TAGS` (field `tag`). Use an org-scoped API key — global/account keys are unreliable on the search family and often return HTTP 403 (see `docs/api-coverage.md`).
 - **`device_search_typeahead`** - Get typeahead suggestions for device search fields. Useful for discovering valid values when building queries.
 - **`get_device_metadata_fields`** - Get available fields for device queries. Returns field names and types supported by the advanced search API.
 - **`get_device_assignments`** - Get device-to-policy and device-to-group assignments.

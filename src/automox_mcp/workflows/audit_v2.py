@@ -8,12 +8,52 @@ tool with direct event type filtering and simpler output.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
 from ..client import AutomoxClient
 from ..utils import resolve_org_uuid
 from ..utils.response import build_pagination_metadata
+
+# OCSF enum labels from the Console API spec (components/schemas
+# `severity_id` / `status_id` x-enumDescriptions), live-confirmed 2026-06-05.
+# NOTE: these integers do NOT mean the same thing as the /servers
+# policy_status enum (where 1 = up_to_date and 2 = pending) — never share a
+# mapping between the two.
+_SEVERITY_ID_LABELS = {
+    0: "unknown",
+    1: "informational",
+    2: "low",
+    3: "medium",
+    4: "high",
+    5: "critical",
+    6: "fatal",
+    99: "other",
+}
+_STATUS_ID_LABELS = {
+    0: "unknown",
+    1: "success",
+    2: "failure",
+    99: "other",
+}
+
+
+def _ocsf_time_to_iso(value: Any) -> Any:
+    """Convert the OCSF event ``time`` to an ISO 8601 UTC string.
+
+    The Automox audit service emits ``time`` as epoch SECONDS (float) —
+    verified live 2026-06-05 — even though the OCSF standard specifies epoch
+    milliseconds. Values too large to be seconds (past year ~5138) are
+    treated as milliseconds defensively. Non-numeric values pass through.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return value
+    seconds = value / 1000 if value > 1e11 else value
+    try:
+        return datetime.fromtimestamp(seconds, tz=UTC).isoformat().replace("+00:00", "Z")
+    except (OverflowError, OSError, ValueError):
+        return value
 
 
 def _summarize_ocsf_event(event: Mapping[str, Any]) -> dict[str, Any]:
@@ -39,6 +79,26 @@ def _summarize_ocsf_event(event: Mapping[str, Any]) -> dict[str, Any]:
         val = event.get(key)
         if val is not None:
             entry[key] = val
+
+    if "time" in entry:
+        entry["time"] = _ocsf_time_to_iso(entry["time"])
+
+    # Make the integer enums self-describing when the upstream omits the
+    # string sibling — otherwise the model has to guess the OCSF scale.
+    severity_id = entry.get("severity_id")
+    if (
+        "severity" not in entry
+        and isinstance(severity_id, int)
+        and not isinstance(severity_id, bool)
+    ):
+        label = _SEVERITY_ID_LABELS.get(severity_id)
+        if label:
+            entry["severity"] = label
+    status_id = entry.get("status_id")
+    if "status" not in entry and isinstance(status_id, int) and not isinstance(status_id, bool):
+        label = _STATUS_ID_LABELS.get(status_id)
+        if label:
+            entry["status"] = label
 
     # Extract actor info
     actor = event.get("actor")

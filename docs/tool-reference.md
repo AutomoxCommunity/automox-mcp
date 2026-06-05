@@ -193,7 +193,7 @@ Manage vulnerability remediation workflows via the Vuln Sync API. Supports CSV-b
 ## Audit Trail (2 tools)
 
 - **`audit_trail_user_activity`** - Retrieve Automox audit trail events performed by a specific user on a given date, with optional pagination cursor support. Set `include_raw_events=true` to include sanitized event payloads when deeper investigation is required. Pass either the full email address or provide `actor_name`/partial email hints and the tool will resolve the matching Automox user automatically.
-- **`audit_events_ocsf`** - Query OCSF-formatted audit events from the Audit Service v2. Supports filtering by date, event category (authentication, account_change, entity_management, user_access, web_resource_activity), and event type name. Uses cursor-based pagination for large result sets.
+- **`audit_events_ocsf`** - Query OCSF-formatted audit events from the Audit Service v2. Supports filtering by date, event category (authentication, account_change, entity_management, user_access, web_resource_activity), and event type name. Uses cursor-based pagination for large result sets. Event `time` is converted to an ISO 8601 UTC string (the upstream sends epoch seconds), and `severity`/`status` labels are filled from the OCSF integer enums when the upstream omits the strings.
 
 ## Policy Windows (9 tools)
 

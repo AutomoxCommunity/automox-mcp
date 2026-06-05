@@ -304,12 +304,12 @@ async def test_history_detail_returns_policy_with_runs() -> None:
     history and status." It now fetches /policy-runs/{uuid} concurrently
     and merges runs + banner_stats into the response."""
     # policy_success_rate is a PERCENT (0–100), not a fraction — live 2026-06-05
-    # returned 16.49 (= 16.49%) alongside count companions.
+    # returned 0.0 / 60.0 / 100.0 alongside count companions.
     runs_payload = {
         "data": {
             "runs": _POLICY_RUNS,
             "banner_stats": {
-                "policy_success_rate": 16.49,
+                "policy_success_rate": 60.0,
                 "total_policies_applied": 57,
                 "total_successful_devices": 55,
             },
@@ -333,8 +333,8 @@ async def test_history_detail_returns_policy_with_runs() -> None:
     assert result["data"]["total_runs_returned"] == 2
     assert len(result["data"]["recent_runs"]) == 2
     assert result["data"]["recent_runs"][0]["policy_uuid"] == "pol-001"
-    assert result["data"]["banner_stats"]["policy_success_rate"] == 16.49
-    # The percent-vs-fraction legend is attached so the model reads 16.49 right.
+    assert result["data"]["banner_stats"]["policy_success_rate"] == 60.0
+    # The percent-vs-fraction legend is attached so the model reads 60.0 right.
     note = result["metadata"]["field_notes"]["banner_stats.policy_success_rate"]
     assert "Percentage" in note and "NOT a 0–1 fraction" in note
 

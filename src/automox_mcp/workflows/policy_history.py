@@ -14,13 +14,15 @@ from ..utils.response import extract_list as _extract_list
 
 # Legend for the `banner_stats` block the policy-report-api returns alongside
 # a policy's runs. `policy_success_rate` is a PERCENTAGE (0–100), not a 0–1
-# fraction — live-verified 2026-06-05 (e.g. 16.49 = 16.49%). The two companion
+# fraction — live-verified 2026-06-05 (observed values 0.0 / 60.0 / 100.0,
+# e.g. 60.0 = 60%). The two companion
 # fields are plain counts. Surfaced in metadata.field_notes so a model does not
 # misread the value as a count or a fraction.
 _BANNER_STATS_FIELD_NOTES: dict[str, str] = {
     "banner_stats.policy_success_rate": (
         "Percentage in the 0–100 range, NOT a 0–1 fraction (live-verified "
-        "2026-06-05; e.g. 16.49 means 16.49%). Do not multiply by 100."
+        "2026-06-05; observed values 0.0 / 60.0 / 100.0, i.e. 60.0 means 60%). "
+        "Do not multiply by 100."
     ),
     "banner_stats.total_policies_applied": (
         "Count of policy applications in the window (an integer count, not a rate)."

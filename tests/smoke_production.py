@@ -875,9 +875,43 @@ async def run_readonly_tools() -> None:
 
         log.info(f"\n{BOLD}Phase 3: Audit v2 (OCSF){RESET}")
 
-        # 44. audit_events_ocsf
-        resp = await _safe_call(session, "audit_events_ocsf", {"date": today, "limit": 5})
-        record("audit_events_ocsf", resp is not None, _count_or_err(resp))
+        # 44. audit_events_ocsf — correctness, not just 200. The upstream has no
+        # category_name field, so the category filter narrows on the type_name
+        # prefix. Assert: (a) a known category token sets matched=true and never
+        # widens the result, and (b) an unmappable token does NOT zero the result
+        # (it leaves it unfiltered, matched=false) — that was the silent-zero bug.
+        resp_all = await _safe_call(session, "audit_events_ocsf", {"date": today, "limit": 50})
+        total_all = (resp_all or {}).get("data", {}).get("total_events")
+        resp_cat = await _safe_call(
+            session,
+            "audit_events_ocsf",
+            {"date": today, "limit": 50, "category_name": "web_resource_activity"},
+        )
+        resp_bogus = await _safe_call(
+            session,
+            "audit_events_ocsf",
+            {"date": today, "limit": 50, "category_name": "__no_such_category__"},
+        )
+        cat_md = (resp_cat or {}).get("metadata", {}).get("applied_filters", {})
+        bogus_data = (resp_bogus or {}).get("data", {})
+        bogus_md = (resp_bogus or {}).get("metadata", {}).get("applied_filters", {})
+        ocsf_ok = (
+            resp_all is not None
+            and resp_cat is not None
+            and resp_bogus is not None
+            and isinstance(total_all, int)
+            and cat_md.get("category_name_matched") is True
+            and (resp_cat or {}).get("data", {}).get("total_events", 0) <= total_all
+            # unknown token must not be mistaken for "no activity"
+            and bogus_md.get("category_name_matched") is False
+            and bogus_data.get("total_events") == total_all
+        )
+        record(
+            "audit_events_ocsf",
+            ocsf_ok,
+            f"unfiltered={total_all} cat_matched={cat_md.get('category_name_matched')} "
+            f"bogus_matched={bogus_md.get('category_name_matched')}",
+        )
 
         log.info(f"\n{BOLD}Phase 3: Advanced Device Search{RESET}")
 

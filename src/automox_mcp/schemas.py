@@ -1057,7 +1057,16 @@ class PolicyRunDetailV2Params(OrgIdRequiredMixin, ForbidExtraModel):
 
 class AuditEventsOcsfParams(OrgIdRequiredMixin, ForbidExtraModel):
     date: str = Field(description="Date to query (YYYY-MM-DD)", pattern=r"^\d{4}-\d{2}-\d{2}$")
-    category_name: str | None = Field(None, description="OCSF event category name", max_length=200)
+    category_name: str | None = Field(
+        None,
+        description=(
+            "OCSF event category; matched client-side against the event type_name "
+            "prefix (the upstream carries no category_name field). Known tokens: "
+            "authentication, entity_management, web_resource_activity (live-verified), "
+            "account_change, user_access (spec-derived, unverified live)."
+        ),
+        max_length=200,
+    )
     type_name: str | None = Field(None, description="OCSF event type name", max_length=200)
     cursor: str | None = Field(None, description="Pagination cursor", max_length=2000)
     limit: int | None = Field(None, ge=1, le=500, description="Maximum events to return")

@@ -259,7 +259,17 @@ async def get_user(
 
     return {
         "data": detail,
-        "metadata": {"deprecated_endpoint": False},
+        "metadata": {
+            "deprecated_endpoint": False,
+            "field_notes": {
+                "orgs[].plan": (
+                    "Per-org billing-plan slug (per spec: basic/manage/tier3 — "
+                    "spec-only, unverified live; field absent on some tenants). "
+                    "Distinct vocabulary from list_organizations Organization.tier; "
+                    "do not reconcile or rank them."
+                )
+            },
+        },
     }
 
 
@@ -307,7 +317,19 @@ async def get_account_user(
 
     return {
         "data": detail,
-        "metadata": {"deprecated_endpoint": False, "account_id": str(account_id)},
+        "metadata": {
+            "deprecated_endpoint": False,
+            "account_id": str(account_id),
+            "field_notes": {
+                "two_factor_authentication": (
+                    "A string value (e.g. 'email'/'google' per spec) means 2FA of that "
+                    "type is configured. null or absent is AMBIGUOUS: per spec null "
+                    "means 2FA disabled, but this was not live-verified and the field "
+                    "is non-required — null/absent may mean disabled OR not-reported. "
+                    "Do not assert 2FA is enabled or disabled from a null/missing value."
+                )
+            },
+        },
     }
 
 

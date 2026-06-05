@@ -252,6 +252,18 @@ async def test_describe_device_trims_large_payload(device_payload: dict[str, Any
     assert "software_preview" in field_notes
     assert "pending_commands" in field_notes
 
+    # N2: a reconciling note for the legacy core.status string points the model
+    # at the authoritative compliant boolean / rollup.
+    assert "core.status" in field_notes
+    assert "compliance.device_compliant" in field_notes["core.status"]
+
+    # N10: the status_breakdown note explains it is computed from a different
+    # source array (server_policies[]) than compliance.policy_status_counts
+    # (policy_status[]), so the two per-policy breakdowns can differ.
+    sb_note = field_notes["policy_assignments.status_breakdown"]
+    assert "server_policies[]" in sb_note
+    assert "policy_status[]" in sb_note
+
     compliance = result["data"]["compliance"]
     assert compliance["device_compliant"] is False
     assert compliance["policy_status_counts"] == {

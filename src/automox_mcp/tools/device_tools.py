@@ -139,11 +139,14 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         name="search_devices",
         description=(
             "Search Automox devices by hostname (including custom name), IP, tag, severity of "
-            "missing patches, or patch status (only 'missing' is supported). When a severity "
-            "filter is set, every returned device has at least one missing patch at that "
-            "severity (the requested values are echoed in metadata.filters.severity). Per-device "
-            "`pending_patches` is the device's total outstanding-patch count and is NOT scoped to "
-            "the severity filter, so do not read it as the count matching the requested severity."
+            "missing patches, or patch status (only 'missing' is supported). The severity "
+            "filter is passed upstream to scope the result set (the requested values are echoed "
+            "in metadata.filters.severity); it narrows the candidate set but does NOT guarantee "
+            "every returned device currently has an outstanding patch at that severity (live, "
+            "~41% of severity=critical results report zero outstanding patches — likely already "
+            "remediated or reassessed since the index was built). Per-device `pending_patches` "
+            "is the device's total outstanding-patch count and is NOT scoped to the severity "
+            "filter, so do not read it as the count matching the requested severity."
         ),
         annotations={
             "readOnlyHint": True,

@@ -1243,6 +1243,36 @@ async def test_summarize_device_health_policy_execution_breakdown() -> None:
 
 
 @pytest.mark.asyncio
+async def test_summarize_device_health_policy_execution_breakdown_diverges_note() -> None:
+    # N2 (live 2026-06-05): the legacy device-level status string can read
+    # "non-compliant" on a device whose authoritative `compliant` boolean is
+    # true (it only has pending work). policy_execution_breakdown tallies the
+    # legacy string, so it diverges from compliance_breakdown — the field_note
+    # must warn the model to use compliance_breakdown for compliance.
+    devices = [
+        _make_device(1, policy_status="non-compliant", compliant=True, pending=True),
+        _make_device(2, policy_status="non-compliant", compliant=False, pending=False),
+    ]
+    client = StubClient(get_responses={"/servers": [devices]})
+    reference_time = datetime(2024, 5, 11, 12, 0, 0, tzinfo=UTC)
+
+    result = await summarize_device_health(
+        cast(AutomoxClient, client),
+        org_id=42,
+        current_time=reference_time,
+    )
+
+    data = result["data"]
+    # Legacy string axis counts both as non-compliant...
+    assert data["policy_execution_breakdown"].get("non-compliant") == 2
+    # ...while the authoritative axis counts only one.
+    assert data["compliance_breakdown"] == {"compliant": 1, "non_compliant": 1}
+    note = result["metadata"]["field_notes"]["policy_execution_breakdown"]
+    assert "compliance_breakdown" in note
+    assert "LEGACY" in note
+
+
+@pytest.mark.asyncio
 async def test_summarize_device_health_excludes_unmanaged_by_default() -> None:
     devices = [
         _make_device(1, managed=True),
@@ -1769,6 +1799,10 @@ async def test_list_device_inventory_metadata() -> None:
     assert meta["requested_limit"] == 50
     assert meta["include_unmanaged"] is True
     assert meta["deprecated_endpoint"] is False
+    # N2: a field_note warns that devices[].policy_status is the legacy,
+    # non-authoritative string and points the model at the compliance rollup.
+    note = meta["field_notes"]["devices[].policy_status"]
+    assert "device_detail" in note or "compliance" in note
 
 
 @pytest.mark.asyncio

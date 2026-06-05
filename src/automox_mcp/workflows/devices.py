@@ -741,6 +741,21 @@ async def list_device_inventory(
             "policy_status": policy_status_filter,
             "managed": managed,
         },
+        "field_notes": {
+            "devices[].policy_status": (
+                "Legacy device-level status string derived from the raw `status` "
+                "block (e.g. 'non-compliant'/'compliant'). It is NOT the "
+                "authoritative compliance signal and can contradict it: live "
+                "(2026-06-05) a device with compliant=true and pending policies "
+                "still reports policy_status='non-compliant'. For a definitive "
+                "compliant/non-compliant answer use device_detail "
+                "(compliance.device_compliant) or device_health_metrics "
+                "(compliance_breakdown), which apply the #149/#155 rule "
+                "(non-compliant only when a policy needs remediation). The "
+                "policy_status filter on this tool matches the same legacy "
+                "string, not the authoritative boolean."
+            ),
+        },
     }
 
     return {
@@ -1055,12 +1070,29 @@ async def describe_device(
         "pending_commands_count": len(queue_preview),
         "device_facts_available": detail_facts is not None,
         "field_notes": {
+            "core.status": (
+                "Legacy device-level status string from the raw `status` block "
+                "(e.g. 'non-compliant'). It is NOT authoritative for compliance "
+                "and can contradict the rollup: live (2026-06-05) a device with "
+                "compliant=true and 13 pending policies still reports "
+                "core.status='non-compliant'. To answer whether the device is "
+                "compliant, read compliance.device_compliant (the authoritative "
+                "boolean, #149/#155 rule: non-compliant only when a policy needs "
+                "remediation), not this string."
+            ),
             "policy_assignments.status_breakdown": (
                 "Per-policy state decoded from the integer policy-status enum "
                 "(0=needs_remediation, 1=up_to_date, 2=pending), live-verified "
                 "2026-06-05. For the device-level compliance rule, see the "
                 "compliance rollup (a device is non-compliant only when a "
-                "policy is in needs_remediation)."
+                "policy is in needs_remediation). NOTE: this breakdown is "
+                "computed from the `server_policies[]` array, while "
+                "compliance.policy_status_counts is computed from the "
+                "`policy_status[]` array — two different upstream source lists. "
+                "Their totals can differ by a policy or two (live 2026-06-05: "
+                "30 here vs 31 in the rollup); neither is wrong, they just count "
+                "different arrays. Prefer compliance.* for compliance questions "
+                "and this breakdown for per-assignment detail."
             ),
             "policy_assignments.policies[].server_group_ids": (
                 "Integer Automox group IDs the policy is scoped to (live verified list of ints)."
@@ -1444,6 +1476,21 @@ async def summarize_device_health(
             "max_stale_devices": stale_limit,
             "stale_device_count": len(stale_devices),
             "stale_check_in_threshold_days": _STALE_CHECK_IN_THRESHOLD_DAYS,
+            "field_notes": {
+                "policy_execution_breakdown": (
+                    "Counts of the LEGACY device-level policy_status string "
+                    "(e.g. 'non-compliant'/'compliant'), tallied from the raw "
+                    "`status` block. This is NOT the authoritative compliance "
+                    "axis and will diverge from compliance_breakdown: live "
+                    "(2026-06-05) this reported non-compliant=175 while "
+                    "compliance_breakdown (the authoritative compliant boolean, "
+                    "#149/#155 rule) reported non_compliant=129 over the same "
+                    "fleet, because many compliant=true devices carry a stale "
+                    "'non-compliant' string when they only have pending work. "
+                    "For fleet compliance use compliance_breakdown; treat "
+                    "policy_execution_breakdown as an execution-state view only."
+                ),
+            },
         }
     )
     if stale_limit is not None and len(stale_devices) > stale_limit:

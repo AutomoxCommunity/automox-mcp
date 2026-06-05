@@ -15,6 +15,23 @@ from .devices import enrich_raw_device_payload
 P = ParamSpec("P")
 T = TypeVar("T")
 
+# Legend for the ADS/saved-search device DTO field `outstanding_patch_severity`.
+# Live-verified 2026-06-05 (per the re-audit, N5): the field distinguishes the
+# string 'none' (device assessed, no outstanding patches found — clean) from
+# JSON null / an absent key (device NOT yet assessed). A model must not read
+# 'none' as "unknown" nor null as "clean": they are opposite states. Observed
+# live distribution over 100 devices: 'none' on the large majority (assessed
+# clean), plus 'critical'/'high' on patched-behind devices, and null/absent on
+# a handful of unassessed devices.
+_OUTSTANDING_PATCH_SEVERITY_NOTE = (
+    "devices[].outstanding_patch_severity: the string 'none' means the device "
+    "was assessed and has NO outstanding patches (clean); JSON null or an "
+    "absent key means the device has NOT been assessed (unknown), NOT that it "
+    "is clean. Non-null/non-'none' values ('critical'/'high'/... observed live "
+    "2026-06-05) are the highest severity among the device's outstanding "
+    "patches. Do not conflate 'none' (assessed-clean) with null (unassessed)."
+)
+
 _KEY_SCOPE_HINT = (
     "Hint: a 403 from the Advanced Device Search endpoints while other tools "
     "work usually means the API key, not the user's permissions. Global/"
@@ -165,7 +182,10 @@ async def advanced_device_search(
         if isinstance(response, Mapping):
             total = response.get("total") or response.get("totalCount")
 
-    metadata: dict[str, Any] = {"deprecated_endpoint": False}
+    metadata: dict[str, Any] = {
+        "deprecated_endpoint": False,
+        "field_notes": {"outstanding_patch_severity": _OUTSTANDING_PATCH_SEVERITY_NOTE},
+    }
     if pagination:
         metadata["pagination"] = pagination
 
@@ -543,7 +563,10 @@ async def get_saved_search_results(
             "total_devices": total if total is not None else len(devices),
             "devices": devices,
         },
-        "metadata": {"deprecated_endpoint": False},
+        "metadata": {
+            "deprecated_endpoint": False,
+            "field_notes": {"outstanding_patch_severity": _OUTSTANDING_PATCH_SEVERITY_NOTE},
+        },
     }
 
 
@@ -588,7 +611,10 @@ async def get_cached_search_results(
             "total_devices": total if total is not None else len(devices),
             "devices": devices,
         },
-        "metadata": {"deprecated_endpoint": False},
+        "metadata": {
+            "deprecated_endpoint": False,
+            "field_notes": {"outstanding_patch_severity": _OUTSTANDING_PATCH_SEVERITY_NOTE},
+        },
     }
 
 
@@ -753,7 +779,10 @@ async def run_saved_search(
     else:
         devices = _extract_list(response)
 
-    metadata: dict[str, Any] = {"deprecated_endpoint": False}
+    metadata: dict[str, Any] = {
+        "deprecated_endpoint": False,
+        "field_notes": {"outstanding_patch_severity": _OUTSTANDING_PATCH_SEVERITY_NOTE},
+    }
     if pagination:
         metadata["pagination"] = pagination
 

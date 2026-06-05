@@ -575,7 +575,9 @@ _DEVICE_DETAIL_RESPONSE: dict[str, Any] = {
                 {"id": 302, "name": "Custom Compliance"},
             ],
         },
-        "pending_commands": [{"command": "scan", "status": "queued"}],
+        "pending_commands": [
+            {"command_type": "Reboot", "scheduled_time": "2026-06-05T04:09:06+0000"}
+        ],
         "device_facts": {"os_version": "10.0.19045"},
     },
     "metadata": {},

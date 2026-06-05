@@ -84,7 +84,13 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         name="splashtop_device_status",
         description=(
             "List Splashtop installation and registration status for a device. "
-            "Returns install_time, registration_status, and any install error."
+            "Returns installation_status, registration_status, install_time, and "
+            "any install error. Per the API spec (not live-verified by this "
+            "server): installation_status=true means the client install "
+            "completed (install_time is set); registration_status=true means the "
+            "device has registered with Splashtop (a device identifier exists). "
+            "These are independent — a device can be installed but not yet "
+            "registered, so check both before assuming remote control is usable."
         ),
         annotations={
             "readOnlyHint": True,
@@ -108,8 +114,14 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     @server.tool(
         name="splashtop_session_status",
         description=(
-            "List active Splashtop remote-control sessions for a device. "
-            "Returns can_start_new_session, current_sessions, and max_sessions."
+            "List active Splashtop session capacity for a device. Returns "
+            "can_start_new_session, current_sessions, and max_sessions. "
+            "can_start_new_session reflects capacity only — per the spec "
+            "examples it is true exactly when current_sessions < max_sessions. "
+            "It is independent of attended-access consent: when attended access "
+            "is enabled (see splashtop_get_attended_access) the end user must "
+            "still approve before a session starts, so capacity alone is not "
+            "sufficient to conclude a session can begin."
         ),
         annotations={
             "readOnlyHint": True,

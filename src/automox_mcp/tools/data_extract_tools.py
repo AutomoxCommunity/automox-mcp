@@ -36,8 +36,10 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     @server.tool(
         name="list_data_extracts",
         description=(
-            "List available data extracts for the Automox organization. "
-            "Returns extract names, statuses, and download information."
+            "List data extract jobs for the Automox organization. Returns each "
+            "job's id, type (e.g. patch-history | api-activity), status, the "
+            "is_completed readiness boolean, and whether a download link is "
+            "available (has_download_url)."
         ),
         annotations={
             "readOnlyHint": True,
@@ -59,7 +61,14 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
 
     @server.tool(
         name="get_data_extract",
-        description=("Get details and download information for a specific data extract."),
+        description=(
+            "Get details for a data extract job. Returns status (per spec enum: "
+            "queued | running | complete | failed | canceled | expired) and the "
+            "is_completed boolean (use this for readiness). download_expires_at "
+            "is the link-expiry timestamp; has_download_url=true means the CSV "
+            "is currently downloadable. The presigned download URL itself is not "
+            "returned to the model — retrieve it from the Automox console."
+        ),
         annotations={
             "readOnlyHint": True,
             "destructiveHint": False,

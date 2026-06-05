@@ -31,6 +31,23 @@ def _summary_or_raw(response: Any) -> dict[str, Any]:
     return dict(response) if isinstance(response, Mapping) else {"raw": response}
 
 
+# Legend for the device-status booleans. Attributed to the spec
+# DeviceStatusResponseDto descriptions — not live-verified by this server
+# (verifying the derivations would require installing Splashtop on a controlled
+# device, which is a write). The raw DTO fields still pass through verbatim.
+_DEVICE_STATUS_FIELD_NOTES: dict[str, str] = {
+    "installation_status": (
+        "Per spec (unverified live): true means the client install completed "
+        "(install_time is set). Independent of registration_status."
+    ),
+    "registration_status": (
+        "Per spec (unverified live): true means the device has registered with "
+        "Splashtop (a device identifier exists). A device can be installed but "
+        "not yet registered — check both before assuming remote control works."
+    ),
+}
+
+
 async def get_device_status(
     client: AutomoxClient,
     *,
@@ -41,7 +58,10 @@ async def get_device_status(
 
     return {
         "data": _summary_or_raw(response),
-        "metadata": {"deprecated_endpoint": False},
+        "metadata": {
+            "deprecated_endpoint": False,
+            "field_notes": _DEVICE_STATUS_FIELD_NOTES,
+        },
     }
 
 

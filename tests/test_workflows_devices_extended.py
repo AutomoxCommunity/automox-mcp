@@ -26,6 +26,7 @@ from automox_mcp.workflows.devices import (
     _summarize_policy_status,
     batch_update_devices,
     delete_device,
+    enrich_raw_device_payload,
     list_device_inventory,
     list_devices_needing_attention,
     search_devices,
@@ -544,6 +545,47 @@ def test_build_device_core_keeps_unparseable_uptime_verbatim() -> None:
 
 def test_build_device_core_omits_missing_uptime() -> None:
     assert "uptime_minutes" not in _build_core({})
+
+
+# ===========================================================================
+# enrich_raw_device_payload — legend for near-raw passthrough tools
+# ===========================================================================
+
+
+def test_enrich_raw_device_payload_adds_labels_and_compliance() -> None:
+    detail = {
+        "uptime": "1440",
+        "compliant": False,
+        "policy_status": [
+            {"policy_id": 1, "policy_name": "A", "status": 0},
+            {"policy_id": 2, "policy_name": "B", "status": 1},
+            {"policy_id": 3, "policy_name": "C", "status": 7},  # unmapped code
+            {"policy_id": 4, "policy_name": "D", "status": "success"},  # string: untouched
+        ],
+    }
+    out = enrich_raw_device_payload(detail)
+    assert out is detail  # in-place
+    labels = [p.get("status_label") for p in detail["policy_status"]]
+    assert labels == ["needs_remediation", "up_to_date", "7", None]
+    assert [p["status"] for p in detail["policy_status"][:3]] == [0, 1, 7]  # raw kept
+    assert "uptime" not in detail
+    assert detail["uptime_minutes"] == 1440
+    assert detail["compliance"]["device_compliant"] is False
+    assert detail["compliance"]["needs_remediation_policies"] == [
+        {"policy_id": 1, "policy_name": "A"}
+    ]
+
+
+def test_enrich_raw_device_payload_handles_sparse_payload() -> None:
+    # No uptime, no policy_status, no compliant flag → no synthetic keys.
+    detail: dict[str, Any] = {"name": "host"}
+    out = enrich_raw_device_payload(detail)
+    assert out == {"name": "host"}
+
+
+def test_enrich_raw_device_payload_unparseable_uptime_kept_verbatim() -> None:
+    detail: dict[str, Any] = {"uptime": "n/a"}
+    assert enrich_raw_device_payload(detail)["uptime_minutes"] == "n/a"
 
 
 # ===========================================================================

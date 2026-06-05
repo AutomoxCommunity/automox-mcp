@@ -29,7 +29,7 @@ _DOMAIN_CATALOG: dict[str, list[tuple[str, str]]] = {
         ("device_search_typeahead", "Typeahead suggestions for search fields"),
         ("get_device_metadata_fields", "Available fields for device queries"),
         ("get_device_assignments", "Device-to-policy/group assignments"),
-        ("get_device_by_uuid", "Get device by UUID (v2 endpoint)"),
+        ("get_device_by_uuid", "Get device by UUID (raw payload with compliance legend)"),
         ("get_saved_search", "Retrieve a single saved search by ID"),
         ("get_saved_search_results", "Execute a saved search and return device results"),
         ("get_cached_search_results", "Retrieve cached results for a prior search execution"),

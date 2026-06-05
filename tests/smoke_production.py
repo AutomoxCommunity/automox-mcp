@@ -1123,7 +1123,26 @@ async def run_readonly_tools() -> None:
         # 73. get_device_by_uuid
         if device_uuid:
             resp = await _safe_call(session, "get_device_by_uuid", {"device_uuid": device_uuid})
-            record("get_device_by_uuid", resp is not None, f"uuid={device_uuid}")
+            ok = resp is not None
+            note = f"uuid={device_uuid}"
+            if ok and resp is not None:
+                # Correctness: the raw payload must carry the legend — every
+                # integer policy code labeled, uptime_minutes instead of the
+                # unit-less raw key (regression guard for the device_detail
+                # twin fix).
+                detail = resp.get("data") or {}
+                unlabeled = [
+                    p
+                    for p in detail.get("policy_status") or []
+                    if isinstance(p.get("status"), int) and "status_label" not in p
+                ]
+                if unlabeled:
+                    ok = False
+                    note = f"{len(unlabeled)} integer policy codes without status_label"
+                elif "uptime" in detail:
+                    ok = False
+                    note = "unit-less `uptime` key present (expected uptime_minutes)"
+            record("get_device_by_uuid", ok, note)
         else:
             record("get_device_by_uuid", True, "skipped — no device uuid (OK)")
 

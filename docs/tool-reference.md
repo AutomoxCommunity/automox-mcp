@@ -54,7 +54,7 @@ Uses the Server Groups API v2 for structured device queries, saved searches, and
 - **`device_search_typeahead`** - Get typeahead suggestions for device search fields. Useful for discovering valid values when building queries.
 - **`get_device_metadata_fields`** - Get available fields for device queries. Returns field names and types supported by the advanced search API.
 - **`get_device_assignments`** - Get device-to-policy and device-to-group assignments.
-- **`get_device_by_uuid`** - Get device details by UUID using the Server Groups API v2.
+- **`get_device_by_uuid`** - Get the near-raw device payload by UUID via the canonical `/servers` endpoint. Integer policy codes carry a `status_label` sibling, `uptime` is replaced by `uptime_minutes` (sampled at last full scan), and a `compliance` rollup names the policies needing remediation.
 - **`get_saved_search`** - Retrieve a single saved search by ID with its name, description, query, and metadata.
 - **`get_saved_search_results`** - Execute a saved search and return its current device result set (supports pagination).
 - **`get_cached_search_results`** - Retrieve cached server-side results for a previously-executed device search, keyed by search execution ID.

@@ -19,7 +19,12 @@ def _summarize_run(run: Mapping[str, Any]) -> dict[str, Any]:
     The policy-report-api returns snake_case JSON via @JsonNaming(SnakeCaseStrategy).
     Fields: policy_uuid, policy_id, org_uuid, policy_name, policy_type,
     policy_deleted_at, pending, success, remediation_not_applicable, failed,
-    not_included, run_time, execution_token, run_count, blocked (v2 only).
+    not_included, run_time, execution_token, run_count, device_count,
+    blocked (v2 only).
+
+    ``pending``/``success``/``failed``/etc. are DEVICE COUNTS per outcome for
+    the run (live-verified 2026-06-05), not run statuses — emitted under
+    ``device_outcomes`` so bare keys like ``success: 13`` can't be misread.
     """
     entry: dict[str, Any] = {}
     for key in (
@@ -29,19 +34,29 @@ def _summarize_run(run: Mapping[str, Any]) -> dict[str, Any]:
         "policy_name",
         "policy_type",
         "policy_deleted_at",
-        "pending",
-        "success",
-        "remediation_not_applicable",
-        "failed",
-        "not_included",
         "run_time",
         "execution_token",
         "run_count",
-        "blocked",
+        "device_count",
     ):
         val = run.get(key)
         if val is not None:
             entry[key] = val
+
+    outcomes: dict[str, Any] = {}
+    for key in (
+        "pending",
+        "success",
+        "failed",
+        "not_included",
+        "remediation_not_applicable",
+        "blocked",
+    ):
+        val = run.get(key)
+        if val is not None:
+            outcomes[key] = val
+    if outcomes:
+        entry["device_outcomes"] = outcomes
     return entry
 
 
@@ -599,5 +614,18 @@ async def get_policy_run_detail_v2(
             "total_results": len(results),
             "results": results,
         },
-        "metadata": {"deprecated_endpoint": False},
+        "metadata": {
+            "deprecated_endpoint": False,
+            # Live-verified 2026-06-05 — without this legend the model has to
+            # guess what a large negative exit_code means.
+            "field_notes": {
+                "exit_code": (
+                    "Raw process exit code from the policy script on the device: "
+                    "0 = success; negative values on Windows are NTSTATUS codes "
+                    "as signed 32-bit ints (e.g. -1073741502 = 0xC0000142 "
+                    "STATUS_DLL_INIT_FAILED)."
+                ),
+                "result_status": "Lowercase per-device outcome string (e.g. success, failed).",
+            },
+        },
     }

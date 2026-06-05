@@ -51,7 +51,10 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         description=(
             "List policy runs with time-range filtering, policy name/type filters, "
             "and result status filtering. Uses the Policy History v2 API for richer "
-            "data than the standard policy execution timeline."
+            "data than the standard policy execution timeline. Each run's "
+            "`device_outcomes` (pending/success/failed/not_included/"
+            "remediation_not_applicable/blocked) are DEVICE COUNTS per outcome "
+            "for that run, not run statuses."
         ),
         annotations={
             "readOnlyHint": True,
@@ -135,7 +138,10 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
 
     @server.tool(
         name="policy_history_detail",
-        description=("Get policy history details by UUID, including run history and status."),
+        description=(
+            "Get policy history details by UUID, including run history and status. "
+            "Each run's `device_outcomes` are device counts per outcome, not run statuses."
+        ),
         annotations={
             "readOnlyHint": True,
             "destructiveHint": False,
@@ -161,7 +167,8 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         name="policy_runs_for_policy",
         description=(
             "Get execution runs for a specific policy by UUID. "
-            "Optionally filter by number of days and sort order."
+            "Optionally filter by number of days and sort order. Each run's "
+            "`device_outcomes` are device counts per outcome, not run statuses."
         ),
         annotations={
             "readOnlyHint": True,
@@ -225,7 +232,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         name="policy_run_detail_v2",
         description=(
             "Get detailed per-device results for a specific policy run. "
-            "Uses UUID-based queries and supports device name filtering."
+            "Uses UUID-based queries and supports device name filtering. "
+            "`exit_code` is the raw process exit code from the policy script "
+            "(0 = success; negative values on Windows are NTSTATUS codes as "
+            "signed 32-bit ints); `result_status` is the lowercase per-device "
+            "outcome (e.g. success, failed)."
         ),
         annotations={
             "readOnlyHint": True,

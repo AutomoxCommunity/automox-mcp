@@ -86,7 +86,10 @@ async def test_list_runs_returns_summaries() -> None:
 
     assert result["data"]["total_runs"] == 2
     assert result["data"]["runs"][0]["policy_uuid"] == "pol-001"
-    assert result["data"]["runs"][0]["success"] == 9
+    # Outcome counts are devices-per-outcome, grouped so they can't be
+    # misread as run statuses.
+    assert result["data"]["runs"][0]["device_outcomes"]["success"] == 9
+    assert "success" not in result["data"]["runs"][0]
 
 
 @pytest.mark.asyncio
@@ -414,6 +417,11 @@ async def test_run_detail_returns_results() -> None:
 
     assert result["data"]["total_results"] == 2
     assert result["data"]["exec_token"] == "exec-001"
+    # The exit_code/result_status legend rides along so the model never has
+    # to guess what a negative NTSTATUS-style code means.
+    notes = result["metadata"]["field_notes"]
+    assert "NTSTATUS" in notes["exit_code"]
+    assert "result_status" in notes
 
 
 @pytest.mark.asyncio
@@ -464,7 +472,7 @@ async def test_runs_for_policy_full_includes_stats_and_banner() -> None:
     assert "banner_stats" in data
     assert data["banner_stats"] == {"success": 12, "failed": 1}
     # full mode keeps the rich per-run fields
-    assert data["runs"][0]["success"] == 9
+    assert data["runs"][0]["device_outcomes"]["success"] == 9
     assert data["runs"][0]["policy_type"] == "patch"
 
 

@@ -29,12 +29,14 @@ _WINDOW_A: dict[str, Any] = {
     "window_name": "Nightly Maintenance",
     "window_description": "No patching during nightly backups",
     "org_uuid": _ORG_UUID,
-    "rrule": "FREQ=YEARLY;BYMONTH=1,2,3,4,5,6,7,8,9,10,11,12;BYDAY=+1MO",
+    # RECURRING grammar (validator-enforced): FREQ=YEARLY + BYMONTH(1-12) +
+    # BYDAY(+N weekday). recurrence is UPPERCASE on read (probe 2026-06-05).
+    "rrule": "FREQ=YEARLY;BYMONTH=3;BYDAY=+2TU",
     "duration_minutes": 120,
     "dtstart": "2026-01-01T02:00:00Z",
     "use_local_tz": False,
     "status": "active",
-    "recurrence": "recurring",
+    "recurrence": "RECURRING",
     "group_uuids": [_GROUP_UUID],
     "created_at": "2026-01-01T00:00:00Z",
     "updated_at": "2026-01-02T00:00:00Z",
@@ -46,12 +48,13 @@ _WINDOW_B: dict[str, Any] = {
     "window_name": "Weekend Freeze",
     "window_description": "No changes on weekends",
     "org_uuid": _ORG_UUID,
-    "rrule": "FREQ=YEARLY;BYDAY=SA,SU",
+    # ONCE grammar (validator-enforced): FREQ=DAILY;UNTIL=compact-Z, no COUNT.
+    "rrule": "FREQ=DAILY;UNTIL=20260101T020000Z",
     "duration_minutes": 1440,
     "dtstart": "2026-01-04T00:00:00Z",
     "use_local_tz": False,
-    "status": "active",
-    "recurrence": "recurring",
+    "status": "inactive",
+    "recurrence": "ONCE",
     "group_uuids": [_GROUP_UUID],
     "created_at": "2026-01-03T00:00:00Z",
     "updated_at": None,
@@ -136,6 +139,9 @@ async def test_get_window_returns_detail() -> None:
     assert result["data"]["window_name"] == "Nightly Maintenance"
     assert result["data"]["duration_minutes"] == 120
     assert result["data"]["status"] == "active"
+    # recurrence is UPPERCASE on read even though create accepts lowercase
+    # (probe 2026-06-05); the projection forwards it raw.
+    assert result["data"]["recurrence"] == "RECURRING"
 
 
 # ---------------------------------------------------------------------------
@@ -495,6 +501,90 @@ async def test_all_functions_include_metadata() -> None:
     for r in results:
         assert "metadata" in r, f"Missing metadata in {r}"
         assert r["metadata"]["deprecated_endpoint"] is False
+
+
+# ---------------------------------------------------------------------------
+# F18: pagination preserves a genuine zero total (Spring Page total_elements=0
+# is falsy; the old `or`-chain dropped it from metadata.pagination).
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_search_windows_zero_total_preserved() -> None:
+    client = StubClient(
+        post_responses={
+            f"/policy-windows/org/{_ORG_UUID}/search": [
+                {"content": [], "total_elements": 0, "total_pages": 0},
+            ],
+        }
+    )
+    result = await search_policy_windows(cast(AutomoxClient, client), org_uuid=_ORG_UUID)
+
+    pagination = result["metadata"]["pagination"]
+    assert pagination.get("total_elements") == 0
+    assert pagination.get("total_pages") == 0
+    assert result["data"]["total_windows"] == 0
+
+
+# ---------------------------------------------------------------------------
+# F16/F17: field_notes legends document verified vocab/units next to the raw
+# projection; the use_local_tz=true timezone case is flagged not-live-verified.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_get_window_emits_field_notes() -> None:
+    client = StubClient(
+        get_responses={
+            f"/policy-windows/org/{_ORG_UUID}/window/{_WINDOW_UUID}": [_WINDOW_A],
+        }
+    )
+    result = await get_policy_window(
+        cast(AutomoxClient, client),
+        org_uuid=_ORG_UUID,
+        window_uuid=_WINDOW_UUID,
+    )
+
+    notes = result["metadata"]["field_notes"]
+    assert {"status", "recurrence", "dtstart", "use_local_tz"} <= set(notes)
+    # The use_local_tz=true half is spec-only, not live-verified.
+    assert "not live-verified" in notes["dtstart"]
+
+
+@pytest.mark.asyncio
+async def test_search_windows_emits_field_notes() -> None:
+    client = StubClient(
+        post_responses={
+            f"/policy-windows/org/{_ORG_UUID}/search": [{"content": [_WINDOW_A]}],
+        }
+    )
+    result = await search_policy_windows(cast(AutomoxClient, client), org_uuid=_ORG_UUID)
+
+    notes = result["metadata"]["field_notes"]
+    assert {"status", "recurrence", "dtstart", "use_local_tz"} <= set(notes)
+    assert "not live-verified" in notes["dtstart"]
+
+
+@pytest.mark.asyncio
+async def test_scheduled_windows_emit_derived_note() -> None:
+    periods = [
+        {"start": "2026-03-30T02:00:00Z", "end": "2026-03-30T04:00:00Z", "window_type": "exclude"},
+    ]
+    client = StubClient(
+        get_responses={
+            f"/policy-windows/org/{_ORG_UUID}/group/{_GROUP_UUID}/scheduled-windows": [periods],
+        }
+    )
+    result = await get_group_scheduled_windows(
+        cast(AutomoxClient, client),
+        org_uuid=_ORG_UUID,
+        group_uuid=_GROUP_UUID,
+    )
+
+    notes = result["metadata"]["field_notes"]
+    assert "start" in notes and "end" in notes
+    assert "derived" in notes["start"].lower()
+    assert "no stored start/end" in notes["start"]
 
 
 # ---------------------------------------------------------------------------

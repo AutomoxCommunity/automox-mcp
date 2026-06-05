@@ -197,15 +197,15 @@ Manage vulnerability remediation workflows via the Vuln Sync API. Supports CSV-b
 
 ## Policy Windows (9 tools)
 
-Manage maintenance/exclusion windows that prevent policy execution during scheduled periods. Uses the Policy Windows API with org UUID-based endpoints and RFC 5545 RRULE scheduling.
+Manage maintenance/exclusion windows that prevent policy execution during scheduled periods. Uses the Policy Windows API with org UUID-based endpoints and validator-constrained RRULE scheduling (`FREQ=DAILY;UNTIL=…` for once; `FREQ=YEARLY`+`BYMONTH`+`BYDAY` for recurring — not generic RFC 5545).
 
 - **`search_policy_windows`** - Search and list maintenance/exclusion windows with optional filtering by group UUIDs, status (`active`/`inactive`), and recurrence type (`recurring`/`once`). Supports pagination via `page`/`size`.
 - **`get_policy_window`** - Retrieve details for a specific maintenance window by UUID, including RRULE schedule, duration, assigned groups, and status.
 - **`check_group_exclusion_status`** - Check whether one or more server groups are currently within an active exclusion window. Returns a per-group boolean — useful before triggering manual policy runs.
 - **`check_window_active`** - Check whether a specific maintenance window is currently active. A window is active when its status is "active", it has at least one group, and the current time falls within an exclusion period.
-- **`get_group_scheduled_windows`** - Get upcoming scheduled maintenance periods for a server group with start/end times and window types. Optionally provide a future date limit (`YYYY-MM-DDTHH:mm:ss`; trailing `Z` is accepted and stripped automatically).
-- **`get_device_scheduled_windows`** - Get upcoming scheduled maintenance periods for a specific device with start/end times and window types. Optionally provide a future date limit (`YYYY-MM-DDTHH:mm:ss`; trailing `Z` is accepted and stripped automatically).
-- **`create_policy_window`** - Create a new maintenance/exclusion window with RFC 5545 RRULE scheduling. Supports recurring windows (e.g., every Monday 2–4 AM) and one-time windows. All fields required.
+- **`get_group_scheduled_windows`** - Get upcoming scheduled maintenance periods for a server group with derived occurrence start/end times and window types (the window stores `dtstart`+`duration_minutes`+`rrule`, not start/end). Optionally provide a future date limit (`YYYY-MM-DDTHH:mm:ss`; trailing `Z` is accepted and stripped automatically).
+- **`get_device_scheduled_windows`** - Get upcoming scheduled maintenance periods for a specific device with derived occurrence start/end times and window types (the window stores `dtstart`+`duration_minutes`+`rrule`, not start/end). Optionally provide a future date limit (`YYYY-MM-DDTHH:mm:ss`; trailing `Z` is accepted and stripped automatically).
+- **`create_policy_window`** - Create a new maintenance/exclusion window. The `rrule` is validator-constrained, not generic RFC 5545: one-time windows use `FREQ=DAILY;UNTIL=YYYYMMDDTHHMMSSZ`; recurring windows use `FREQ=YEARLY;BYMONTH=<1-12>;BYDAY=<+N weekday>` only (`FREQ=WEEKLY` is rejected with a 400) — see the tool description for the exact grammar. All fields required.
 - **`update_policy_window`** - Update an existing maintenance window. Only `dtstart` is required; all other fields are optional for partial updates.
 - **`delete_policy_window`** - Delete a maintenance/exclusion window permanently.
 

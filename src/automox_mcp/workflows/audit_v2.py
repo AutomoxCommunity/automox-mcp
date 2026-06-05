@@ -38,6 +38,32 @@ _STATUS_ID_LABELS = {
     99: "other",
 }
 
+# The upstream OCSF audit events carry NO `category_name` field (verified live
+# 2026-06-05: 0 occurrences across all event variants; only an integer
+# `category_uid` is present, and per the spec examples category_uid maps 1:N
+# across categories — live-confirmed, e.g. category_uid=3 covers BOTH
+# Authentication and Entity Management). The one string the upstream actually
+# populates is `type_name`, whose live values are prefixed by a human category
+# label using a colon+space boundary ("Authentication: Logon",
+# "Entity Management: Create", "Web Resources Activity: Delete"). We therefore
+# narrow a `category_name` filter against the `type_name` PREFIX rather than the
+# non-existent `category_name` field.
+#
+# `authentication` / `entity_management` / `web_resource_activity` prefixes are
+# LIVE-VERIFIED (2026-06-05). `account_change` / `user_access` are SPEC-EXAMPLE
+# DERIVED ONLY (no events of those categories existed in the live tenant to
+# confirm the exact prefix) — labeled unverified in the field_notes legend.
+_CATEGORY_TYPE_PREFIXES = {
+    "authentication": "authentication: ",  # live-verified
+    "entity_management": "entity management: ",  # live-verified
+    "web_resource_activity": "web resources activity: ",  # live-verified
+    "account_change": "account change: ",  # spec-example only, unverified live
+    "user_access": "user access: ",  # spec-example only, unverified live
+}
+_CATEGORY_PREFIXES_VERIFIED = frozenset(
+    {"authentication", "entity_management", "web_resource_activity"}
+)
+
 
 def _ocsf_time_to_iso(value: Any) -> Any:
     """Convert the OCSF event ``time`` to an ISO 8601 UTC string.
@@ -147,8 +173,11 @@ async def audit_events_ocsf(
 ) -> dict[str, Any]:
     """Query OCSF-formatted audit events with filtering and cursor pagination.
 
-    Supports filtering by event category (authentication, account_change,
-    entity_management, user_access, web_resource_activity) and event type name.
+    category_name filtering is applied client-side against the event ``type_name``
+    prefix because the upstream events carry no ``category_name`` field; an
+    unmappable token leaves the results unfiltered and sets
+    ``applied_filters.category_name_matched=false`` rather than zeroing the set.
+    type_name filtering is an exact (case-insensitive) match.
     """
     resolved_uuid = await resolve_org_uuid(
         client,
@@ -186,16 +215,62 @@ async def audit_events_ocsf(
     else:
         events = []
 
-    # Apply client-side filtering
+    # Apply client-side filtering.
+    #
+    # category_name: the upstream has NO category_name field (see
+    # _CATEGORY_TYPE_PREFIXES). We narrow against the type_name prefix instead.
+    # An UNKNOWN/underivable token must NOT silently zero the result (that is the
+    # exact "empty looks like no activity" failure mode this fix removes) — when
+    # we cannot map the token to a prefix, we leave the events unfiltered and
+    # surface category_name_matched=false so the model can tell the difference.
     filtered: list[Mapping[str, Any]] = events
+    field_notes: list[str] = []
+    category_name_matched: bool | None = None
     if category_name:
-        cat_lower = category_name.strip().lower()
-        filtered = [e for e in filtered if str(e.get("category_name") or "").lower() == cat_lower]
+        token = category_name.strip().lower()
+        prefix = _CATEGORY_TYPE_PREFIXES.get(token)
+        if prefix:
+            filtered = [
+                e for e in filtered if str(e.get("type_name") or "").lower().startswith(prefix)
+            ]
+            category_name_matched = True
+            source = (
+                "live-verified 2026-06-05"
+                if token in _CATEGORY_PREFIXES_VERIFIED
+                else "spec examples only, unverified live"
+            )
+            field_notes.append(
+                f"category_name filter is applied client-side against the event "
+                f"type_name prefix '{prefix}' (the upstream events carry no "
+                f"category_name field). Prefix source: {source}."
+            )
+        else:
+            # Unknown token: do not zero the result. Leave unfiltered and flag.
+            category_name_matched = False
+            field_notes.append(
+                f"category_name '{category_name}' could not be mapped to a known "
+                f"type_name prefix; the category filter was NOT applied and all "
+                f"events for the date are returned. Known tokens: "
+                f"{', '.join(sorted(_CATEGORY_TYPE_PREFIXES))}."
+            )
     if type_name:
         type_lower = type_name.strip().lower()
         filtered = [e for e in filtered if str(e.get("type_name") or "").lower() == type_lower]
 
     summaries = [_summarize_ocsf_event(e) for e in filtered]
+
+    # report-only finding 3: the OCSF taxonomy uids are raw integers with no
+    # decode table in the upstream spec (no x-enumDescriptions on
+    # category_uid/type_uid/class_uid/activity_id), and category_uid is not a
+    # clean discriminator (live: category_uid=3 spans both Authentication and
+    # Entity Management). Point the model at the populated string siblings.
+    field_notes.append(
+        "category_uid/type_uid/class_uid/activity_id are raw OCSF taxonomy "
+        "integers with no decode table in the upstream spec; category_uid maps "
+        "1:N across categories (e.g. 3 covers both Authentication and Entity "
+        "Management). Prefer the human-readable sibling strings type_name and "
+        "activity, which the upstream populates."
+    )
 
     # Extract next cursor
     next_cursor = None
@@ -227,7 +302,9 @@ async def audit_events_ocsf(
             "events_before_filter": len(events),
             "applied_filters": {
                 "category_name": category_name,
+                "category_name_matched": category_name_matched,
                 "type_name": type_name,
             },
+            "field_notes": field_notes,
         },
     }

@@ -22,7 +22,10 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         name="list_events",
         description=(
             "List Automox organization events with optional filters by policy, "
-            "device, user, event name, or date range."
+            "device, user, event name, or date range. For policy/patch events, "
+            "`data.status` is the raw process exit code (arrives as string or "
+            "int): '0' = success; negative values on Windows are NTSTATUS codes "
+            "as signed 32-bit ints (e.g. '-1073741502' = 0xC0000142)."
         ),
         annotations={
             "readOnlyHint": True,

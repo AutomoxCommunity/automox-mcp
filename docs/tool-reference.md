@@ -90,12 +90,12 @@ Uses the Server Groups API v2 for structured device queries, saved searches, and
 
 Richer policy execution reporting via the `/policy-history` API with UUID-based queries, time-range filtering, and aggregate views.
 
-- **`policy_runs_v2`** - List policy runs with time-range filtering, policy name/type filters, and result status filtering. Filters (`policy_name`, `policy_uuid`, `policy_type`, `start_time`, `end_time`, `result_status`) are applied **client-side** because the upstream policy-report-api silently ignores them; `policy_name` matches as a case-insensitive substring, and `result_status` is treated as "include runs where the named counter is non-zero" (success/failed/pending/not_included/remediation_not_applicable/blocked). When a filter is active, `metadata.filter_strategy="client_side"`, `metadata.filters_applied`, and `metadata.pagination` (with `total_count` / `has_more`) describe the local pagination state.
+- **`policy_runs_v2`** - List policy runs with time-range filtering, policy name/type filters, and result status filtering. Filters (`policy_name`, `policy_uuid`, `policy_type`, `start_time`, `end_time`, `result_status`) are applied **client-side** because the upstream policy-report-api silently ignores them; `policy_name` matches as a case-insensitive substring, and `result_status` is treated as "include runs where the named counter is non-zero" (success/failed/pending/not_included/remediation_not_applicable/blocked). Each run's `device_outcomes` are device counts per outcome, not run statuses. When a filter is active, `metadata.filter_strategy="client_side"`, `metadata.filters_applied`, and `metadata.pagination` (with `total_count` / `has_more`) describe the local pagination state.
 - **`policy_run_count`** - Get aggregate policy execution counts. Optionally filter by number of days to look back.
 - **`policy_runs_by_policy`** - Get policy runs grouped by policy for cross-policy comparison.
-- **`policy_history_detail`** - Get policy history details by UUID, including run history and status.
+- **`policy_history_detail`** - Get policy history details by UUID, including run history and status. Each run's `device_outcomes` are device counts per outcome, not run statuses.
 - **`policy_runs_for_policy`** - Get execution runs for a specific policy by UUID with optional day range and sort order. Set `summary_only=true` to project each run to `{policy_uuid, run_time, execution_token, run_count}` and drop `banner_stats` — a token-efficient way to enumerate execution tokens for a policy with many runs.
-- **`policy_run_detail_v2`** - Get detailed per-device results for a specific policy run. Supports device name filtering and pagination.
+- **`policy_run_detail_v2`** - Get detailed per-device results for a specific policy run. Supports device name filtering and pagination. `exit_code` is the raw process exit code (0 = success; negative values on Windows are NTSTATUS as signed 32-bit ints) and `result_status` the lowercase per-device outcome — a `metadata.field_notes` legend rides along.
 - **`policy_execution_counts`** - List fleet-wide policy execution counts over a time window: one row per policy with its run count, in a single round-trip. Answers "which policies ran most last quarter?" without per-policy calls. Distinct from `policy_run_count` (single aggregate) and `policy_runs_for_policy` (per-run records for one policy).
 
 ## Package Management (2 tools)
@@ -156,7 +156,7 @@ Manage vulnerability remediation workflows via the Vuln Sync API. Supports CSV-b
 
 ## Events (1 tool)
 
-- **`list_events`** - List organization events with optional filters by policy, device, user, event name, or date range.
+- **`list_events`** - List organization events with optional filters by policy, device, user, event name, or date range. For policy/patch events, `data.status` is the raw process exit code (string or int; '0' = success, negative = Windows NTSTATUS).
 
 ## Reports (2 tools)
 

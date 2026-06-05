@@ -16,6 +16,30 @@ from ..utils.pagination import parallel_paginate
 _DEFAULT_PACKAGE_PAGE_SIZE = 500
 _MAX_PACKAGE_PAGES = 20
 
+# `severity` is the `Packages.severity` field returned by both
+# `/servers/{id}/packages` and `/orgs/{id}/packages` (same per-package DTO).
+# The raw value is forwarded as-is for fidelity; this note disambiguates the
+# confusable low-end states for the model. Values are tagged by how they were
+# confirmed: `observed_live` were seen on the probed production tenant
+# (2026-06-05); `spec_only_unverified` are members of the spec enum that were
+# NOT seen live, so no safe/unsafe meaning is asserted for them.
+_SEVERITY_FIELD_NOTE: dict[str, Any] = {
+    "meaning": "Security severity of the package version (Packages.severity).",
+    "observed_live": ["critical", "high", "medium", "no_known_cves", "null (JSON null)"],
+    "spec_only_unverified": ["low", "none", "unknown"],
+    "legend": {
+        "null": (
+            "No severity assessment recorded for this package (absence of an "
+            "assessment, not a safety claim)."
+        ),
+        "no_known_cves": "Assessed; no known CVEs (treat as safe).",
+        "none/unknown": (
+            "Spec enum members; not observed live on the probed tenant. Do not "
+            "infer safe-vs-unassessed without confirmation."
+        ),
+    },
+}
+
 
 def _coerce_package_list(raw: Any) -> list[Any]:
     """Normalize a `/servers/{id}/packages` response into a list of packages."""
@@ -81,15 +105,15 @@ async def list_device_packages(
         severity = pkg.get("severity")
         if severity is not None:
             entry["severity"] = severity
-        patch_status = pkg.get("status") or pkg.get("patch_status")
-        if patch_status is not None:
-            entry["patch_status"] = patch_status
         is_managed = pkg.get("is_managed")
         if is_managed is not None:
             entry["is_managed"] = is_managed
         summary.append(entry)
 
-    metadata: dict[str, Any] = {"deprecated_endpoint": False}
+    metadata: dict[str, Any] = {
+        "deprecated_endpoint": False,
+        "field_notes": {"severity": _SEVERITY_FIELD_NOTE},
+    }
     if auto_paginated:
         # The auto-paginate path walked every page; the count is exhaustive
         # unless we hit the safety cap (a host with >10k packages).
@@ -158,15 +182,9 @@ async def search_org_packages(
             "version": pkg.get("version"),
             "severity": pkg.get("severity"),
         }
-        device_count = pkg.get("device_count")
-        if device_count is not None:
-            entry["device_count"] = device_count
         is_managed = pkg.get("is_managed")
         if is_managed is not None:
             entry["is_managed"] = is_managed
-        awaiting_flag = pkg.get("awaiting")
-        if awaiting_flag is not None:
-            entry["awaiting"] = awaiting_flag
         summary.append(entry)
 
     return {
@@ -176,5 +194,6 @@ async def search_org_packages(
         },
         "metadata": {
             "deprecated_endpoint": False,
+            "field_notes": {"severity": _SEVERITY_FIELD_NOTE},
         },
     }

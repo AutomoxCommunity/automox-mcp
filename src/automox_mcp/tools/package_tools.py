@@ -24,11 +24,18 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     @server.tool(
         name="list_device_packages",
         description=(
-            "List software packages installed on a specific Automox device. "
-            "Returns package names, versions, patch status, and severity. By "
-            "default returns the complete package set (auto-paginated), so it is "
-            "reliable for 'is package X installed?' checks. Pass an explicit "
-            "`page` to fetch a single page instead."
+            "List software packages on a specific Automox device. Returns "
+            "package name, version, `installed` (boolean install state), "
+            "`repo`, `is_managed`, and `severity`. There is no patch-status "
+            "field in the response; install state comes from the `installed` "
+            "boolean. `severity` is one of critical/high/medium/no_known_cves "
+            "or JSON null (live-verified); low/none/unknown exist per spec but "
+            "were not observed live. JSON null means no severity assessment was "
+            "recorded (not a safety claim); no_known_cves means scanned with no "
+            "known CVEs. See metadata.field_notes.severity. By default returns "
+            "the complete package set (auto-paginated), so it is reliable for "
+            "'is package X installed?' checks. Pass an explicit `page` to fetch "
+            "a single page instead."
         ),
         annotations={
             "readOnlyHint": True,
@@ -61,8 +68,16 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     @server.tool(
         name="search_org_packages",
         description=(
-            "Search software packages across the Automox organization. "
-            "Filter by managed status or packages awaiting installation."
+            "Search software packages across the Automox organization. Filter "
+            "by managed status (`include_unmanaged`) or install state "
+            "(`awaiting`: true = available but not installed, false = already "
+            "installed -- per spec; note this is inverted from a naive reading "
+            "of the word). `awaiting` is a request filter only, NOT a field in "
+            "the response. Returns package name, version, `is_managed`, and "
+            "`severity`. `severity` vocabulary is the same as "
+            "list_device_packages: critical/high/medium/no_known_cves or JSON "
+            "null observed live, with low/none/unknown present in the spec enum "
+            "but unobserved. See metadata.field_notes.severity."
         ),
         annotations={
             "readOnlyHint": True,

@@ -145,7 +145,14 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
 
     @server.tool(
         name="policy_catalog",
-        description="List Automox policies with type and status summaries.",
+        description=(
+            "List Automox policies with type and status summaries. "
+            "`schedule_days` is a bitmask (decoded alongside as "
+            "`schedule_days_decoded`); `schedule_time` is a bare HH:MM string "
+            "with no timezone marker — whether it runs in device-local time or "
+            "org time depends on policy configuration, so don't assert a "
+            "timezone for it."
+        ),
         annotations={
             "readOnlyHint": True,
             "destructiveHint": False,

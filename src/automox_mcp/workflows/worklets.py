@@ -54,7 +54,10 @@ async def search_worklet_catalog(
             "id": item.get("uuid") or item.get("id"),
             "name": item.get("name"),
             "description": item.get("description"),
-            "category": item.get("category"),
+            # Live catalog items carry `categories` (a list); `category` is a
+            # legacy/defensive fallback — the singular key does not appear in
+            # live payloads (verified 2026-06-05).
+            "categories": item.get("categories") or item.get("category"),
         }
         for optional in (
             "os_family",
@@ -64,6 +67,13 @@ async def search_worklet_catalog(
             "update_time",
             "create_time",
             "author",
+            # Trust/availability signals present on live catalog items.
+            "verified",
+            "access",
+            "license_required",
+            "language",
+            "version",
+            "device_type",
         ):
             val = item.get(optional)
             if val is not None:
@@ -97,14 +107,23 @@ async def get_worklet_detail(
         "id": result.get("uuid") or result.get("id"),
         "name": result.get("name"),
         "description": result.get("description"),
-        "category": result.get("category"),
+        "categories": result.get("categories") or result.get("category"),
     }
     for optional in (
         "os_family",
         "os_families",
         "created_at",
         "updated_at",
+        "create_time",
+        "update_time",
         "author",
+        "verified",
+        "access",
+        "license_required",
+        "language",
+        "version",
+        "device_type",
+        "keywords",
         "evaluation_code",
         "remediation_code",
         "notes",

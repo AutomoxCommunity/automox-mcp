@@ -336,24 +336,30 @@ async def summarize_policies(
         status_counts[normalized] += 1
 
         filtered.append(policy_item)
-        preview.append(
-            {
-                "policy_id": policy_item.get("id"),
-                "policy_uuid": policy_item.get("guid") or policy_item.get("uuid"),
-                "name": policy_item.get("name"),
-                "type": policy_type,
-                "status": policy_item.get("status"),
-                "targets": policy_item.get("target"),
-                "server_groups": policy_item.get("server_groups"),
-                "schedule_days": policy_item.get("schedule_days"),
-                "schedule_time": policy_item.get("schedule_time"),
-                "next_run": policy_item.get("next_run"),
-                "installation_do_not_disturb_honored": policy_item.get(
-                    "installation_do_not_disturb_honored"
-                ),
-                "reboot_do_not_disturb_honored": policy_item.get("reboot_do_not_disturb_honored"),
-            }
-        )
+        preview_entry = {
+            "policy_id": policy_item.get("id"),
+            "policy_uuid": policy_item.get("guid") or policy_item.get("uuid"),
+            "name": policy_item.get("name"),
+            "type": policy_type,
+            "status": policy_item.get("status"),
+            "targets": policy_item.get("target"),
+            "server_groups": policy_item.get("server_groups"),
+            "schedule_days": policy_item.get("schedule_days"),
+            "schedule_time": policy_item.get("schedule_time"),
+            "next_run": policy_item.get("next_run"),
+            "installation_do_not_disturb_honored": policy_item.get(
+                "installation_do_not_disturb_honored"
+            ),
+            "reboot_do_not_disturb_honored": policy_item.get("reboot_do_not_disturb_honored"),
+        }
+        # schedule_days is a bitmask (describe_policy already decodes it);
+        # decode here too so catalog rows are self-describing.
+        schedule_days = policy_item.get("schedule_days")
+        if isinstance(schedule_days, int) and not isinstance(schedule_days, bool):
+            preview_entry["schedule_days_decoded"] = _decode_schedule_days_bitmask(schedule_days)[
+                "interpretation"
+            ]
+        preview.append(preview_entry)
 
     stats_data: Any = None
     total_available: int | None = None

@@ -95,8 +95,9 @@ async def get_patch_tuesday_readiness(
 
     prepatch_devices_full = prepatch_data.get("devices") or []
     approval_items_full = approval_items if isinstance(approval_items, list) else []
-    patch_policy_entries_full = [
-        {
+    patch_policy_entries_full = []
+    for p in patch_policies:
+        policy_entry: dict[str, Any] = {
             "id": p.get("policy_id"),
             "name": p.get("name"),
             "status": p.get("status"),
@@ -105,8 +106,16 @@ async def get_patch_tuesday_readiness(
             "next_run": p.get("next_run"),
             "server_groups": p.get("server_groups"),
         }
-        for p in patch_policies
-    ]
+        # schedule_days arrives pre-decoded from policy_catalog when present;
+        # otherwise decode the raw bitmask so schedules are self-describing.
+        decoded = p.get("schedule_days_decoded")
+        if decoded is None:
+            schedule_days = p.get("schedule_days")
+            if isinstance(schedule_days, int) and not isinstance(schedule_days, bool):
+                decoded = policy._decode_schedule_days_bitmask(schedule_days)["interpretation"]
+        if decoded is not None:
+            policy_entry["schedule_days_decoded"] = decoded
+        patch_policy_entries_full.append(policy_entry)
 
     prepatch_devices_preview = prepatch_devices_full[:detail_limit]
     approvals_preview = approval_items_full[:detail_limit]

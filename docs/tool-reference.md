@@ -73,7 +73,7 @@ Uses the Server Groups API v2 for structured device queries, saved searches, and
 - **`policy_health_overview`** - Summarize recent Automox policy activity. Omit `org_uuid` to let the server resolve it from `AUTOMOX_ORG_ID` / `AUTOMOX_ORG_UUID`.
 - **`policy_execution_timeline`** - Review recent executions for a policy.
 - **`policy_run_results`** - Fetch per-device results (stdout, stderr, exit codes) for a specific execution token returned by `policy_execution_timeline`.
-- **`policy_catalog`** - List Automox policies with type and status summaries. Supports `page` (0-indexed) and `limit` pagination — each user page maps 1:1 to the upstream `/policies` page so cursors are stable. Inspect `metadata.pagination.has_more`, read `metadata.notes`, and follow the optional `metadata.suggested_next_call` hint to continue paginating. Per-policy compliance stats are **opt-in** via `include_stats=true` (default off): the stats payload is large and was previously truncating the `policies` array. Use `policy_compliance_stats` for a focused breakdown.
+- **`policy_catalog`** - List Automox policies with type and status summaries. `schedule_days` bitmasks carry a `schedule_days_decoded` sibling; `schedule_time` is a bare HH:MM string with no timezone marker. Supports `page` (0-indexed) and `limit` pagination — each user page maps 1:1 to the upstream `/policies` page so cursors are stable. Inspect `metadata.pagination.has_more`, read `metadata.notes`, and follow the optional `metadata.suggested_next_call` hint to continue paginating. Per-policy compliance stats are **opt-in** via `include_stats=true` (default off): the stats payload is large and was previously truncating the `policies` array. Use `policy_compliance_stats` for a focused breakdown.
 - **`policy_detail`** - Retrieve configuration and recent history for a policy.
 - **`policy_compliance_stats`** - Retrieve per-policy compliance statistics showing compliant vs. non-compliant device counts and compliance rates.
 - **`apply_policy_changes`** - Preview or submit structured policy create/update operations. Automatically normalizes helper fields (`filter_name`, `filter_names`) and friendly schedule blocks into Automox's expected payloads, ensuring required fields (e.g., `schedule_days`, `schedule_time`) are present before submission.
@@ -125,8 +125,8 @@ Richer policy execution reporting via the `/policy-history` API with UUID-based 
 
 ## Worklet Catalog (2 tools)
 
-- **`search_worklet_catalog`** - Search the Automox community worklet catalog. Returns worklet names, descriptions, categories, and OS compatibility.
-- **`get_worklet_detail`** - Get detailed information for a specific community worklet, including evaluation code, remediation code, and requirements.
+- **`search_worklet_catalog`** - Search the Automox community worklet catalog. Returns worklet names, descriptions, categories, OS compatibility, and trust/availability signals (`verified`, `access` tier, `license_required`, `language`, `version`). Catalog items have no status field.
+- **`get_worklet_detail`** - Get detailed information for a specific community worklet, including evaluation code, remediation code, requirements, and the same trust/availability signals as the catalog search.
 
 ## Data Extracts (3 tools)
 
@@ -150,7 +150,7 @@ Manage vulnerability remediation workflows via the Vuln Sync API. Supports CSV-b
 
 ## Compound Workflows (3 tools)
 
-- **`get_patch_tuesday_readiness`** - Combined view of pre-patch report, pending approvals, and patch policy schedules. Answers "Are we ready for Patch Tuesday?" in a single call. Includes per-device severity classification computed from CVE data. Each inner list is capped at `detail_limit` (default 10); see the **Compound tools** section under [Pagination](#pagination) for the `metadata.section_summaries` shape and how to fetch the full data via the linked detail tools.
+- **`get_patch_tuesday_readiness`** - Combined view of pre-patch report, pending approvals, and patch policy schedules. Answers "Are we ready for Patch Tuesday?" in a single call. Includes per-device severity classification computed from CVE data (vocabulary: critical/high/medium/low/no_known_cves, null when unrated); policy `schedule_days` bitmasks carry a `schedule_days_decoded` sibling. Each inner list is capped at `detail_limit` (default 10); see the **Compound tools** section under [Pagination](#pagination) for the `metadata.section_summaries` shape and how to fetch the full data via the linked detail tools.
 - **`get_compliance_snapshot`** - Combined view of non-compliant devices, fleet health metrics, and policy statistics. Answers "What is our compliance posture?" in a single call. Includes compliance rate, device health breakdown, and stale device detection. Inner lists capped at `detail_limit` (default 10) per the compound-tool contract.
 - **`get_device_full_profile`** - Complete device profile combining device detail, inventory summary, packages, and policy assignments in a single call. Inventory is summarized server-side with key values per category (its raw payload is dict-shaped, not a flat list). The `packages.packages` list is capped at `detail_limit` (default falls back to legacy `max_packages=25`); `metadata.section_summaries.packages.packages` surfaces the truncation and points at `list_device_packages` for full data.
 

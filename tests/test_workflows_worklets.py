@@ -12,15 +12,24 @@ from automox_mcp.workflows.worklets import (
 )
 
 _WORKLET_LIST: list[dict[str, Any]] = [
+    # Live /wis/search item shape (sanitized capture 2026-06-05): `uuid`,
+    # plural `categories`, trust/availability signals, and NO status field.
     {
-        "id": "wklt-001",
+        "uuid": "wklt-001",
         "name": "Disable USB Storage",
         "description": "Disables USB mass storage devices",
-        "category": "Security",
+        "categories": ["Security"],
         "os_family": "Windows",
-        "author": "Automox",
-        "created_at": "2024-01-15T00:00:00Z",
+        "language": "PowerShell",
+        "version": "1.2.0",
+        "device_type": "endpoint",
+        "verified": True,
+        "access": "premium",
+        "license_required": False,
+        "create_time": "2024-01-15T00:00:00Z",
+        "update_time": "2024-06-01T00:00:00Z",
     },
+    # Legacy/defensive shape: singular `category`, `id` instead of `uuid`.
     {
         "id": "wklt-002",
         "name": "Check Disk Space",
@@ -84,10 +93,18 @@ async def test_search_includes_optional_fields() -> None:
 
     usb = next(w for w in result["data"]["worklets"] if w["name"] == "Disable USB Storage")
     assert usb["os_family"] == "Windows"
-    assert usb["author"] == "Automox"
+    assert usb["categories"] == ["Security"]
+    # Trust/availability signals from the live catalog shape are projected.
+    assert usb["verified"] is True
+    assert usb["access"] == "premium"
+    assert usb["license_required"] is False
+    assert usb["language"] == "PowerShell"
+    assert usb["version"] == "1.2.0"
 
     disk = next(w for w in result["data"]["worklets"] if w["name"] == "Check Disk Space")
     assert disk["os_families"] == ["Windows", "macOS", "Linux"]
+    # Legacy singular `category` falls back into the plural key.
+    assert disk["categories"] == "Monitoring"
 
 
 @pytest.mark.asyncio

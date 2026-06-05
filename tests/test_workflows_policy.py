@@ -800,6 +800,46 @@ async def test_summarize_policies_filters_inactive_by_default() -> None:
 
 
 @pytest.mark.asyncio
+async def test_summarize_policies_decodes_schedule_days_bitmask() -> None:
+    """Catalog rows decode the schedule_days bitmask alongside the raw value."""
+    policy = {
+        "id": 1,
+        "name": "Weekday Patching",
+        "policy_type_name": "patch",
+        "status": "active",
+        "schedule_days": 62,  # Mon-Fri
+        "schedule_time": "16:00",
+    }
+    unscheduled = {
+        "id": 2,
+        "name": "Manual Policy",
+        "policy_type_name": "patch",
+        "status": "active",
+        # no schedule_days key at all
+    }
+    stub = StubClient(
+        get_responses={
+            "/policies": [[policy, unscheduled], []],
+            "/policystats": [[]],
+        }
+    )
+    stub.org_id = 42  # type: ignore[attr-defined]
+
+    result = await summarize_policies(
+        cast(AutomoxClient, stub),
+        org_id=42,
+        limit=20,
+        include_inactive=False,
+    )
+
+    rows = {p["name"]: p for p in result["data"]["policies"]}
+    weekday = rows["Weekday Patching"]
+    assert weekday["schedule_days"] == 62  # raw bitmask kept
+    assert weekday["schedule_days_decoded"] == "Weekdays (Monday through Friday)"
+    assert "schedule_days_decoded" not in rows["Manual Policy"]
+
+
+@pytest.mark.asyncio
 async def test_summarize_policies_include_inactive() -> None:
     """When include_inactive=True, inactive policies are included."""
     inactive_policy = {

@@ -210,8 +210,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     @server.tool(
         name="policy_compliance_stats",
         description=(
-            "Retrieve per-policy compliance statistics showing compliant vs "
-            "non-compliant device counts and compliance rates for the organization."
+            "Retrieve per-policy compliance statistics for the organization. "
+            "`compliance_rate_percent` is computed over evaluated devices "
+            "(compliant + noncompliant) and is null when none have been "
+            "evaluated; pending devices do not count against compliance and "
+            "are reported separately via `pending_devices` / "
+            "`pending_rate_percent` over all targeted devices."
         ),
         annotations={
             "readOnlyHint": True,

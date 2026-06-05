@@ -183,7 +183,10 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         description=(
             "Aggregate organization-wide device health statistics including managed/unmanaged "
             "breakdown, device status breakdown, compliance metrics, and check-in recency "
-            "analysis. Use this for monitoring dashboards and getting a fleet-wide health overview."
+            "analysis. Compliance follows the platform rule: a device is non-compliant only "
+            "when at least one policy needs remediation — pending work is tracked separately "
+            "as devices_with_pending_policies. Use this for monitoring dashboards and getting "
+            "a fleet-wide health overview."
         ),
         annotations={
             "readOnlyHint": True,

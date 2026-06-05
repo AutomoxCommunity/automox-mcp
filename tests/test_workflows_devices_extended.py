@@ -1194,6 +1194,31 @@ async def test_summarize_device_health_basic_counts() -> None:
 
 
 @pytest.mark.asyncio
+async def test_summarize_device_health_pending_does_not_break_compliance() -> None:
+    # Platform rule (live-verified, PR #149): only needs_remediation flips a
+    # device non-compliant — `pending: true` with `compliant: true` must
+    # count as compliant, tracked separately as pending work.
+    devices = [
+        _make_device(1, policy_status="success", compliant=True, pending=True),
+        _make_device(2, policy_status="success", compliant=True, pending=False),
+        _make_device(3, policy_status="failed", compliant=False, pending=True),
+    ]
+    client = StubClient(get_responses={"/servers": [devices]})
+    reference_time = datetime(2024, 5, 11, 12, 0, 0, tzinfo=UTC)
+
+    result = await summarize_device_health(
+        cast(AutomoxClient, client),
+        org_id=42,
+        current_time=reference_time,
+    )
+
+    data = result["data"]
+    assert data["compliant_devices"] == 2  # pending+compliant stays compliant
+    assert data["compliance_breakdown"] == {"compliant": 2, "non_compliant": 1}
+    assert data["devices_with_pending_policies"] == 2
+
+
+@pytest.mark.asyncio
 async def test_summarize_device_health_policy_execution_breakdown() -> None:
     devices = [
         _make_device(1, policy_status="success"),

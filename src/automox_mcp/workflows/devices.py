@@ -1229,6 +1229,7 @@ async def summarize_device_health(
     platform_counts: Counter[str] = Counter()
     compliant_counts: Counter[str] = Counter()
     devices_with_pending_patches = 0
+    devices_with_pending_policies = 0
     devices_needing_attention = 0
     check_in_recency_counts: Counter[str] = Counter()
     stale_devices: list[dict[str, Any]] = []
@@ -1252,14 +1253,21 @@ async def summarize_device_health(
         platform = summary_fields["platform"] or "unknown"
         platform_counts[platform] += 1
 
+        # Platform rule (live-verified, PR #149): the upstream `compliant`
+        # boolean is authoritative — a device is non-compliant only when at
+        # least one policy needs remediation. Pending work does NOT count
+        # against compliance (a previous revision here counted any
+        # `pending: true` device as non-compliant, contradicting the rule);
+        # it is tracked separately below.
         device_compliant = device.get("compliant")
-        device_pending = device.get("pending")
-        if device_compliant is True and device_pending is False:
+        if device_compliant is True:
             compliant_counts["compliant"] += 1
-        elif device_compliant is False or device_pending is True:
+        elif device_compliant is False:
             compliant_counts["non_compliant"] += 1
         else:
             compliant_counts["unknown"] += 1
+        if device.get("pending") is True:
+            devices_with_pending_policies += 1
 
         pending_patches = summary_fields.get("pending_patches")
         if isinstance(pending_patches, (int, float)) and pending_patches > 0:
@@ -1321,6 +1329,8 @@ async def summarize_device_health(
         "policy_execution_breakdown": dict(policy_execution_counts),
         "platform_breakdown": dict(platform_counts),
         "compliant_devices": compliant_counts["compliant"],
+        "compliance_breakdown": dict(compliant_counts),
+        "devices_with_pending_policies": devices_with_pending_policies,
         "devices_with_pending_patches": devices_with_pending_patches,
         "devices_needing_attention": devices_needing_attention,
         "check_in_recency_breakdown": dict(check_in_recency_counts),

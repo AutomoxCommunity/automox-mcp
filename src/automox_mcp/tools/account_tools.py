@@ -271,9 +271,10 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         name="get_account_user",
         description=(
             "Get an account-scoped user record by UUID: status, account RBAC "
-            "role, verification, and 2FA type. A null/absent "
-            "two_factor_authentication is ambiguous (may mean disabled or "
-            "not-reported) — see metadata.field_notes."
+            "role, verification, and 2FA type. two_factor_authentication "
+            "carries the literal string 'disabled' when 2FA is OFF (do NOT "
+            "read it as a configured type); a null/absent value is ambiguous "
+            "(may mean disabled or not-reported) — see metadata.field_notes."
         ),
         annotations=_READ_ANNOTATIONS,
     )

@@ -85,9 +85,23 @@ async def list_org_api_keys(
         params["page"] = page
     if limit is not None:
         params["limit"] = limit
-    results = await client.get(f"/orgs/{org_id}/api_keys", params=params or None)
+    response = await client.get(f"/orgs/{org_id}/api_keys", params=params or None)
 
-    if not isinstance(results, list):
+    # GET /orgs/{id}/api_keys returns a {"results": [...], "size": N} envelope
+    # (confirmed live 2026-06-05: size=21, results carried 21 items). The
+    # previous bare-list assumption made every conforming response collapse to
+    # zero keys — the same envelope class as #154 (/approvals) and #163
+    # (/data-extracts). Keep a bare-list fallback for defensive parity.
+    size: int | None = None
+    if isinstance(response, Mapping):
+        raw_results = response.get("results")
+        results = raw_results if isinstance(raw_results, list) else []
+        raw_size = response.get("size")
+        if isinstance(raw_size, int):
+            size = raw_size
+    elif isinstance(response, list):
+        results = response
+    else:
         results = []
 
     keys: list[dict[str, Any]] = []
@@ -98,20 +112,26 @@ async def list_org_api_keys(
             "id": item.get("id"),
             "name": item.get("name"),
         }
-        for optional in ("created_at", "expires_at", "last_used_at", "enabled"):
+        # Live DTO key is `is_enabled` (bool), NOT `enabled`; the prior code
+        # read a key the API never returns. created_at/expires_at confirmed
+        # live. The `user` blob (id/email/firstname/lastname) is dropped to
+        # stay lean and avoid forwarding embedded contact PII.
+        for optional in ("created_at", "expires_at", "last_used_at", "is_enabled"):
             val = item.get(optional)
             if val is not None:
                 entry[optional] = val
         keys.append(entry)
+
+    metadata: dict[str, Any] = {"deprecated_endpoint": False}
+    if size is not None:
+        metadata["total_size"] = size
 
     return {
         "data": {
             "total_keys": len(keys),
             "api_keys": keys,
         },
-        "metadata": {
-            "deprecated_endpoint": False,
-        },
+        "metadata": metadata,
     }
 
 
@@ -205,6 +225,24 @@ _ZONE_FIELDS = (
     "created_at",
     "updated_at",
 )
+# Nested org projection for get_user.orgs[]. The User DTO forwards each org
+# whole, and an org object can carry `access_key` (a per-org credential) plus
+# `saml`/`metadata` config blobs. Project an allowlist of navigation-safe
+# fields so a populated secret is never forwarded into model context, mirroring
+# the _ZONE_FIELDS redaction guarantee. (The /users endpoint is scope-gated on
+# the audit key, so the no-access_key witness is implemented defensively rather
+# than live-confirmed.)
+_USER_ORG_FIELDS = (
+    "id",
+    "uuid",
+    "name",
+    "plan",  # kept so the orgs[].plan legend (below) stays meaningful
+    "device_count",
+    "device_limit",
+    "soft_device_limit",
+    "parent_id",
+    "create_time",
+)
 
 
 def _project(item: Mapping[str, Any], fields: tuple[str, ...]) -> dict[str, Any]:
@@ -256,6 +294,13 @@ async def get_user(
     """Get a single user by numeric ID (detail projection; secrets redacted)."""
     response = await client.get(f"/users/{user_id}", params={"o": org_id})
     detail = _project(response, _USER_DETAIL_FIELDS) if isinstance(response, Mapping) else {}
+
+    # orgs[] is forwarded whole by _USER_DETAIL_FIELDS; re-project each nested
+    # org through an allowlist so a populated access_key/saml/metadata is never
+    # leaked into model context (see _USER_ORG_FIELDS).
+    raw_orgs = detail.get("orgs")
+    if isinstance(raw_orgs, list):
+        detail["orgs"] = [_project(o, _USER_ORG_FIELDS) for o in raw_orgs if isinstance(o, Mapping)]
 
     return {
         "data": detail,
@@ -322,11 +367,14 @@ async def get_account_user(
             "account_id": str(account_id),
             "field_notes": {
                 "two_factor_authentication": (
-                    "A string value (e.g. 'email'/'google' per spec) means 2FA of that "
-                    "type is configured. null or absent is AMBIGUOUS: per spec null "
-                    "means 2FA disabled, but this was not live-verified and the field "
-                    "is non-required — null/absent may mean disabled OR not-reported. "
-                    "Do not assert 2FA is enabled or disabled from a null/missing value."
+                    "The literal string 'disabled' means 2FA is OFF (live-verified "
+                    "2026-06-05 — the field carries 'disabled', NOT null, when 2FA is "
+                    "not enabled). Other string values (e.g. 'email'/'google' per spec, "
+                    "not live-verified) name the configured 2FA type, i.e. 2FA is ON. "
+                    "Do NOT read the string 'disabled' as a configured 2FA type — it "
+                    "means the opposite. null or absent remains AMBIGUOUS (field is "
+                    "non-required): may mean disabled OR not-reported, so do not assert "
+                    "2FA is enabled or disabled from a null/missing value."
                 )
             },
         },

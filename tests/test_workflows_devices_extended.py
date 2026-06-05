@@ -900,7 +900,10 @@ async def test_search_devices_severity_json_string_array() -> None:
         org_id=42,
         severity='["critical", "high"]',
     )
-    # Parsed correctly — severity filter is in metadata
+    # Parsed correctly — severity filter is in metadata. The model relies on
+    # this echo (not per-device data) to know the membership guarantee; the
+    # per-device `pending_patches` is the all-severity outstanding total, NOT
+    # the severity-filtered count, which the tool description now states.
     severities = result["metadata"]["filters"]["severity"]
     assert severities == ["critical", "high"]
 
@@ -1496,9 +1499,30 @@ async def test_list_devices_needing_attention_basic_camelcase() -> None:
                     "needsReboot": True,
                     "os_family": "Mac",
                     "connected": True,
+                    # nonCompliant.devices[].policies[] shape captured from a
+                    # live GET /reports/needs-attention (sanitized 2026-06-05):
+                    # severity/reasonForFail/policyCreateTime are present and
+                    # populated on every live entry. Observed severity values
+                    # were unknown/critical/high; the rest of the spec enum
+                    # (no_known_cves/none/low/medium) was not seen at policy
+                    # level this session.
                     "policies": [
-                        {"id": 1, "name": "Patch All", "type": "patch"},
-                        {"id": 2, "name": "Reboot Nightly", "type": "custom"},
+                        {
+                            "id": 1,
+                            "name": "Patch All",
+                            "type": "patch",
+                            "severity": "critical",
+                            "reasonForFail": "missing critical patches",
+                            "policyCreateTime": "2026-04-01T08:00:00+0000",
+                        },
+                        {
+                            "id": 2,
+                            "name": "Reboot Nightly",
+                            "type": "custom",
+                            "severity": "unknown",
+                            "reasonForFail": "device awaiting reboot",
+                            "policyCreateTime": "2026-04-02T08:00:00+0000",
+                        },
                     ],
                 }
             ],
@@ -1519,7 +1543,14 @@ async def test_list_devices_needing_attention_basic_camelcase() -> None:
     assert device["os_family"] == "Mac"
     assert device["connected"] is True
     assert device["failing_policies_count"] == 2
-    assert device["failing_policies"][0]["policy_name"] == "Patch All"
+    failing = device["failing_policies"][0]
+    assert failing["policy_name"] == "Patch All"
+    # Triage signals the report DTO carries are surfaced (previously dropped).
+    assert failing["severity"] == "critical"
+    assert failing["reason"] == "missing critical patches"
+    assert failing["policy_create_time"] == "2026-04-01T08:00:00+0000"
+    # The legend attributing the severity enum is present.
+    assert "failing_policies[].severity" in result["metadata"]["field_notes"]
 
 
 @pytest.mark.asyncio

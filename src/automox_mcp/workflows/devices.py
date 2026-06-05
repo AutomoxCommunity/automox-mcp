@@ -386,7 +386,13 @@ def _summarize_policy_assignments(
         if not isinstance(item, Mapping):
             continue
         total += 1
-        status = _normalize_status(item.get("status"))
+        # server_policies[].status is the same integer policy-status enum as
+        # policy_status[].status (0 needs_remediation / 1 up_to_date / 2
+        # pending), live-verified 2026-06-05: a per-policy crosstab showed
+        # sp.status == policy_status.status for every matching policy (0/1/2
+        # all observed). Decode it via the shared label map; str passthrough
+        # for any non-int the decoder doesn't recognize.
+        status = _policy_entry_status(item)
         status_counter[status] += 1
         if len(summary) >= limit:
             continue
@@ -396,18 +402,21 @@ def _summarize_policy_assignments(
             configuration_raw if isinstance(configuration_raw, Mapping) else {}
         )
 
+        # server_groups is a list of integer group IDs live (e.g. [166208,
+        # 204462]) — never objects — so the old group.get("name") loop always
+        # yielded []. Project the integer IDs directly.
         server_groups_raw = item.get("server_groups")
-        group_names: list[str] = []
+        group_ids: list[int] = []
         group_remaining = 0
         server_group_count: int | None = None
         if isinstance(server_groups_raw, Sequence) and not isinstance(
             server_groups_raw, (str, bytes, bytearray)
         ):
             server_group_count = len(server_groups_raw)
-            group_names = [
-                str(group.get("name"))
+            group_ids = [
+                group
                 for group in server_groups_raw[:_SANITIZED_SEQUENCE_LIMIT]
-                if isinstance(group, Mapping) and group.get("name")
+                if isinstance(group, int) and not isinstance(group, bool)
             ]
             group_remaining = max(len(server_groups_raw) - _SANITIZED_SEQUENCE_LIMIT, 0)
 
@@ -419,7 +428,7 @@ def _summarize_policy_assignments(
             "status": status,
             "next_remediation": item.get("next_remediation"),
             "server_group_count": server_group_count,
-            "server_groups": group_names if group_names else None,
+            "server_group_ids": group_ids if group_ids else None,
             "auto_reboot": configuration.get("auto_reboot")
             if isinstance(configuration.get("auto_reboot"), bool)
             else configuration.get("auto_reboot"),
@@ -556,11 +565,23 @@ async def list_devices_needing_attention(
             for pol in policies[:5]:
                 if not isinstance(pol, Mapping):
                     continue
+                # severity/reasonForFail/policyCreateTime are the triage signals
+                # the report DTO carries that the old projection dropped — all
+                # three were present on every live nonCompliant policy entry
+                # (verified 2026-06-05). See metadata.field_notes for the
+                # severity enum caveat.
                 failing_policies.append(
                     {
-                        "policy_id": pol.get("id"),
-                        "policy_name": pol.get("name"),
-                        "policy_type": pol.get("type"),
+                        k: v
+                        for k, v in {
+                            "policy_id": pol.get("id"),
+                            "policy_name": pol.get("name"),
+                            "policy_type": pol.get("type"),
+                            "severity": pol.get("severity"),
+                            "reason": pol.get("reasonForFail"),
+                            "policy_create_time": pol.get("policyCreateTime"),
+                        }.items()
+                        if v not in (None, "", [], {})
                     }
                 )
         failing_policies_count = (
@@ -597,6 +618,19 @@ async def list_devices_needing_attention(
         "org_id": resolved_org_id,
         "group_id": group_id,
         "requested_limit": limit,
+        "field_notes": {
+            "failing_policies[].severity": (
+                "Per-policy severity from the needs-attention report — present "
+                "and populated on every live entry (verified 2026-06-05; "
+                "observed values: unknown, critical, high). The full enum "
+                "(no_known_cves/none/unknown/low/medium/high/critical) is "
+                "partly spec-only — the remaining values appear as rollup "
+                "bucket keys, not yet seen at policy level."
+            ),
+            "failing_policies[].reason": (
+                "reasonForFail string from the report DTO (live-verified present 2026-06-05)."
+            ),
+        },
     }
 
     return {
@@ -822,11 +856,27 @@ async def describe_device(
         pkg_params: dict[str, Any] = {"o": resolved_org_id, "limit": 10}
         packages_raw = await client.get(f"/servers/{device_id}/packages", params=pkg_params)
         if isinstance(packages_raw, Sequence):
+            # The /servers/{id}/packages item has NO `status` key (live-confirmed
+            # 2026-06-05 — the old projection always emitted null). Project the
+            # real per-package signals the Packages DTO carries. agent_severity
+            # is surfaced raw: per spec it may be a text severity OR a numeric
+            # CVSS score (a single overloaded field) — do not relabel or coerce.
             return [
                 {
-                    "name": pkg.get("name") or pkg.get("package_name"),
-                    "version": pkg.get("version"),
-                    "status": pkg.get("status"),
+                    k: v
+                    for k, v in {
+                        "name": pkg.get("name") or pkg.get("package_name"),
+                        "version": pkg.get("version"),
+                        "installed": pkg.get("installed"),
+                        "ignored": pkg.get("ignored"),
+                        "severity": pkg.get("severity"),
+                        "agent_severity": pkg.get("agent_severity"),
+                        "cve_score": pkg.get("cve_score"),
+                        "cves": pkg.get("cves"),
+                        "requires_reboot": pkg.get("requires_reboot"),
+                        "deferred_until": pkg.get("deferred_until"),
+                    }.items()
+                    if v not in (None, "", [], {})
                 }
                 for pkg in packages_raw[:10]
                 if isinstance(pkg, Mapping)
@@ -864,11 +914,28 @@ async def describe_device(
         queue_params: dict[str, Any] = {"o": resolved_org_id}
         queue_raw = await client.get(f"/servers/{device_id}/queues", params=queue_params)
         if isinstance(queue_raw, Sequence):
+            # Live queue items (GET /servers/{id}/queues, verified 2026-06-05)
+            # carry NONE of command/scheduled_time/status — those were phantom
+            # keys that made every queued command null. The real Command fields
+            # are command_type_name and exec_time (an ISO-8601 scheduled
+            # execution timestamp, not a duration). command_type_name is kept
+            # raw (the vocab is non-exhaustive: live shows Reboot/GetHostname,
+            # spec adds InstallUpdate, the spec example uses GetOS). Some live
+            # items carry an empty-string command_type_name; the empty filter
+            # below intentionally drops the key in that case rather than
+            # surfacing a literal "" — do not "fix" it back to an empty string.
             return [
                 {
-                    "command": item.get("command") or item.get("type"),
-                    "scheduled_time": item.get("scheduled_time") or item.get("scheduledAt"),
-                    "status": item.get("status"),
+                    k: v
+                    for k, v in {
+                        "command_type": item.get("command_type_name"),
+                        "scheduled_time": item.get("exec_time"),
+                        "policy_id": item.get("policy_id"),
+                        "args": item.get("args") or None,
+                        "response": item.get("response"),
+                        "response_time": item.get("response_time"),
+                    }.items()
+                    if v not in (None, "", [], {})
                 }
                 for item in queue_raw[:10]
                 if isinstance(item, Mapping)
@@ -987,6 +1054,33 @@ async def describe_device(
         "software_preview_count": len(packages_preview),
         "pending_commands_count": len(queue_preview),
         "device_facts_available": detail_facts is not None,
+        "field_notes": {
+            "policy_assignments.status_breakdown": (
+                "Per-policy state decoded from the integer policy-status enum "
+                "(0=needs_remediation, 1=up_to_date, 2=pending), live-verified "
+                "2026-06-05. For the device-level compliance rule, see the "
+                "compliance rollup (a device is non-compliant only when a "
+                "policy is in needs_remediation)."
+            ),
+            "policy_assignments.policies[].server_group_ids": (
+                "Integer Automox group IDs the policy is scoped to (live verified list of ints)."
+            ),
+            "software_preview": (
+                "installed/ignored are booleans. severity vocab live-verified "
+                "critical/high/no_known_cves/null (medium per the audit's "
+                "verified probe; low/none/unknown per spec, unverified live). "
+                "agent_severity is surfaced raw: per spec it may be a text "
+                "severity OR a numeric CVSS score (a single overloaded field) "
+                "— it was null on every live sample, so neither form was "
+                "observed."
+            ),
+            "pending_commands": (
+                "command_type comes from the upstream command_type_name (e.g. "
+                "Reboot, GetHostname; InstallUpdate per spec) — the vocabulary "
+                "is non-exhaustive, kept raw. scheduled_time is the queued "
+                "exec_time (ISO-8601 with offset)."
+            ),
+        },
     }
 
     if inventory_summary:

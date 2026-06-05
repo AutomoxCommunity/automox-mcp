@@ -111,15 +111,19 @@ def device_payload() -> dict[str, Any]:
                 "will_reboot": False,
             },
         ],
+        # Shape captured from a live GET /servers/{id} server_policies entry
+        # (sanitized 2026-06-05): `status` is the integer policy-status enum
+        # (here 1 = up_to_date), and `server_groups` is a list of integer
+        # group IDs — never objects with a `name`.
         "server_policies": [
             {
                 "id": 99,
                 "uuid": "33333333-3333-3333-3333-333333333333",
                 "name": "VirtualBox Install",
                 "policy_type_name": "custom",
-                "status": "success",
+                "status": 1,
                 "next_remediation": "2024-05-12T01:00:00Z",
-                "server_groups": [{"name": "Engineering"}, {"name": "QA"}],
+                "server_groups": [166208, 204462],
                 "configuration": {
                     "auto_reboot": False,
                     "device_filters": ["isManaged"],
@@ -142,15 +146,45 @@ def _build_responses(payload: dict[str, Any]) -> dict[tuple[str, str], Any]:
     inventory_path = f"/device-details/orgs/{org_uuid}/devices/{device_uuid}/inventory"
     return {
         ("/servers/42", "console"): payload,
+        # Shape captured from a live GET /servers/{id}/packages item
+        # (sanitized 2026-06-05): there is NO `status` key; real signals are
+        # installed/ignored/severity/agent_severity/cve_score/cves/etc.
+        # Observed severity vocab: critical/high/no_known_cves/null.
         ("/servers/42/packages", "console"): [
-            {"name": "zoom", "version": "6.3.0", "status": "installed"}
+            {
+                "name": "zoom",
+                "version": "6.3.0",
+                "installed": True,
+                "ignored": False,
+                "severity": "high",
+                "agent_severity": None,
+                "cve_score": 8.1,
+                "cves": ["CVE-2024-0001"],
+                "requires_reboot": False,
+            }
         ],
         (inventory_path, "console"): {
             "Applications": [{"name": "zoom"}, {"name": "slack"}],
             "Hardware": [{"name": "Disk", "size": "512GB"}],
         },
+        # Shape captured from a live GET /servers/{id}/queues item (sanitized
+        # 2026-06-05): the real fields are command_type_name and exec_time
+        # (an ISO-8601 scheduled-execution timestamp with offset), plus
+        # args/policy_id/response. There is NO command/scheduled_time/status.
         ("/servers/42/queues", "console"): [
-            {"command": "Reboot", "scheduled_time": "2024-05-12T14:00:00Z", "status": "pending"}
+            {
+                "id": 555,
+                "server_id": 42,
+                "command_id": 777,
+                "command_type_name": "Reboot",
+                "agent_command_type": 3,
+                "exec_time": "2026-06-05T04:09:06+0000",
+                "args": "",
+                "policy_id": 99,
+                "reboot": True,
+                "response": None,
+                "response_time": None,
+            }
         ],
     }
 
@@ -182,7 +216,41 @@ async def test_describe_device_trims_large_payload(device_payload: dict[str, Any
     # `uptime` is renamed with its (verified) unit and parsed to an int.
     assert "uptime" not in core
     assert core["uptime_minutes"] == 8077
-    assert "evaluation_code" not in result["data"]["policy_assignments"]["policies"][0]
+
+    policy_assignments = result["data"]["policy_assignments"]
+    assignment = policy_assignments["policies"][0]
+    assert "evaluation_code" not in assignment
+    # server_policies[].status is the integer enum, decoded to a label —
+    # not the old raw "1"/"2" passthrough.
+    assert assignment["status"] == "up_to_date"
+    assert policy_assignments["status_breakdown"] == {"up_to_date": 1}
+    # server_groups is a list of integer IDs live; the projection surfaces
+    # them as server_group_ids, not a (always-empty) `server_groups` name list.
+    assert assignment["server_group_ids"] == [166208, 204462]
+    assert "server_groups" not in assignment
+
+    # software_preview drops the phantom (always-null) `status` key and
+    # carries the real per-package signals.
+    software = result["data"]["software_preview"][0]
+    assert "status" not in software
+    assert software["installed"] is True
+    assert software["severity"] == "high"
+    assert software["cves"] == ["CVE-2024-0001"]
+
+    # pending_commands maps the live Command fields; the phantom
+    # command/scheduled_time/status keys are gone.
+    pending = result["data"]["pending_commands"][0]
+    assert "command" not in pending
+    assert "status" not in pending
+    assert pending["command_type"] == "Reboot"
+    assert pending["scheduled_time"] == "2026-06-05T04:09:06+0000"
+
+    # The legend that explains these decodings is present.
+    assert "field_notes" in result["metadata"]
+    field_notes = result["metadata"]["field_notes"]
+    assert "policy_assignments.status_breakdown" in field_notes
+    assert "software_preview" in field_notes
+    assert "pending_commands" in field_notes
 
     compliance = result["data"]["compliance"]
     assert compliance["device_compliant"] is False

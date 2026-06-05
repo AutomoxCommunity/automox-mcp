@@ -85,8 +85,9 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "Complete device profile combining device detail, inventory summary, "
             "packages, and policy assignments in a single call. Inventory is "
             "summarized with key values per category. Packages capped at "
-            "max_packages (default 25). Use get_device_inventory or "
-            "list_device_packages for full data."
+            "max_packages (default 25). pending_commands entries carry "
+            "command_type and scheduled_time (the queued exec_time). Use "
+            "get_device_inventory or list_device_packages for full data."
         ),
         annotations={
             "readOnlyHint": True,

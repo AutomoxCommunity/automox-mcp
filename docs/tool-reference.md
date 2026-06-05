@@ -139,9 +139,9 @@ Richer policy execution reporting via the `/policy-history` API with UUID-based 
 Manage vulnerability remediation workflows via the Vuln Sync API. Supports CSV-based import from vulnerability scanners (Qualys, Tenable, etc.).
 
 - **`list_remediation_action_sets`** - List vulnerability remediation action sets for the organization.
-- **`get_action_set_detail`** - Get details for a specific vulnerability remediation action set.
+- **`get_action_set_detail`** - Get details for a specific vulnerability remediation action set. The `status` lifecycle string is observed live as active/ready/building (spec defines no enum; terminal value unconfirmed) — see metadata.field_notes.
 - **`get_action_set_issues`** - Get vulnerability issues (CVEs) associated with an action set.
-- **`get_action_set_solutions`** - Get solutions for an action set. Shows recommended patches or configurations.
+- **`get_action_set_solutions`** - Get solutions for an action set. Shows recommended patches or configurations. Per-vulnerability `severity` and per-device `status` are coded strings with no API-enumerated value set (severity scale/ceiling spec-derived and unverified live; device status observed live as `not-started`) — see metadata.field_notes.
 - **`get_upload_formats`** - Get supported CSV upload formats for vulnerability remediation action sets.
 - **`upload_action_set`** *(write)* - Upload a CSV-based vulnerability remediation action set. Pass the CSV as text in `csv_content`; `source` picks the format (`generic`/`qualys`/`tenable`/`crowd-strike`/`rapid7`) and `filename` becomes the action set's display name. Sent as real `multipart/form-data`; returns the created action set (`status` usually `building` — processing is async). Call `get_upload_formats` first for the required columns.
 - **`delete_action_set`** *(write)* - Delete a single remediation action set by ID. Console metadata, reconstructable via re-upload.

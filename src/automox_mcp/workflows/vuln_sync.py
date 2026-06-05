@@ -139,7 +139,21 @@ async def get_action_set_detail(
 
     return {
         "data": detail,
-        "metadata": {"deprecated_endpoint": False},
+        "metadata": {
+            "deprecated_endpoint": False,
+            "field_notes": {
+                "status": (
+                    "Action-set processing lifecycle. Observed live on this tenant: "
+                    "active, ready, building. The spec defines no enum for this field "
+                    "(ActionSet.status = {type:string, example:'active'}) so the full "
+                    "value set is open and the terminal/ready-to-act value and "
+                    "transition order were NOT confirmed (no upload-to-completion poll). "
+                    "Do not assert which value is terminal. As a cross-check, non-zero "
+                    "issue_count/solution_count indicate processing has produced results "
+                    "regardless of the status string."
+                ),
+            },
+        },
     }
 
 
@@ -201,7 +215,48 @@ async def get_action_set_solutions(
             "total_solutions": len(solutions),
             "solutions": solutions,
         },
-        "metadata": {"deprecated_endpoint": False},
+        "metadata": {
+            "deprecated_endpoint": False,
+            # Legend only — the raw `solutions` payload is forwarded verbatim
+            # (no per-item severity/status mutation). The spec types these
+            # fields as bare strings with no enum; vocabulary notes below mark
+            # what was/wasn't confirmed against the live tenant (2026-06-05; only
+            # rapid7-solution entries were observed on this tenant).
+            "field_notes": {
+                "vulnerabilities[].severity": (
+                    "Per-CVE severity string. The remediation API does NOT enumerate "
+                    "this field (spec types it `{type: string}` with example values "
+                    "low/medium/high). 'critical' was observed live on this tenant, "
+                    "consistent with the lowercase patch-severity scale "
+                    "(no_known_cves/none/unknown/low/medium/high/critical, "
+                    "ceiling=critical) rather than the capitalized OCSF severity scale "
+                    "(Low/High/Critical/Fatal) — but the FULL emitted value set and the "
+                    "ceiling were NOT confirmed (the live sample showed only 'critical'), "
+                    "so the scale/ceiling remains spec-derived / unverified-live. Treat "
+                    "the value as the vendor/source-reported rating; cross-check "
+                    "authoritative CVSS for the CVE id before asserting 'this is the "
+                    "most/least severe'."
+                ),
+                "devices[].status": (
+                    "Per-device remediation status. Spec types it `{type: string}` with "
+                    "the single example 'pending'; no enum. Observed live on this tenant: "
+                    "'not-started' (the spec's 'pending' example was NOT seen live, and "
+                    "other values such as completed/failed/in-progress are neither "
+                    "documented nor confirmed). The full value set is open — do not "
+                    "assert what a given status means without confirming against the "
+                    "device's patch/event history."
+                ),
+                "solutions[].status": (
+                    "A solution-LEVEL status string is defined for the rapid7-solution "
+                    "and solution_type 'unmatched' (schema UnmatchedCVE) sub-types in the "
+                    "spec (example 'pending'), but it was NOT present on the live "
+                    "rapid7-solution entries observed on this tenant (2026-06-05) — those "
+                    "carry status on devices[] only. Spec-defined / not-observed-live: do "
+                    "not rely on a solution-level status being present, and apply the same "
+                    "undocumented free-string caveat as devices[].status if one appears."
+                ),
+            },
+        },
     }
 
 

@@ -42,7 +42,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
 
     @server.tool(
         name="policy_health_overview",
-        description="Summarize recent Automox policy activity.",
+        description=(
+            "Summarize recent Automox policy activity. `status_breakdown` counts "
+            "RUNS by overall result; the 'no_success_or_failure' bucket means "
+            "every device was pending/not_included/remediation_not_applicable (a "
+            "benign no-op or still in progress), not an error."
+        ),
         annotations={
             "readOnlyHint": True,
             "destructiveHint": False,
@@ -73,7 +78,13 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
 
     @server.tool(
         name="policy_execution_timeline",
-        description="Review recent executions for a policy.",
+        description=(
+            "Review recent executions for a policy. Each execution's "
+            "`device_outcomes` are device counts per outcome (not run statuses); "
+            "a run with no successes or failures but pending/not_included/"
+            "remediation_not_applicable completed as a benign no-op or is still "
+            "in progress, not a failure."
+        ),
         annotations={
             "readOnlyHint": True,
             "destructiveHint": False,
@@ -104,7 +115,13 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
 
     @server.tool(
         name="policy_run_results",
-        description="Retrieve per-device results and output for a specific policy execution token.",
+        description=(
+            "Retrieve per-device results and output for a specific policy "
+            "execution token. `exit_code` is the raw process exit code from the "
+            "policy script (0 = success; negative values on Windows are NTSTATUS "
+            "codes as signed 32-bit ints, e.g. -1073741502 = 0xC0000142); "
+            "`result_status` is the lowercase per-device outcome string."
+        ),
         annotations={
             "readOnlyHint": True,
             "destructiveHint": False,

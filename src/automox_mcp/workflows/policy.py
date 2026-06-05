@@ -78,13 +78,15 @@ async def summarize_policy_activity(
         success = item.get("success") or 0
         device_count = item.get("device_count") or 0
 
-        # Classify the run overall
+        # Classify the run overall. The catch-all bucket is NOT "unknown": a run
+        # with no failures and no successes means every device was pending /
+        # not_included / remediation_not_applicable (benign no-op or in progress).
         if failed > 0:
             status_counter["failed"] += 1
         elif success > 0:
             status_counter["success"] += 1
         else:
-            status_counter["unknown"] += 1
+            status_counter["no_success_or_failure"] += 1
 
         policy_key = str(
             item.get("policy_uuid") or item.get("policy_id") or item.get("policy_name") or "unknown"
@@ -146,6 +148,16 @@ async def summarize_policy_activity(
         "window_days": window_days,
         "total_runs_considered": runs_considered,
         "sample_is_truncated": sample_is_truncated,
+        "field_notes": {
+            "status_breakdown": (
+                "Counts RUNS by overall result: 'failed' = at least one device "
+                "failed; 'success' = at least one device succeeded and none "
+                "failed; 'no_success_or_failure' = every device was pending / "
+                "not_included / remediation_not_applicable (a benign no-op or "
+                "still in progress, not an error). These are run counts, not "
+                "device counts."
+            ),
+        },
     }
     if sample_is_truncated:
         metadata["sample_note"] = (
@@ -222,25 +234,53 @@ async def summarize_policy_execution_history(
         run_time = item.get("run_time")
         failed = item.get("failed") or 0
         success = item.get("success") or 0
+        pending = item.get("pending") or 0
+        not_included = item.get("not_included") or 0
+        remediation_not_applicable = item.get("remediation_not_applicable") or 0
 
+        # Run-level status: failed wins, then success. The else branch is NOT
+        # "unknown" — a run with no failures and no successes but nonzero
+        # pending/not_included/remediation_not_applicable is a benign no-op or
+        # still in progress (live-verified 2026-06-05). The conservative call is
+        # status=None there (the probe verified no run-level status vocabulary),
+        # with device_outcomes carrying the disambiguating counts.
         if failed > 0:
-            status = "failed"
+            status: str | None = "failed"
+            status_counter["failed"] += 1
         elif success > 0:
             status = "success"
+            status_counter["success"] += 1
+        elif pending or not_included or remediation_not_applicable:
+            status = None
+            status_counter["no_success_or_failure"] += 1
         else:
-            status = "unknown"
-        status_counter[status] += 1
+            status = None
+            status_counter["no_success_or_failure"] += 1
+
+        # Group ALL device outcome counts under device_outcomes (device counts
+        # per outcome, not run statuses), mirroring _summarize_run in
+        # policy_history.py. `blocked` is included for parity with that key set;
+        # it is omitted when absent (this endpoint's resource does not emit it).
+        outcomes = {
+            key: item.get(key)
+            for key in (
+                "pending",
+                "success",
+                "failed",
+                "not_included",
+                "remediation_not_applicable",
+                "blocked",
+            )
+            if item.get(key) is not None
+        }
 
         timeline.append(
             {
                 "exec_token": exec_token,
                 "run_time": run_time,
-                "status": status if status != "unknown" else None,
+                "status": status,
                 "device_count": item.get("device_count"),
-                "success": success,
-                "failed": failed,
-                "pending": item.get("pending"),
-                "not_included": item.get("not_included"),
+                "device_outcomes": outcomes,
             }
         )
 
@@ -258,6 +298,15 @@ async def summarize_policy_execution_history(
         "policy_uuid": str(policy_uuid),
         "report_days": report_days,
         "run_count": len(timeline),
+        "field_notes": {
+            "device_outcomes": (
+                "Device counts per outcome for the run (live-verified "
+                "2026-06-05), not run statuses; they sum to device_count. A run "
+                "with failed=0 and success=0 but nonzero pending/not_included/"
+                "remediation_not_applicable completed as a benign no-op or is "
+                "still in progress — not a failure (status is null in that case)."
+            ),
+        },
     }
 
     return {
@@ -757,6 +806,23 @@ async def describe_policy_run_result(
         "exec_token": str(exec_token),
         "result_count": len(device_results),
         "status_breakdown": dict(status_counter),
+        # Live-verified 2026-06-05 — without this legend the model has to guess
+        # what a large negative exit_code means, and which namespace a fallback
+        # value came from.
+        "field_notes": {
+            "exit_code": (
+                "Raw process exit code from the policy script on the device: "
+                "0 = success; negative values on Windows are NTSTATUS codes as "
+                "signed 32-bit ints (e.g. -1073741502 = 0xC0000142 "
+                "STATUS_DLL_INIT_FAILED). When the upstream exit_code is null "
+                "this field falls back to the Automox internal error_code (a "
+                "different namespace)."
+            ),
+            "result_status": (
+                "Lowercase per-device outcome string (live-verified: 'failed'; "
+                "'success' and others per spec, unverified live)."
+            ),
+        },
         # Legacy fields retained for backwards-compat (#52). Canonical
         # pagination block lives under metadata.pagination.
         "page": upstream_page,

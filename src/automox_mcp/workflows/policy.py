@@ -801,8 +801,24 @@ async def summarize_patch_approvals(
     resolved_org_id = require_org_id(client, org_id)
 
     params = {"o": resolved_org_id, "limit": limit}
-    approvals = await client.get("/approvals", params=params)
-    approvals = approvals if isinstance(approvals, Sequence) else []
+    response = await client.get("/approvals", params=params)
+    # /approvals returns a {"size": N, "results": [...]} envelope
+    # (components/schemas/Approvals; envelope confirmed live 2026-06-05).
+    # The previous bare-Sequence assumption made this tool silently report
+    # zero approvals on every conforming response — the same envelope class
+    # as the #132 bugs. Keep a bare-list fallback for defensive parity.
+    approvals: Sequence[Any]
+    if isinstance(response, Mapping):
+        results = response.get("results")
+        approvals = (
+            results
+            if isinstance(results, Sequence) and not isinstance(results, (str, bytes))
+            else []
+        )
+    elif isinstance(response, Sequence) and not isinstance(response, (str, bytes)):
+        approvals = response
+    else:
+        approvals = []
 
     status_filter = (status or "").lower()
     status_counts: Counter[str] = Counter()
@@ -815,26 +831,53 @@ async def summarize_patch_approvals(
         approval_status = str(approval_item.get("status") or "unknown").lower()
         status_counts[approval_status] += 1
 
-        severity = str(
-            approval_item.get("severity") or approval_item.get("cvss_severity") or "unknown"
-        ).lower()
-        severity_counts[severity] += 1
+        # The documented approval record carries no severity field; CVE ids
+        # ride under software.cves. Count a real severity when one appears
+        # (forward-compat), and bucket the rest as "unspecified" — distinct
+        # from an upstream value that literally says "unknown".
+        severity_raw = approval_item.get("severity") or approval_item.get("cvss_severity")
+        severity_counts[str(severity_raw).lower() if severity_raw else "unspecified"] += 1
 
         if status_filter and approval_status != status_filter:
             continue
 
-        pending_items.append(
-            {
-                "approval_id": approval_item.get("id"),
-                "title": approval_item.get("title") or approval_item.get("name"),
-                "status": approval_item.get("status"),
-                "severity": approval_item.get("severity"),
-                "device_count": approval_item.get("device_count")
-                or approval_item.get("devices_affected"),
-                "created_at": approval_item.get("created_at"),
-                "deadline": approval_item.get("deadline") or approval_item.get("expires_at"),
+        software_raw = approval_item.get("software")
+        software = software_raw if isinstance(software_raw, Mapping) else {}
+        policy_raw = approval_item.get("policy")
+        policy_info = policy_raw if isinstance(policy_raw, Mapping) else {}
+
+        entry: dict[str, Any] = {
+            "approval_id": approval_item.get("id"),
+            # Spec shape: the human-readable name lives at software.display_name.
+            "title": software.get("display_name")
+            or approval_item.get("title")
+            or approval_item.get("name"),
+            "status": approval_item.get("status"),
+            # Spec: True = approved, False = rejected, null = awaiting decision.
+            "manual_approval": approval_item.get("manual_approval"),
+            "manual_approval_time": approval_item.get("manual_approval_time"),
+        }
+        if severity_raw:
+            entry["severity"] = severity_raw
+        software_summary = {
+            key: software.get(key)
+            for key in ("version", "os_family")
+            if software.get(key) is not None
+        }
+        if software_summary:
+            entry["software"] = software_summary
+        cves_raw = software.get("cves")
+        if isinstance(cves_raw, Sequence) and not isinstance(cves_raw, (str, bytes)):
+            entry["cves"] = [str(cve) for cve in cves_raw[:5]]
+            if len(cves_raw) > 5:
+                entry["cves_truncated"] = len(cves_raw) - 5
+        if policy_info:
+            entry["policy"] = {
+                "id": policy_info.get("id"),
+                "name": policy_info.get("name"),
             }
-        )
+
+        pending_items.append(entry)
 
     data = {
         "total_approvals_considered": len(approvals),

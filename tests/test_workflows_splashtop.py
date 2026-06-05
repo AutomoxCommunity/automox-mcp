@@ -38,8 +38,12 @@ async def test_device_status_returns_payload() -> None:
     client = _make_client(get_responses={path: [payload]})
     result = await get_device_status(cast(AutomoxClient, client), device_uuid=_DEVICE_UUID)
 
+    # Raw DTO booleans still pass through verbatim.
     assert result["data"]["installation_status"] is True
     assert result["data"]["registration_status"] is True
+    # Sibling legend documents the two independent booleans (house style).
+    notes = result["metadata"]["field_notes"]
+    assert set(notes) == {"installation_status", "registration_status"}
 
 
 @pytest.mark.asyncio

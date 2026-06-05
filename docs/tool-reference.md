@@ -130,8 +130,8 @@ Richer policy execution reporting via the `/policy-history` API with UUID-based 
 
 ## Data Extracts (3 tools)
 
-- **`list_data_extracts`** - List available data extracts for the organization. Returns extract names, statuses, and download information.
-- **`get_data_extract`** - Get details and download information for a specific data extract.
+- **`list_data_extracts`** - List data extract jobs for the organization. Returns each job's id, type, status, the `is_completed` readiness boolean, and whether a download link is available (`has_download_url`).
+- **`get_data_extract`** - Get details for a data extract job. Returns status (spec enum `queued|running|complete|failed|canceled|expired`) and `is_completed` (the readiness signal), plus `download_expires_at` and `has_download_url` (true means the CSV is currently downloadable; the presigned URL itself is not returned).
 - **`create_data_extract`** - Request a new data extract for bulk reporting. Returns the extract ID and initial status.
 
 ## Vulnerability Sync (9 tools)
@@ -215,8 +215,8 @@ Wraps the ten `/remotecontrol-st/...` endpoints Automox shipped on 2026-01-14 (S
 
 Tenants without an active Remote Control subscription (Core bundled with Automate Enterprise, or Resolve as a paid add-on) will receive 4XX errors from the upstream — tools surface these as standard `AutomoxApiError`. Module loads only when `splashtop` is included in `AUTOMOX_MCP_MODULES` (or no module filter is set).
 
-- **`splashtop_device_status`** - Installation and registration status for a device (install_time, registration_status, install error if any).
-- **`splashtop_session_status`** - Active session count, max sessions, and whether a new session can be started.
+- **`splashtop_device_status`** - Installation and registration status for a device (install_time, installation_status, registration_status, install error if any). Per spec (not live-verified) the two booleans are independent: a device can be installed but not yet registered.
+- **`splashtop_session_status`** - Active session count, max sessions, and whether a new session can be started. `can_start_new_session` reflects capacity only (true when current < max); attended-access consent is a separate precondition.
 - **`splashtop_get_attended_access`** - Returns whether end-user consent is required before remote sessions can start.
 - **`splashtop_install`** *(write)* - Install the Splashtop RMM client on a device (asynchronous). `request_permission` controls install-time consent (`not_needed` or `ask_reject_on_timeout`), distinct from per-session attended access.
 - **`splashtop_bulk_install_uninstall`** *(write, gated)* - Bulk install or uninstall across a server group. Returns 200 when queued, not when complete. Fleet-scale, so **registered only when `AUTOMOX_MCP_ALLOW_SPLASHTOP_BULK_INSTALL_UNINSTALL=true`** and write mode is enabled.

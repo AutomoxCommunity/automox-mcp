@@ -337,15 +337,19 @@ async def test_audit_v2_non_sequence_response() -> None:
 
 @pytest.mark.asyncio
 async def test_data_extract_get_passes_org() -> None:
-    client = StubClient(get_responses={"/data-extracts/ext-1": [{"id": "ext-1", "status": "done"}]})
-    await get_data_extract(cast(AutomoxClient, client), org_id=99, extract_id="ext-1")
+    # Use a real spec-enum status ("expired") + integer id (live shape), not the
+    # fictional "done" the old fixture taught.
+    client = StubClient(
+        get_responses={"/data-extracts/1": [{"id": 1, "status": "expired", "is_completed": False}]}
+    )
+    await get_data_extract(cast(AutomoxClient, client), org_id=99, extract_id="1")
     params = client.calls[0][2]
     assert params["o"] == 99
 
 
 @pytest.mark.asyncio
 async def test_create_data_extract_passes_body() -> None:
-    response = {"id": "ext-new"}
+    response = [{"id": 2, "status": "queued"}]
     client = StubClient(post_responses={"/data-extracts": [response]})
     await create_data_extract(
         cast(AutomoxClient, client),

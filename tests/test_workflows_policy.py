@@ -337,6 +337,9 @@ async def test_describe_policy_run_result_summarizes_and_normalizes() -> None:
             "total_count": 2,
             "limit": 25,
         },
+        # result_status values are lowercase to match the live-verified shape
+        # (2026-06-05: upstream emits lowercase 'failed'); _normalize_status
+        # would lowercase regardless, but the fixture must mirror the real wire.
         "data": [
             {
                 "device_id": 1,
@@ -344,7 +347,7 @@ async def test_describe_policy_run_result_summarizes_and_normalizes() -> None:
                 "hostname": "alpha",
                 "custom_name": "Alpha",
                 "display_name": "Alpha",
-                "result_status": "SUCCESS",
+                "result_status": "success",
                 "result_reason": "Policy Successfully Ran",
                 "run_time": "2024-01-01T00:00:00Z",
                 "event_time": "2024-01-01T00:01:00Z",
@@ -358,14 +361,32 @@ async def test_describe_policy_run_result_summarizes_and_normalizes() -> None:
                 "device_uuid": "22222222-2222-2222-2222-222222222222",
                 "hostname": "beta",
                 "display_name": "beta",
-                "result_status": "FAILED",
+                "result_status": "failed",
                 "result_reason": "Error",
                 "run_time": "2024-01-01T00:00:30Z",
                 "event_time": "2024-01-01T00:01:30Z",
                 "stdout": "",
                 "stderr": "oops",
-                "exit_code": 1,
+                # Negative NTSTATUS exit code as observed live (0xC0000142).
+                "exit_code": -1073741502,
                 "patches": ["KB123"],
+            },
+            {
+                "device_id": 3,
+                "device_uuid": "33333333-3333-3333-3333-333333333333",
+                "hostname": "gamma",
+                "display_name": "gamma",
+                "result_status": "failed",
+                "result_reason": "Error",
+                "run_time": "2024-01-01T00:00:45Z",
+                "event_time": "2024-01-01T00:01:45Z",
+                "stdout": "",
+                "stderr": "boom",
+                # exit_code null → wrapper falls back to error_code (a different
+                # namespace; the legend documents this collapse).
+                "exit_code": None,
+                "error_code": 42,
+                "patches": [],
             },
         ],
     }
@@ -380,13 +401,24 @@ async def test_describe_policy_run_result_summarizes_and_normalizes() -> None:
         limit=25,
     )
 
-    assert result["data"]["result_summary"]["total_devices"] == 2
+    assert result["data"]["result_summary"]["total_devices"] == 3
     assert result["metadata"]["status_breakdown"]["success"] == 1
-    assert result["metadata"]["status_breakdown"]["failed"] == 1
+    assert result["metadata"]["status_breakdown"]["failed"] == 2
 
-    first_device = result["data"]["devices"][0]
+    devices = result["data"]["devices"]
+    first_device = devices[0]
     assert first_device["result_status"] == "success"
     assert first_device["stdout"] == "ok"
+    # Negative NTSTATUS exit code surfaces unchanged (fidelity).
+    assert devices[1]["exit_code"] == -1073741502
+    # exit_code null → error_code fallback surfaces.
+    assert devices[2]["exit_code"] == 42
+
+    # Finding 15: per-device exit_code / result_status now carry a legend.
+    field_notes = result["metadata"]["field_notes"]
+    assert "exit_code" in field_notes
+    assert "result_status" in field_notes
+    assert "NTSTATUS" in field_notes["exit_code"]
 
     method, path, params, _ = client.calls[0]
     assert method == "GET"
@@ -599,9 +631,12 @@ async def test_summarize_policy_activity_runs_as_list() -> None:
         org_uuid=org_uuid,
     )
 
-    # The run has no failed/success → classified as unknown
-    assert result["data"]["status_breakdown"].get("unknown", 0) >= 1
+    # The run has no failed/success → classified in the renamed catch-all
+    # bucket (was the opaque "unknown"), with a field_notes legend.
+    assert "unknown" not in result["data"]["status_breakdown"]
+    assert result["data"]["status_breakdown"].get("no_success_or_failure", 0) >= 1
     assert result["data"]["total_policy_runs"] == 10
+    assert "status_breakdown" in result["metadata"]["field_notes"]
 
 
 @pytest.mark.asyncio
@@ -671,6 +706,13 @@ async def test_summarize_policy_execution_history_list_response() -> None:
     org_uuid = UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
     policy_uuid = UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
 
+    # Run shapes captured (sanitized) from a live GET against
+    # /policy-history/policy-runs?policy_uuid:equals=... on 2026-06-05. The
+    # third run is a real all-not-applicable no-op observed live (pending=0,
+    # success=0, failed=0, remediation_not_applicable + not_included nonzero,
+    # summing to device_count) — counts adjusted only to keep the fixture
+    # small; the shape is real. `blocked` is intentionally absent (this
+    # endpoint's resource does not emit it live).
     runs = [
         {
             "execution_token": "tok-1",
@@ -686,6 +728,16 @@ async def test_summarize_policy_execution_history_list_response() -> None:
             "failed": 0,
             "success": 5,
             "device_count": 5,
+        },
+        {
+            "execution_token": "tok-3",
+            "run_time": "2024-06-03T00:00:00Z",
+            "pending": 1,
+            "success": 0,
+            "failed": 0,
+            "not_included": 4,
+            "remediation_not_applicable": 5,
+            "device_count": 10,
         },
     ]
 
@@ -704,10 +756,28 @@ async def test_summarize_policy_execution_history_list_response() -> None:
 
     assert result["data"]["status_breakdown"]["failed"] == 1
     assert result["data"]["status_breakdown"]["success"] == 1
-    assert len(result["data"]["recent_executions"]) == 2
+    # The no-op run lands in the renamed catch-all bucket, never "unknown".
+    assert "unknown" not in result["data"]["status_breakdown"]
+    assert result["data"]["status_breakdown"]["no_success_or_failure"] == 1
+    execs = result["data"]["recent_executions"]
+    assert len(execs) == 3
     assert result["data"]["policy_uuid"] == str(policy_uuid)
     # policy_name is only extracted when payload is a Mapping — for a plain list it's None
     assert result["data"]["policy_name"] is None
+
+    # The no-op run now carries device_outcomes including the previously-dropped
+    # remediation_not_applicable count, and its status is NOT "unknown".
+    noop = execs[2]
+    assert noop["status"] != "unknown"
+    assert noop["status"] is None
+    assert noop["device_outcomes"]["remediation_not_applicable"] == 5
+    assert noop["device_outcomes"]["not_included"] == 4
+    assert noop["device_outcomes"]["pending"] == 1
+    assert "blocked" not in noop["device_outcomes"]
+    # The failed run's device_outcomes drop null keys (is-not-None guard).
+    assert execs[0]["device_outcomes"] == {"failed": 2, "success": 0}
+    # Legend present and live-verified.
+    assert "device_outcomes" in result["metadata"]["field_notes"]
 
 
 @pytest.mark.asyncio
@@ -743,8 +813,11 @@ async def test_summarize_policy_execution_history_mapping_response() -> None:
 
     execs = result["data"]["recent_executions"]
     assert len(execs) == 1
-    # status is None when both failed and success are 0
+    # status is None when both failed and success are 0 (no-op / in-progress);
+    # device_outcomes carries the truth, status is never the literal "unknown".
     assert execs[0]["status"] is None
+    assert execs[0]["status"] != "unknown"
+    assert execs[0]["device_outcomes"] == {"failed": 0, "success": 0}
 
 
 # ---------------------------------------------------------------------------

@@ -73,8 +73,98 @@ _ISSUES = [
     {"id": 202, "cve_id": "CVE-2026-0002", "severity": "high", "title": "Curl vuln"},
 ]
 
+# SANITIZED LIVE CAPTURE (entry 0) + spec-derived synthetic sub-type (entry 1).
+#
+# Entry 0 mirrors the real get_action_set_solutions payload captured from the
+# live tenant 2026-06-05: solution_type 'rapid7-solution', NO solution-level
+# `status` key, `solution_details` is a *dict* (not a string), `remediation_type`
+# 'patch-with-worklet', per-device status observed as 'not-started' (NOT the
+# spec's 'pending' example), severity observed as 'critical', and the device
+# objects carry more keys than the spec example (os/details dicts, agent_status,
+# device_status). All device names/custom_names and IPs are replaced with
+# synthetic values (RFC-5737 TEST-NET + RFC-1918 placeholders); ids/proof/version
+# strings are synthetic. No real hostname/IP/CVE-proof text is retained.
+#
+# Entry 1 is SPEC-DERIVED (not live — this tenant emits only rapid7-solution):
+# an 'automox-patch' SolutionObject sub-type assembled from the DTO property
+# definitions to exercise the alternate shape (status on devices[], a string
+# solution_details, low/high severities). Severity intentionally includes a None
+# (not in the spec examples) to prove the wrapper does NO normalization/coercion;
+# the raw payload must pass through verbatim. If a live automox-patch capture
+# later becomes available it should supersede this entry.
 _SOLUTIONS = [
-    {"id": 301, "title": "Update OpenSSL to 3.2.0", "action_count": 5},
+    {
+        "id": 5001,
+        "organization_id": 42,
+        "solution_type": "rapid7-solution",
+        "remediation_type": "patch-with-worklet",
+        "solution_details": {
+            "solution_id": "rapid7-sol-0001",
+            "solution_type": "patch",
+            "solution_summary": "Apply vendor security update for example component",
+            "solution_fix": "Upgrade example-pkg to the fixed release",
+        },
+        "devices": [
+            {
+                "id": 1,
+                "name": "synthetic-host-01",
+                "custom_name": None,
+                "ip_addrs": ["192.0.2.10"],
+                "ip_addrs_private": ["10.0.0.10"],
+                "status": "not-started",
+                "deleted": False,
+                "os": {"version": "10.0.0", "name": "Example OS", "family": "Windows"},
+                "details": {"proof": "synthetic-proof-text", "last_found": "2026-06-01T00:00:00Z"},
+                "agent_status": "online",
+                "device_status": "active",
+            },
+        ],
+        "vulnerabilities": [
+            {
+                "id": "CVE-2026-0001",
+                "title": "Example library RCE",
+                "summary": "Remote code execution in example library",
+                "severity": "critical",
+            },
+        ],
+    },
+    {
+        # SPEC-DERIVED synthetic automox-patch entry (see header comment).
+        "solution_type": "automox-patch",
+        "remediation_type": "patch",
+        "solution_details": "Apply vendor security update",
+        "devices": [
+            {
+                "id": 2,
+                "name": "synthetic-host-02",
+                "custom_name": "lab-box-beta",
+                "status": "pending",
+                "deleted": False,
+                "ip_addrs_private": ["10.0.0.20"],
+            },
+        ],
+        "vulnerabilities": [
+            {
+                "id": "CVE-2026-0002",
+                "title": "Example info leak",
+                "summary": "Information disclosure in example component",
+                "severity": "low",
+            },
+            {
+                "id": "CVE-2026-0003",
+                "title": "Example library RCE",
+                "summary": "Remote code execution in example library",
+                "severity": "high",
+            },
+            {
+                # null severity — must survive verbatim (no coercion to '')
+                "id": "CVE-2026-0004",
+                "title": "Example uncategorized issue",
+                "summary": "Unrated finding from source",
+                "severity": None,
+            },
+        ],
+    },
 ]
 
 _FORMATS = [
@@ -134,6 +224,11 @@ async def test_detail_returns_info() -> None:
     # Raw statistics block exposed for callers that need per-bucket detail
     assert "issues" in detail["statistics"]
     assert "solutions" in detail["statistics"]
+    # The status legend documents the live-observed lifecycle vocabulary.
+    status_note = result["metadata"]["field_notes"]["status"]
+    assert "active" in status_note
+    assert "ready" in status_note
+    assert "building" in status_note
 
 
 # ---------------------------------------------------------------------------
@@ -168,7 +263,51 @@ async def test_solutions_returns_list() -> None:
         org_id=42,
         action_set_id=1,
     )
-    assert result["data"]["total_solutions"] == 1
+    assert result["data"]["total_solutions"] == 2
+    # The raw solutions payload must pass through UNCHANGED — no severity/status
+    # normalization or coercion. Deep-equality against the fixture proves it.
+    assert result["data"]["solutions"] == _SOLUTIONS
+    # Live-captured rapid7 entry: device status 'not-started' (NOT the spec's
+    # 'pending'), severity 'critical', and NO solution-level status key.
+    rapid7 = result["data"]["solutions"][0]
+    assert rapid7["devices"][0]["status"] == "not-started"
+    assert rapid7["vulnerabilities"][0]["severity"] == "critical"
+    assert "status" not in rapid7
+    # Spec-derived automox-patch entry: device-level status, severities verbatim
+    # including the None (proving no coercion).
+    patch_entry = result["data"]["solutions"][1]
+    assert patch_entry["devices"][0]["status"] == "pending"
+    severities = [v["severity"] for v in patch_entry["vulnerabilities"]]
+    assert severities == ["low", "high", None]
+
+    # Legend present and keyed for the three coded fields.
+    field_notes = result["metadata"]["field_notes"]
+    assert "vulnerabilities[].severity" in field_notes
+    assert "devices[].status" in field_notes
+    assert "solutions[].status" in field_notes
+
+
+@pytest.mark.asyncio
+async def test_solutions_field_notes_marked_unverified() -> None:
+    """Regression guard for the no-unverified-vocab rule: the severity scale is
+    explicitly marked unverified-live (only 'critical' was observed, not the full
+    scale/ceiling), and the device-status legend states what was vs. wasn't seen
+    live rather than asserting an undocumented value space."""
+    client = StubClient(
+        get_responses={"/orgs/42/remediations/action-sets/1/solutions": [_SOLUTIONS]}
+    )
+    result = await get_action_set_solutions(
+        cast(AutomoxClient, client),
+        org_id=42,
+        action_set_id=1,
+    )
+    field_notes = result["metadata"]["field_notes"]
+    assert "unverified-live" in field_notes["vulnerabilities[].severity"].lower()
+    # Device status legend must report the live-observed value, not invent siblings.
+    assert "not-started" in field_notes["devices[].status"]
+    assert "open" in field_notes["devices[].status"].lower()
+    # solutions[].status must be flagged spec-defined but not-observed-live.
+    assert "not-observed-live" in field_notes["solutions[].status"].lower()
 
 
 # ---------------------------------------------------------------------------

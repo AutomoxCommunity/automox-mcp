@@ -84,7 +84,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
 
     @server.tool(
         name="get_action_set_detail",
-        description="Get details for a specific vulnerability remediation action set.",
+        description=(
+            "Get details for a specific vulnerability remediation action set. The "
+            "`status` field is a processing-lifecycle string observed live as "
+            "active/ready/building (spec defines no enum; terminal value unconfirmed) "
+            "— see metadata.field_notes."
+        ),
         annotations={
             "readOnlyHint": True,
             "destructiveHint": False,
@@ -132,8 +137,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     @server.tool(
         name="get_action_set_solutions",
         description=(
-            "Get solutions for a vulnerability action set. "
-            "Shows recommended patches or configurations to resolve vulnerabilities."
+            "Get solutions for a vulnerability action set. Shows recommended patches "
+            "or configurations to resolve vulnerabilities. Per-vulnerability `severity` "
+            "and per-device `status` are coded strings with no API-enumerated value set "
+            "(severity scale/ceiling spec-derived and unverified live; device status "
+            "observed live as 'not-started') — see metadata.field_notes."
         ),
         annotations={
             "readOnlyHint": True,

@@ -21,14 +21,14 @@ def register(server: FastMCP) -> None:
 
 2. **Check device inventory**: Use `get_device_inventory` to review hardware, security, and system details.
 
-3. **Review installed packages**: Use `list_device_packages` to see which packages are installed, their versions, and patch status. Look for packages with severity "critical" or "high".
+3. **Review installed packages**: Use `list_device_packages` to see which packages are present, their versions, and install state. Each entry has an `installed` boolean (true = installed, false = available but not installed) and a `severity` (risk: "critical"/"high"/"medium"/"low"/"no_known_cves" or null) — install state comes from `installed`, not from any patch-status field. Look for not-yet-installed packages (`installed`: false) with severity "critical" or "high".
 
 4. **Check policy status**: From the device detail, identify which policies apply to this device and their compliance status.
 
 5. **Review policy execution history**: For any failing policies, use `policy_execution_timeline` to see recent runs and `policy_run_results` to understand per-device failures.
 
 6. **Determine root cause**: Based on the above, identify whether the non-compliance is due to:
-   - Missing patches (check packages with patch_status "missing")
+   - Missing patches (check packages with `installed`: false — available but not yet installed — prioritizing high/critical `severity`)
    - Failed policy execution (check policy run results for errors)
    - Device offline/stale (check last_seen timestamp)
    - Configuration drift (compare device state to policy requirements)

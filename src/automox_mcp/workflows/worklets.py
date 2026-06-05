@@ -120,6 +120,11 @@ async def get_worklet_detail(
         "verified",
         "access",
         "license_required",
+        # Safety flag present on live worklet detail (verified 2026-06-05:
+        # 10/60 worklets carry it, value False). Whether running the worklet
+        # requires a logged-in user / interactive session — surface it so the
+        # model can flag unattended-execution risk before recommending a run.
+        "user_interaction_required",
         "language",
         "version",
         "device_type",

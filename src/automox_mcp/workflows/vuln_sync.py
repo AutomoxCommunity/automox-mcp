@@ -143,13 +143,17 @@ async def get_action_set_detail(
             "deprecated_endpoint": False,
             "field_notes": {
                 "status": (
-                    "Action-set processing lifecycle. Observed live on this tenant: "
-                    "active, ready, building. The spec defines no enum for this field "
-                    "(ActionSet.status = {type:string, example:'active'}) so the full "
-                    "value set is open and the terminal/ready-to-act value and "
-                    "transition order were NOT confirmed (no upload-to-completion poll). "
-                    "Do not assert which value is terminal. As a cross-check, non-zero "
-                    "issue_count/solution_count indicate processing has produced results "
+                    "Action-set processing lifecycle. Provenance differs per value: "
+                    "'ready' is the only value OBSERVED LIVE on this tenant (both "
+                    "action sets returned 'ready', 2026-06-05). 'active' is the spec "
+                    "example (ActionSet.status = {type:string, example:'active'}); "
+                    "'building' is this wrapper's default-on-upload constant for the "
+                    "async create path — NEITHER 'active' nor 'building' was observed "
+                    "live here. The spec defines no enum, so the value set is open and "
+                    "the terminal/ready-to-act value and transition order are NOT "
+                    "confirmed (no upload-to-completion poll). Do not assert which "
+                    "value is terminal. As a cross-check, non-zero issue_count/"
+                    "solution_count indicate processing has produced results "
                     "regardless of the status string."
                 ),
             },

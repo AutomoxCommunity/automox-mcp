@@ -26,8 +26,14 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "schedules. Answers 'Are we ready for Patch Tuesday?' in a single call. "
             "Policy `schedule_days` bitmasks carry a `schedule_days_decoded` "
             "sibling; `schedule_time` is a bare HH:MM string with no timezone "
-            "marker. Patch `severity` values use the vocabulary "
-            "critical/high/medium/low/no_known_cves (null when unrated)."
+            "marker. Per-device `prepatch_report.devices[].highest_severity` "
+            "uses the vocabulary critical/high/medium/low/none/no_known_cves/"
+            "unknown (full enum per spec; live-observed on this tenant: "
+            "no_known_cves, high, critical, unknown). The projection emits the "
+            "string 'unknown' for absent/undetermined severity — it never emits "
+            "JSON null. 'no_known_cves' (patches carry no CVE) and 'unknown' "
+            "(severity absent/undetermined, NOT inherently high risk) are "
+            "distinct states and are never collapsed."
         ),
         annotations={
             "readOnlyHint": True,

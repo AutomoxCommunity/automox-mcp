@@ -660,16 +660,25 @@ async def run_readonly_tools() -> None:
             record("list_device_packages", False, "skipped — no device_id")
 
         # 22. search_org_packages — assert phantom `awaiting` output key never
-        # reappears and the severity legend is present (unconditional), not just
-        # a bare not-None check (which would pass on wrong-but-200 data).
+        # reappears, the severity legend is present (unconditional), and the
+        # count is page-scoped with a truncation signal (the endpoint is a bare
+        # list with no total). A full page (count == limit) must flag has_more
+        # and report `returned_package_count` (not a fleet-wide `total_packages`).
         resp = await _safe_call(session, "search_org_packages", {"limit": 2})
-        org_pkgs = (resp or {}).get("data", {}).get("packages", []) or []
+        org_data = (resp or {}).get("data", {})
+        org_pkgs = org_data.get("packages", []) or []
         no_awaiting = all("awaiting" not in p for p in org_pkgs)
         org_legend = "severity" in (resp or {}).get("metadata", {}).get("field_notes", {})
+        org_pagination = (resp or {}).get("metadata", {}).get("pagination", {})
+        returned = org_data.get("returned_package_count")
+        # Page-scoped count, no fleet-wide total leaked, full page → has_more.
+        page_scoped = "total_packages" not in org_data and returned == len(org_pkgs)
+        truncation_ok = (returned or 0) < 2 or org_pagination.get("has_more") is True
         record(
             "search_org_packages",
-            resp is not None and no_awaiting and org_legend,
-            f"{_count_or_err(resp)} no_awaiting={no_awaiting} legend={org_legend}",
+            resp is not None and no_awaiting and org_legend and page_scoped and truncation_ok,
+            f"returned={returned} no_awaiting={no_awaiting} legend={org_legend} "
+            f"page_scoped={page_scoped} has_more={org_pagination.get('has_more')}",
         )
 
         # ---- Reports ----

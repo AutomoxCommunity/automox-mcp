@@ -9,6 +9,56 @@ from urllib.parse import quote
 from ..client import AutomoxClient
 from ..utils.response import build_pagination_metadata
 
+# Field-level legends surfaced in metadata.field_notes so the model can read
+# the verified vocabularies/units alongside the raw projection. All claims here
+# are live-verified (controlled-object probe 2026-06-05) EXCEPT the
+# use_local_tz=true timezone semantics, which the probe could not exercise
+# (the probed object used use_local_tz=false) and are therefore attributed to
+# the spec/input semantics, not verified live.
+_WINDOW_FIELD_NOTES: dict[str, str] = {
+    "status": "Lowercase: active | inactive (live-verified 2026-06-05).",
+    "recurrence": (
+        "Read responses normalize to UPPERCASE (ONCE | RECURRING) even though "
+        "create/update accept lowercase (once/recurring) — live-verified 2026-06-05."
+    ),
+    "dtstart": (
+        "ISO 8601, echoed exactly as submitted. When use_local_tz=false the "
+        "trailing Z is literal UTC (live-verified 2026-06-05). When "
+        "use_local_tz=true the same wall-clock is applied in each device's "
+        "local timezone, so the Z suffix does NOT mean UTC (per spec/input "
+        "semantics, not live-verified)."
+    ),
+    "use_local_tz": (
+        "false = interpret dtstart as UTC (live-verified); true = interpret "
+        "dtstart's wall-clock in each device's local timezone (per spec/input "
+        "semantics, not live-verified)."
+    ),
+}
+
+_SCHEDULED_WINDOWS_FIELD_NOTES: dict[str, str] = {
+    "start": (
+        "Derived occurrence start; the window entity has no stored start/end "
+        "(it is dtstart + duration_minutes + rrule). Timezone basis follows "
+        "the parent window's use_local_tz, which this endpoint does not return."
+    ),
+    "end": (
+        "Derived occurrence end (start + duration_minutes). See start note for timezone basis."
+    ),
+}
+
+
+def _first_present(m: Mapping[str, Any], *keys: str) -> Any:
+    """Return the first key whose value is not None.
+
+    Used for pagination totals so a genuine zero (``total_elements == 0``,
+    falsy) is preserved instead of being coalesced away by an ``or`` chain.
+    """
+    for k in keys:
+        v = m.get(k)
+        if v is not None:
+            return v
+    return None
+
 
 def _scheduled_windows_path(base_path: str, date: str | None) -> str:
     """Append a date query param without percent-encoding the colons.
@@ -113,7 +163,10 @@ async def get_policy_window(
 
     return {
         "data": data,
-        "metadata": {"deprecated_endpoint": False},
+        "metadata": {
+            "deprecated_endpoint": False,
+            "field_notes": dict(_WINDOW_FIELD_NOTES),
+        },
     }
 
 
@@ -236,8 +289,13 @@ async def search_policy_windows(
         raw_items = result.get("content") or result.get("data") or result.get("windows") or []
         if isinstance(raw_items, list):
             windows = [_summarize_window(w) for w in raw_items if isinstance(w, Mapping)]
-        total_elements = result.get("total_elements") or result.get("totalElements")
-        total_pages = result.get("total_pages") or result.get("totalPages")
+        # Use explicit None-coalescing (not `or`) so a genuine zero count
+        # survives. A Spring Page with total_elements=0 is falsy; an `or`
+        # chain would fall through to the absent camelCase key (None) and
+        # drop the totals from pagination metadata. The camelCase fallback is
+        # defensive only — the live envelope is snake_case (probe 2026-06-05).
+        total_elements = _first_present(result, "total_elements", "totalElements")
+        total_pages = _first_present(result, "total_pages", "totalPages")
     elif isinstance(result, list):
         windows = [_summarize_window(w) for w in result if isinstance(w, Mapping)]
 
@@ -256,6 +314,7 @@ async def search_policy_windows(
         "data": data,
         "metadata": {
             "deprecated_endpoint": False,
+            "field_notes": dict(_WINDOW_FIELD_NOTES),
             "pagination": build_pagination_metadata(
                 page=page,
                 page_size=size,
@@ -381,7 +440,10 @@ async def get_group_scheduled_windows(
             "group_uuid": group_uuid,
             "periods": periods,
         },
-        "metadata": {"deprecated_endpoint": False},
+        "metadata": {
+            "deprecated_endpoint": False,
+            "field_notes": dict(_SCHEDULED_WINDOWS_FIELD_NOTES),
+        },
     }
 
 
@@ -427,5 +489,8 @@ async def get_device_scheduled_windows(
             "device_uuid": device_uuid,
             "periods": periods,
         },
-        "metadata": {"deprecated_endpoint": False},
+        "metadata": {
+            "deprecated_endpoint": False,
+            "field_notes": dict(_SCHEDULED_WINDOWS_FIELD_NOTES),
+        },
     }

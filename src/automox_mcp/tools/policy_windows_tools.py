@@ -19,6 +19,36 @@ from ..utils.tooling import (
 )
 
 # -----------------------------------------------------------------
+# RRULE grammar (live-verified 2026-06-05): the upstream validator does NOT
+# accept generic RFC 5545. It enforces exactly two grammars; FREQ=WEEKLY (and
+# any other FREQ for recurring) is rejected with a 400.
+#   recurrence=once     -> FREQ=DAILY;UNTIL=YYYYMMDDTHHMMSSZ  (compact UNTIL,
+#                          no COUNT)
+#   recurrence=recurring-> FREQ=YEARLY;BYMONTH=<1-12>;BYDAY=<+N weekday> only
+# -----------------------------------------------------------------
+_RRULE_GRAMMAR_NOTE = (
+    "The 'rrule' field does NOT accept generic RFC 5545; the upstream "
+    "validator enforces exactly two grammars (live-verified 2026-06-05). "
+    "For recurrence=once: FREQ=DAILY;UNTIL=YYYYMMDDTHHMMSSZ (compact UNTIL, "
+    "no COUNT). For recurrence=recurring: FREQ=YEARLY;BYMONTH=<1-12>;"
+    "BYDAY=<+N weekday> only — no other FREQ values, no WEEKLY."
+)
+
+_RRULE_FIELD_DESCRIPTION = (
+    "RRULE string. Validator-constrained, NOT generic RFC 5545: "
+    "recurrence=once requires FREQ=DAILY;UNTIL=YYYYMMDDTHHMMSSZ; "
+    "recurrence=recurring requires FREQ=YEARLY;BYMONTH=<1-12>;BYDAY=<+N "
+    "weekday> only (FREQ=WEEKLY is rejected with a 400)."
+)
+
+_DTSTART_FIELD_DESCRIPTION = (
+    "Start datetime, ISO 8601 (e.g. 2026-01-01T02:00:00Z). When "
+    "use_local_tz=false this is UTC; when use_local_tz=true the same "
+    "wall-clock is applied in each device's local timezone."
+)
+
+
+# -----------------------------------------------------------------
 # Pydantic parameter models
 # -----------------------------------------------------------------
 
@@ -109,13 +139,13 @@ class CreatePolicyWindowParams(ForbidExtraModel):
     window_type: Literal["exclude"] = Field(description="Window type")
     window_name: str = Field(max_length=100)
     window_description: str = Field(max_length=500)
-    rrule: str = Field(description="RFC 5545 RRULE string")
+    rrule: str = Field(description=_RRULE_FIELD_DESCRIPTION)
     duration_minutes: int = Field(gt=0, le=43200)
     use_local_tz: bool
     recurrence: Literal["recurring", "once"]
     group_uuids: list[UUID]
     dtstart: str = Field(
-        description="Start datetime in ISO 8601 UTC format",
+        description=_DTSTART_FIELD_DESCRIPTION,
         pattern=r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?Z?$",
     )
     status: Literal["active", "inactive"]
@@ -124,7 +154,9 @@ class CreatePolicyWindowParams(ForbidExtraModel):
     @classmethod
     def validate_rrule(cls, v: str) -> str:
         if not v.startswith("FREQ="):
-            raise ValueError("rrule must start with 'FREQ=' per RFC 5545")
+            raise ValueError(
+                "rrule must start with 'FREQ=' (FREQ=DAILY for once; FREQ=YEARLY for recurring)"
+            )
         if len(v) > 500:
             raise ValueError("rrule must not exceed 500 characters")
         return v
@@ -140,7 +172,7 @@ class UpdatePolicyWindowParams(ForbidExtraModel):
     window_type: Literal["exclude"] | None = None
     window_name: str | None = Field(None, max_length=100)
     window_description: str | None = Field(None, max_length=500)
-    rrule: str | None = None
+    rrule: str | None = Field(None, description=_RRULE_FIELD_DESCRIPTION)
     duration_minutes: int | None = Field(None, gt=0, le=43200)
     use_local_tz: bool | None = None
     recurrence: Literal["recurring", "once"] | None = None
@@ -152,7 +184,9 @@ class UpdatePolicyWindowParams(ForbidExtraModel):
     def validate_rrule(cls, v: str | None) -> str | None:
         if v is not None:
             if not v.startswith("FREQ="):
-                raise ValueError("rrule must start with 'FREQ=' per RFC 5545")
+                raise ValueError(
+                    "rrule must start with 'FREQ=' (FREQ=DAILY for once; FREQ=YEARLY for recurring)"
+                )
             if len(v) > 500:
                 raise ValueError("rrule must not exceed 500 characters")
         return v
@@ -215,7 +249,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
 
     @server.tool(
         name="get_policy_window",
-        description="Retrieve details for a specific maintenance/exclusion window by UUID.",
+        description=(
+            "Retrieve details for a specific maintenance/exclusion window by UUID. "
+            "Returns status (lowercase active | inactive) and recurrence (UPPERCASE "
+            "ONCE | RECURRING on read)."
+        ),
         annotations={
             "readOnlyHint": True,
             "destructiveHint": False,
@@ -306,7 +344,9 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         description=(
             "Get upcoming scheduled maintenance periods for a server group. "
             "Returns start/end times and window types. Optionally provide a "
-            "future date limit (ISO 8601 UTC)."
+            "future date limit (ISO 8601 UTC). start/end are derived occurrence "
+            "times (the window stores dtstart+duration_minutes+rrule, not "
+            "start/end); their timezone basis follows the window's use_local_tz."
         ),
         annotations={
             "readOnlyHint": True,
@@ -339,7 +379,9 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         description=(
             "Get upcoming scheduled maintenance periods for a specific device. "
             "Returns start/end times and window types. Optionally provide a "
-            "future date limit (ISO 8601 UTC)."
+            "future date limit (ISO 8601 UTC). start/end are derived occurrence "
+            "times (the window stores dtstart+duration_minutes+rrule, not "
+            "start/end); their timezone basis follows the window's use_local_tz."
         ),
         annotations={
             "readOnlyHint": True,
@@ -374,9 +416,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         @server.tool(
             name="create_policy_window",
             description=(
-                "Create a new maintenance/exclusion window. Uses RFC 5545 RRULE "
-                "for scheduling. All fields are required. The window prevents "
-                "policy execution on the specified groups during the defined periods."
+                "Create a new maintenance/exclusion window that prevents policy "
+                "execution on the specified groups during the defined periods. "
+                "All fields are required. " + _RRULE_GRAMMAR_NOTE + " status "
+                "accepts active|inactive; recurrence accepts once|recurring "
+                "(lowercase on input)."
             ),
             annotations={
                 "readOnlyHint": False,
@@ -431,7 +475,9 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             name="update_policy_window",
             description=(
                 "Update an existing maintenance window. Only dtstart is required; "
-                "all other fields are optional for partial updates."
+                "all other fields are optional for partial updates. status is "
+                "lowercase active | inactive; recurrence is lowercase once | "
+                "recurring on input. " + _RRULE_GRAMMAR_NOTE
             ),
             annotations={
                 "readOnlyHint": False,

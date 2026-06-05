@@ -230,7 +230,15 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
 
     @server.tool(
         name="patch_approvals_summary",
-        description="Summarize pending patch approvals and their severity.",
+        description=(
+            "Summarize patch approvals awaiting decision. Each approval covers "
+            "one software package (`title`, `software.version`/`os_family`, CVE "
+            "ids under `cves`) for a specific policy; `manual_approval` is "
+            "true = approved, false = rejected, null = awaiting decision. The "
+            "upstream record has no severity field, so `severity_breakdown` "
+            "buckets approvals without one as 'unspecified' — use the CVE ids "
+            "to judge urgency."
+        ),
         annotations={
             "readOnlyHint": True,
             "destructiveHint": False,

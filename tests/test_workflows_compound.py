@@ -47,22 +47,45 @@ _PREPATCH_RESPONSE = {
     }
 }
 
-_APPROVALS_RESPONSE = [
-    {
-        "id": 201,
-        "title": "Chrome 120",
-        "status": "pending",
-        "severity": "high",
-        "device_count": 5,
-    },
-    {
-        "id": 202,
-        "title": "Firefox 121",
-        "status": "approved",
-        "severity": "medium",
-        "device_count": 3,
-    },
-]
+# Spec-shaped /approvals envelope (components/schemas/Approvals): a
+# {size, results} wrapper whose items carry software/policy blocks and
+# manual_approval — NOT the flat title/severity/device_count shape the old
+# fixture invented (which let the silent-zero envelope bug pass tests).
+_APPROVALS_RESPONSE = {
+    "size": 2,
+    "results": [
+        {
+            "id": 201,
+            "manual_approval": None,
+            "manual_approval_time": None,
+            "status": "pending",
+            "software": {
+                "id": 137,
+                "software_version_id": 324,
+                "display_name": "Chrome 120",
+                "version": "120.0.1",
+                "os_family": "Windows",
+                "cves": ["CVE-2026-0001", "CVE-2026-0002"],
+            },
+            "policy": {"id": 301, "name": "Weekday Patching"},
+        },
+        {
+            "id": 202,
+            "manual_approval": True,
+            "manual_approval_time": "2026-06-01T12:00:00Z",
+            "status": "approved",
+            "software": {
+                "id": 138,
+                "software_version_id": 325,
+                "display_name": "Firefox 121",
+                "version": "121.0",
+                "os_family": "Mac",
+                "cves": [],
+            },
+            "policy": {"id": 301, "name": "Weekday Patching"},
+        },
+    ],
+}
 
 _POLICIES_RESPONSE = [
     {
@@ -255,16 +278,19 @@ async def test_patch_tuesday_readiness_caps_inner_lists_at_detail_limit() -> Non
             "total": 30,
         }
     }
-    approvals_payload = [
-        {
-            "id": i,
-            "title": f"Approval {i}",
-            "status": "pending",
-            "severity": "high",
-            "device_count": 1,
-        }
-        for i in range(30)
-    ]
+    approvals_payload = {
+        "size": 30,
+        "results": [
+            {
+                "id": i,
+                "status": "pending",
+                "manual_approval": None,
+                "software": {"display_name": f"Approval {i}", "version": "1.0", "cves": []},
+                "policy": {"id": 1, "name": "P"},
+            }
+            for i in range(30)
+        ],
+    }
     policies_payload = [
         {
             "id": 1000 + i,
@@ -334,7 +360,10 @@ async def test_patch_tuesday_readiness_detail_limit_zero_returns_summary_only() 
             "total": 5,
         }
     }
-    approvals_payload = [{"id": i, "title": f"A{i}", "status": "pending"} for i in range(5)]
+    approvals_payload = {
+        "size": 5,
+        "results": [{"id": i, "title": f"A{i}", "status": "pending"} for i in range(5)],
+    }
     policies_payload = [
         {"id": 1000 + i, "name": f"P{i}", "policy_type_name": "patch", "status": "active"}
         for i in range(3)

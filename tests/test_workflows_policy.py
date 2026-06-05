@@ -10,6 +10,7 @@ from automox_mcp.workflows.policy import (
     _normalize_status,
     describe_policy,
     describe_policy_run_result,
+    summarize_patch_approvals,
     summarize_policies,
     summarize_policy_activity,
     summarize_policy_execution_history,
@@ -1157,3 +1158,66 @@ async def test_describe_policy_omits_dnd_block_when_absent() -> None:
     )
 
     assert "dnd_honored" not in result["data"]
+
+
+# ---------------------------------------------------------------------------
+# summarize_patch_approvals — {size, results} envelope + spec-shaped items
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_patch_approvals_unwraps_results_envelope() -> None:
+    """Live /approvals returns {size, results}; the old bare-Sequence guard
+    silently reported zero approvals for every conforming response."""
+    envelope = {
+        "size": 2,
+        "results": [
+            {
+                "id": 351,
+                "manual_approval": None,
+                "manual_approval_time": None,
+                "status": "pending",
+                "software": {
+                    "id": 137,
+                    "display_name": "Adobe Refresh Manager",
+                    "version": "0.0.19",
+                    "os_family": "Mac",
+                    "cves": ["CVE-2026-1111"],
+                },
+                "policy": {"id": 5, "name": "A Manual Policy"},
+            },
+            {
+                "id": 352,
+                "manual_approval": False,
+                "manual_approval_time": "2026-06-01T00:00:00Z",
+                "status": "rejected",
+                "software": {"id": 138, "display_name": "Other App", "cves": []},
+                "policy": {"id": 5, "name": "A Manual Policy"},
+            },
+        ],
+    }
+    stub = StubClient(get_responses={"/approvals": [envelope]})
+    stub.org_id = 42  # type: ignore[attr-defined]
+
+    result = await summarize_patch_approvals(cast(AutomoxClient, stub), org_id=42)
+    data = result["data"]
+    assert data["total_approvals_considered"] == 2
+    assert data["status_breakdown"] == {"pending": 1, "rejected": 1}
+    # No severity field exists upstream — bucketed as unspecified, not "unknown".
+    assert data["severity_breakdown"] == {"unspecified": 2}
+
+    first = data["approvals"][0]
+    assert first["approval_id"] == 351
+    assert first["title"] == "Adobe Refresh Manager"  # from software.display_name
+    assert first["manual_approval"] is None  # awaiting decision
+    assert first["software"] == {"version": "0.0.19", "os_family": "Mac"}
+    assert first["cves"] == ["CVE-2026-1111"]
+    assert first["policy"] == {"id": 5, "name": "A Manual Policy"}
+
+
+@pytest.mark.asyncio
+async def test_patch_approvals_bare_list_fallback() -> None:
+    stub = StubClient(get_responses={"/approvals": [[{"id": 1, "status": "pending"}]]})
+    stub.org_id = 42  # type: ignore[attr-defined]
+    result = await summarize_patch_approvals(cast(AutomoxClient, stub), org_id=42)
+    assert result["data"]["total_approvals_considered"] == 1

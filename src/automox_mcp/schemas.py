@@ -7,7 +7,7 @@ from datetime import date as Date
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 
 class ForbidExtraModel(BaseModel):
@@ -858,11 +858,21 @@ class ListDataExtractsParams(OrgIdRequiredMixin, ForbidExtraModel):
 
 
 class GetDataExtractParams(OrgIdRequiredMixin, ForbidExtraModel):
+    # Live extract ids ARE ints (list_data_extracts returns e.g. 479737), so a
+    # model relays an int. Accept int|str and coerce to a string for the URL
+    # path; the regex still validates the coerced form.
     extract_id: str = Field(
         description="Data extract ID",
         max_length=200,
         pattern=r"^[a-zA-Z0-9_\-]+$",
     )
+
+    @field_validator("extract_id", mode="before")
+    @classmethod
+    def _coerce_extract_id(cls, value: Any) -> Any:
+        if isinstance(value, int) and not isinstance(value, bool):
+            return str(value)
+        return value
 
 
 class ListOrgApiKeysParams(OrgIdRequiredMixin, ForbidExtraModel):

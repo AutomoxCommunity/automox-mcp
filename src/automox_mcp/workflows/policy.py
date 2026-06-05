@@ -917,7 +917,7 @@ async def get_policy_compliance_stats(
     policy_stats: list[dict[str, Any]] = []
     total_compliant = 0
     total_noncompliant = 0
-    total_devices = 0
+    total_pending = 0
 
     if isinstance(stats, Sequence):
         for item in stats:
@@ -925,34 +925,57 @@ async def get_policy_compliance_stats(
                 continue
             compliant = item.get("compliant", 0) or 0
             noncompliant = item.get("non_compliant", 0) or item.get("noncompliant", 0) or 0
-            device_count = compliant + noncompliant
+            # /policystats carries a `pending` count (live-verified
+            # 2026-06-05). It was previously dropped, so a policy with
+            # 2 compliant / 0 noncompliant / 166 pending read as "100%
+            # compliant over 2 devices". Pending stays out of the
+            # compliance denominator (platform rule: pending does not count
+            # against compliance) but is reported as its own rate.
+            pending = item.get("pending", 0) or 0
+            evaluated = compliant + noncompliant
+            device_count = evaluated + pending
 
             total_compliant += compliant
             total_noncompliant += noncompliant
-            total_devices += device_count
+            total_pending += pending
 
             policy_stats.append(
                 {
                     "policy_id": item.get("policy_id"),
                     "policy_name": item.get("policy_name") or item.get("name"),
+                    "policy_type": item.get("policy_type_name"),
                     "compliant_devices": compliant,
                     "noncompliant_devices": noncompliant,
+                    "pending_devices": pending,
                     "total_devices": device_count,
                     "compliance_rate_percent": (
-                        round(compliant / device_count * 100, 1) if device_count > 0 else 0
+                        round(compliant / evaluated * 100, 1) if evaluated > 0 else None
+                    ),
+                    "pending_rate_percent": (
+                        round(pending / device_count * 100, 1) if device_count > 0 else None
                     ),
                 }
             )
 
-    overall_rate = round(total_compliant / total_devices * 100, 1) if total_devices > 0 else 0
+    total_evaluated = total_compliant + total_noncompliant
+    total_devices = total_evaluated + total_pending
 
     return {
         "data": {
             "overall_compliance": {
-                "total_devices_evaluated": total_devices,
+                "total_devices_evaluated": total_evaluated,
                 "compliant": total_compliant,
                 "noncompliant": total_noncompliant,
-                "compliance_rate_percent": overall_rate,
+                "pending": total_pending,
+                "total_devices": total_devices,
+                "compliance_rate_percent": (
+                    round(total_compliant / total_evaluated * 100, 1)
+                    if total_evaluated > 0
+                    else None
+                ),
+                "pending_rate_percent": (
+                    round(total_pending / total_devices * 100, 1) if total_devices > 0 else None
+                ),
             },
             "per_policy_stats": policy_stats,
         },
@@ -960,6 +983,13 @@ async def get_policy_compliance_stats(
             "deprecated_endpoint": False,
             "org_id": resolved_org_id,
             "policy_count": len(policy_stats),
+            "rate_semantics": (
+                "compliance_rate_percent is computed over evaluated devices "
+                "(compliant + noncompliant) and is null when none have been "
+                "evaluated; pending devices do not count against compliance "
+                "(platform rule) and are reported via pending_devices / "
+                "pending_rate_percent over all targeted devices."
+            ),
         },
     }
 

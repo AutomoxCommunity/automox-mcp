@@ -109,12 +109,17 @@ _SOURCE_POLICY: dict[str, Any] = {
     "account_id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
 }
 
+# Live /policystats shape (sanitized capture 2026-06-05): keys are
+# `noncompliant` (no underscore) and a `pending` count rides along.
 _POLICYSTATS_RESPONSE: list[dict[str, Any]] = [
     {
+        "organization_id": 555,
         "policy_id": 301,
         "policy_name": "Weekday Patching",
+        "policy_type_name": "patch",
         "compliant": 18,
-        "non_compliant": 2,
+        "noncompliant": 2,
+        "pending": 20,
     },
     {
         "policy_id": 302,
@@ -123,10 +128,13 @@ _POLICYSTATS_RESPONSE: list[dict[str, Any]] = [
         "non_compliant": 0,
     },
     {
+        "organization_id": 555,
         "policy_id": 303,
         "policy_name": "Required Software",
+        "policy_type_name": "required_software",
         "compliant": 5,
-        "non_compliant": 5,
+        "noncompliant": 5,
+        "pending": 0,
     },
 ]
 
@@ -385,13 +393,17 @@ async def test_policy_compliance_stats_computes_per_policy() -> None:
     per_policy = data["per_policy_stats"]
     assert len(per_policy) == 3
 
-    # Check first policy
+    # Check first policy: compliance rate over evaluated devices only;
+    # pending reported as its own count and rate over all targeted devices.
     p1 = per_policy[0]
     assert p1["policy_id"] == 301
+    assert p1["policy_type"] == "patch"
     assert p1["compliant_devices"] == 18
     assert p1["noncompliant_devices"] == 2
-    assert p1["total_devices"] == 20
-    assert p1["compliance_rate_percent"] == 90.0
+    assert p1["pending_devices"] == 20
+    assert p1["total_devices"] == 40
+    assert p1["compliance_rate_percent"] == 90.0  # 18 / (18 + 2)
+    assert p1["pending_rate_percent"] == 50.0  # 20 / 40
 
     # Check second policy (100% compliant)
     p2 = per_policy[1]
@@ -414,11 +426,15 @@ async def test_policy_compliance_stats_overall_rate() -> None:
     )
 
     overall = result["data"]["overall_compliance"]
-    # Total: 18+10+5=33 compliant, 2+0+5=7 noncompliant, 40 total
+    # Total: 18+10+5=33 compliant, 2+0+5=7 noncompliant, 20 pending
     assert overall["compliant"] == 33
     assert overall["noncompliant"] == 7
-    assert overall["total_devices_evaluated"] == 40
-    assert overall["compliance_rate_percent"] == 82.5
+    assert overall["pending"] == 20
+    assert overall["total_devices_evaluated"] == 40  # compliant + noncompliant
+    assert overall["total_devices"] == 60
+    assert overall["compliance_rate_percent"] == 82.5  # over evaluated only
+    assert overall["pending_rate_percent"] == 33.3  # 20 / 60
+    assert "pending" in result["metadata"]["rate_semantics"]
 
 
 @pytest.mark.asyncio
@@ -435,7 +451,8 @@ async def test_policy_compliance_stats_empty_org() -> None:
     data = result["data"]
     assert data["per_policy_stats"] == []
     assert data["overall_compliance"]["total_devices_evaluated"] == 0
-    assert data["overall_compliance"]["compliance_rate_percent"] == 0
+    # No evaluated devices: rate is null (honest), not a misleading 0%.
+    assert data["overall_compliance"]["compliance_rate_percent"] is None
     assert result["metadata"]["policy_count"] == 0
 
 

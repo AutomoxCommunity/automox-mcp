@@ -26,8 +26,10 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         name="search_worklet_catalog",
         description=(
             "Search the Automox community worklet catalog. "
-            "Returns worklet names, descriptions, categories, and OS compatibility. "
-            "Use to discover pre-built evaluation and remediation scripts."
+            "Returns worklet names, descriptions, categories, OS compatibility, "
+            "and trust/availability signals (`verified` boolean, `access` tier "
+            "such as premium, `license_required`). Catalog items have no status "
+            "field. Use to discover pre-built evaluation and remediation scripts."
         ),
         annotations={
             "readOnlyHint": True,

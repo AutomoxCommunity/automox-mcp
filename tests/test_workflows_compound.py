@@ -181,6 +181,8 @@ async def test_patch_tuesday_readiness_returns_all_sections() -> None:
     patch_schedules = data["patch_policy_schedules"]
     assert len(patch_schedules) == 1  # only the patch policy, not the custom one
     assert patch_schedules[0]["name"] == "Weekday Patching"
+    # schedule_days bitmask 62 is decoded so the model never reads it raw
+    assert patch_schedules[0]["schedule_days_decoded"] == "Weekdays (Monday through Friday)"
 
     # Readiness summary
     summary = data["readiness_summary"]

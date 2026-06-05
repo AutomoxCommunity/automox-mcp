@@ -23,7 +23,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         name="get_patch_tuesday_readiness",
         description=(
             "Combined view of pre-patch report, pending approvals, and patch policy "
-            "schedules. Answers 'Are we ready for Patch Tuesday?' in a single call."
+            "schedules. Answers 'Are we ready for Patch Tuesday?' in a single call. "
+            "Policy `schedule_days` bitmasks carry a `schedule_days_decoded` "
+            "sibling; `schedule_time` is a bare HH:MM string with no timezone "
+            "marker. Patch `severity` values use the vocabulary "
+            "critical/high/medium/low/no_known_cves (null when unrated)."
         ),
         annotations={
             "readOnlyHint": True,

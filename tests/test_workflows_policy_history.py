@@ -18,6 +18,12 @@ from automox_mcp.workflows.policy_history import (
 
 _ORG_UUID = "11111111-2222-3333-4444-555555555555"
 
+# Captured shape (sanitized) from /policy-history/policy-runs (live 2026-06-05):
+# every run carries `device_count`, and the per-outcome device counts sum to it
+# exactly (probe: 8 runs, dc in {41,168,207}, outcomes summed to device_count
+# with 0 mismatches). The projection surfaces device_count and the legend
+# asserts "outcomes sum to device_count", so the fixture must carry it or that
+# load-bearing field goes untested.
 _POLICY_RUNS = [
     {
         "policy_uuid": "pol-001",
@@ -33,6 +39,7 @@ _POLICY_RUNS = [
         "run_time": "2026-03-01T00:00:00Z",
         "execution_token": "exec-001",
         "run_count": 10,
+        "device_count": 10,  # 0+9+0+1+0
     },
     {
         "policy_uuid": "pol-002",
@@ -47,6 +54,7 @@ _POLICY_RUNS = [
         "not_included": 0,
         "run_time": "2026-03-01T01:00:00Z",
         "execution_token": "exec-002",
+        "device_count": 5,  # 2+3+0+0+0
     },
 ]
 
@@ -90,6 +98,12 @@ async def test_list_runs_returns_summaries() -> None:
     # misread as run statuses.
     assert result["data"]["runs"][0]["device_outcomes"]["success"] == 9
     assert "success" not in result["data"]["runs"][0]
+    # device_count is surfaced and the per-outcome device counts sum to it,
+    # exactly as live (the legend asserts this — exercise it, don't just claim).
+    for run in result["data"]["runs"]:
+        assert "device_count" in run
+        outcome_sum = sum(v for v in run["device_outcomes"].values() if isinstance(v, (int, float)))
+        assert outcome_sum == run["device_count"]
 
 
 @pytest.mark.asyncio
@@ -289,10 +303,16 @@ async def test_history_detail_returns_policy_with_runs() -> None:
     top-level policy metadata despite the description promising "run
     history and status." It now fetches /policy-runs/{uuid} concurrently
     and merges runs + banner_stats into the response."""
+    # policy_success_rate is a PERCENT (0–100), not a fraction — live 2026-06-05
+    # returned 16.49 (= 16.49%) alongside count companions.
     runs_payload = {
         "data": {
             "runs": _POLICY_RUNS,
-            "banner_stats": {"policy_success_rate": 0.5, "total_policies_applied": 2},
+            "banner_stats": {
+                "policy_success_rate": 16.49,
+                "total_policies_applied": 57,
+                "total_successful_devices": 55,
+            },
         },
         "metadata": {"total_run_count": 2},
     }
@@ -313,7 +333,10 @@ async def test_history_detail_returns_policy_with_runs() -> None:
     assert result["data"]["total_runs_returned"] == 2
     assert len(result["data"]["recent_runs"]) == 2
     assert result["data"]["recent_runs"][0]["policy_uuid"] == "pol-001"
-    assert result["data"]["banner_stats"]["policy_success_rate"] == 0.5
+    assert result["data"]["banner_stats"]["policy_success_rate"] == 16.49
+    # The percent-vs-fraction legend is attached so the model reads 16.49 right.
+    note = result["metadata"]["field_notes"]["banner_stats.policy_success_rate"]
+    assert "Percentage" in note and "NOT a 0–1 fraction" in note
 
 
 @pytest.mark.asyncio
@@ -352,13 +375,14 @@ async def test_history_detail_runs_fetch_failure_does_not_block_detail() -> None
 @pytest.mark.asyncio
 async def test_runs_for_policy_returns_runs() -> None:
     # /policy-runs/{policyUuid} returns RunsByPolicyResponse shape
+    # policy_success_rate is a PERCENT (0–100), live-shaped value.
     runs_response = {
         "data": {
             "runs": _POLICY_RUNS,
             "banner_stats": {
-                "policy_success_rate": 0.9,
-                "total_policies_applied": 2,
-                "total_successful_devices": 12,
+                "policy_success_rate": 95.5,
+                "total_policies_applied": 57,
+                "total_successful_devices": 55,
             },
         },
         "metadata": {"total_run_count": 2, "last_run_time": "2026-03-01T01:00:00Z"},
@@ -372,8 +396,11 @@ async def test_runs_for_policy_returns_runs() -> None:
 
     assert result["data"]["total_runs"] == 2
     assert result["data"]["policy_uuid"] == "pol-001"
-    assert result["data"]["banner_stats"]["policy_success_rate"] == 0.9
+    assert result["data"]["banner_stats"]["policy_success_rate"] == 95.5
     assert result["metadata"]["total_run_count"] == 2
+    # The percent-vs-fraction legend rides along on the non-summary path.
+    note = result["metadata"]["field_notes"]["banner_stats.policy_success_rate"]
+    assert "Percentage" in note
 
 
 @pytest.mark.asyncio
@@ -487,6 +514,8 @@ async def test_runs_for_policy_summary_only_projects_and_drops_banner() -> None:
     )
     data = result["data"]
     assert "banner_stats" not in data
+    # banner_stats is dropped on the lean path, so its legend must not appear.
+    assert "field_notes" not in result["metadata"]
     assert data["total_runs"] == 2
     first = data["runs"][0]
     assert set(first.keys()) <= {"policy_uuid", "run_time", "execution_token", "run_count"}

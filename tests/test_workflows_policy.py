@@ -914,6 +914,71 @@ async def test_summarize_policies_decodes_schedule_days_bitmask() -> None:
 
 
 @pytest.mark.asyncio
+async def test_summarize_policies_drops_phantom_next_run() -> None:
+    """audit finding N8: the /policies list endpoint never returns `next_run`
+    (live-verified absent 2026-06-05 — keys are id/name/status/schedule_*/
+    server_*/uuid/...); the catalog used to emit a confident `next_run: null`
+    that reads as 'nothing scheduled'. The catalog must NOT surface next_run.
+    The spec-defined `next_remediation` is surfaced only when present."""
+    # Captured-shaped /policies row (sanitized): the real DTO has no next_run
+    # and no next_remediation on this tenant.
+    policy = {
+        "id": 1,
+        "uuid": "11111111-1111-1111-1111-111111111111",
+        "name": "Weekday Patching",
+        "policy_type_name": "patch",
+        "status": "active",
+        "schedule_days": 62,
+        "schedule_time": "16:00",
+        "server_count": 12,
+        "server_groups": [301],
+    }
+    stub = StubClient(get_responses={"/policies": [[policy], []], "/policystats": [[]]})
+    stub.org_id = 42  # type: ignore[attr-defined]
+
+    result = await summarize_policies(
+        cast(AutomoxClient, stub),
+        org_id=42,
+        limit=20,
+        include_inactive=False,
+    )
+    row = result["data"]["policies"][0]
+    assert "next_run" not in row  # phantom dropped — no confident null
+    assert "next_remediation" not in row  # absent upstream -> not emitted
+    # The legend explains next_remediation and warns absence != "unscheduled".
+    note = result["metadata"]["field_notes"]["next_remediation"]
+    assert "not observed live" in note
+
+
+@pytest.mark.asyncio
+async def test_summarize_policies_surfaces_next_remediation_when_present() -> None:
+    """When the upstream does return next_remediation (spec-defined), the
+    catalog forwards it; it is never replaced by a phantom next_run."""
+    policy = {
+        "id": 1,
+        "uuid": "11111111-1111-1111-1111-111111111111",
+        "name": "Weekday Patching",
+        "policy_type_name": "patch",
+        "status": "active",
+        "schedule_days": 62,
+        "schedule_time": "16:00",
+        "next_remediation": "2026-06-10T16:00:00Z",
+    }
+    stub = StubClient(get_responses={"/policies": [[policy], []], "/policystats": [[]]})
+    stub.org_id = 42  # type: ignore[attr-defined]
+
+    result = await summarize_policies(
+        cast(AutomoxClient, stub),
+        org_id=42,
+        limit=20,
+        include_inactive=False,
+    )
+    row = result["data"]["policies"][0]
+    assert row["next_remediation"] == "2026-06-10T16:00:00Z"
+    assert "next_run" not in row
+
+
+@pytest.mark.asyncio
 async def test_summarize_policies_include_inactive() -> None:
     """When include_inactive=True, inactive policies are included."""
     inactive_policy = {

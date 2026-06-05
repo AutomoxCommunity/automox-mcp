@@ -43,8 +43,10 @@ _RRULE_FIELD_DESCRIPTION = (
 
 _DTSTART_FIELD_DESCRIPTION = (
     "Start datetime, ISO 8601 (e.g. 2026-01-01T02:00:00Z). When "
-    "use_local_tz=false this is UTC; when use_local_tz=true the same "
-    "wall-clock is applied in each device's local timezone."
+    "use_local_tz=false this is UTC (live-verified 2026-06-05). When "
+    "use_local_tz=true the same wall-clock is applied in each device's local "
+    "timezone, so the trailing Z does NOT mean UTC (per spec/input semantics, "
+    "not live-verified — the controlled-object probe used use_local_tz=false)."
 )
 
 
@@ -207,7 +209,10 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         description=(
             "Search and list maintenance/exclusion windows for the Automox organization. "
             "Supports filtering by group UUIDs, status (active/inactive), and recurrence "
-            "type (recurring/once). Supports pagination via page/size."
+            "type (recurring/once). The recurrences filter is case-insensitive — tokens "
+            "are coerced to the spec's UPPERCASE enum (ONCE/RECURRING) before sending, "
+            "since the upstream expects uppercase (per spec, not live-verified). "
+            "Supports pagination via page/size."
         ),
         annotations={
             "readOnlyHint": True,

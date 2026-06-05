@@ -267,7 +267,14 @@ async def search_policy_windows(
     if statuses is not None:
         body["statuses"] = statuses
     if recurrences is not None:
-        body["recurrences"] = recurrences
+        # The spec declares the recurrences filter as an UPPERCASE enum
+        # (ONCE | RECURRING) — read responses also normalize to uppercase. The
+        # tool's Literal accepts lowercase tokens for ergonomics, so coerce to
+        # uppercase before sending; a lowercase token could otherwise silently
+        # match zero windows (audit finding N11; spec-attributed, not
+        # live-verified — tenant had 0 windows so neither casing could be
+        # exercised). Case-insensitive accept, uppercase on the wire.
+        body["recurrences"] = [r.upper() if isinstance(r, str) else r for r in recurrences]
     if page is not None:
         body["page"] = page
     if size is not None:

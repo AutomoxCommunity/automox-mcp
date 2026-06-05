@@ -102,9 +102,29 @@ async def test_search_windows_passes_filters() -> None:
 
     body = client.calls[0][2]
     assert body["statuses"] == ["active"]
-    assert body["recurrences"] == ["recurring"]
+    # audit finding N11: the recurrences filter is coerced to the spec's
+    # UPPERCASE enum before sending (lowercase would silently match 0 windows).
+    assert body["recurrences"] == ["RECURRING"]
     assert body["page"] == 0
     assert body["size"] == 10
+
+
+@pytest.mark.asyncio
+async def test_search_windows_coerces_recurrences_to_uppercase() -> None:
+    """Mixed-case and already-uppercase recurrence tokens both go out uppercase
+    (case-insensitive accept, spec-uppercase on the wire)."""
+    client = StubClient(
+        post_responses={
+            f"/policy-windows/org/{_ORG_UUID}/search": [{"content": []}],
+        }
+    )
+    await search_policy_windows(
+        cast(AutomoxClient, client),
+        org_uuid=_ORG_UUID,
+        recurrences=["once", "RECURRING"],
+    )
+    body = client.calls[0][2]
+    assert body["recurrences"] == ["ONCE", "RECURRING"]
 
 
 @pytest.mark.asyncio

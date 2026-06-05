@@ -54,7 +54,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "data than the standard policy execution timeline. Each run's "
             "`device_outcomes` (pending/success/failed/not_included/"
             "remediation_not_applicable/blocked) are DEVICE COUNTS per outcome "
-            "for that run, not run statuses."
+            "for that run, not run statuses. `result_status` filters with "
+            "any-device-with-this-outcome semantics: a run matches when AT LEAST "
+            "ONE device had that outcome — it does NOT mean every device did "
+            "(live-verified 2026-06-05: result_status='failed' returns runs with "
+            "1 failed device alongside 200+ not-failed). The same run can match "
+            "multiple result_status values."
         ),
         annotations={
             "readOnlyHint": True,

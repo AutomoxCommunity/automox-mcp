@@ -12,6 +12,24 @@ from ..utils import resolve_org_uuid
 from ..utils.response import build_pagination_metadata
 from ..utils.response import extract_list as _extract_list
 
+# Legend for the `banner_stats` block the policy-report-api returns alongside
+# a policy's runs. `policy_success_rate` is a PERCENTAGE (0–100), not a 0–1
+# fraction — live-verified 2026-06-05 (e.g. 16.49 = 16.49%). The two companion
+# fields are plain counts. Surfaced in metadata.field_notes so a model does not
+# misread the value as a count or a fraction.
+_BANNER_STATS_FIELD_NOTES: dict[str, str] = {
+    "banner_stats.policy_success_rate": (
+        "Percentage in the 0–100 range, NOT a 0–1 fraction (live-verified "
+        "2026-06-05; e.g. 16.49 means 16.49%). Do not multiply by 100."
+    ),
+    "banner_stats.total_policies_applied": (
+        "Count of policy applications in the window (an integer count, not a rate)."
+    ),
+    "banner_stats.total_successful_devices": (
+        "Count of devices with a successful outcome (an integer count, not a rate)."
+    ),
+}
+
 
 def _summarize_run(run: Mapping[str, Any]) -> dict[str, Any]:
     """Extract key fields from a policy run record.
@@ -427,6 +445,10 @@ async def get_policy_history_detail(
         data["banner_stats"] = banner_stats
 
     metadata: dict[str, Any] = {"deprecated_endpoint": False}
+    if banner_stats:
+        # policy_success_rate is a percent (0–100), not a fraction; the
+        # companions are counts. Annotate so the model reads units right.
+        metadata["field_notes"] = dict(_BANNER_STATS_FIELD_NOTES)
     if runs_error:
         metadata["runs_fetch_error"] = runs_error
 
@@ -504,9 +526,18 @@ async def get_policy_runs_for_policy(
             "banner_stats": banner_stats,
         }
 
+    out_metadata: dict[str, Any] = dict(metadata) if isinstance(metadata, Mapping) else {}
+    if not summary_only and banner_stats:
+        # policy_success_rate is a percent (0–100), not a fraction; the
+        # companions are counts. Annotate so the model reads units right.
+        existing_notes = out_metadata.get("field_notes")
+        merged_notes = dict(existing_notes) if isinstance(existing_notes, Mapping) else {}
+        merged_notes.update(_BANNER_STATS_FIELD_NOTES)
+        out_metadata["field_notes"] = merged_notes
+
     return {
         "data": data,
-        "metadata": metadata,
+        "metadata": out_metadata,
     }
 
 

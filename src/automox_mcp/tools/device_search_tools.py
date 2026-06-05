@@ -210,8 +210,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     @server.tool(
         name="get_device_by_uuid",
         description=(
-            "Get device details by UUID using the Server Groups API v2. "
-            "Provides device information via UUID-based lookup."
+            "Get the near-raw device payload by UUID (canonical /servers endpoint). "
+            "Integer policy codes carry a status_label sibling (up_to_date / pending / "
+            "needs_remediation — only needs_remediation makes a device non-compliant; "
+            "see the compliance rollup). uptime_minutes is sampled at the device's "
+            "last full scan, so it can lag the current boot session."
         ),
         annotations={
             "readOnlyHint": True,

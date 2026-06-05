@@ -304,6 +304,38 @@ def _build_compliance_summary(device_data: Mapping[str, Any]) -> dict[str, Any] 
     return summary
 
 
+def enrich_raw_device_payload(detail: dict[str, Any]) -> dict[str, Any]:
+    """Apply the model-facing field translations to a raw ``/servers/{id}`` payload.
+
+    For tools that intentionally return the near-raw device dict (e.g.
+    ``get_device_by_uuid``) so they carry the same legend as ``device_detail``:
+    each integer policy code gains a ``status_label`` sibling, the unit-less
+    ``uptime`` is replaced by ``uptime_minutes`` (minutes, verified live
+    2026-06-04 — the public spec's "seconds" claim is wrong; sampled at the
+    device's last full scan), and the device-level ``compliance`` rollup is
+    attached. Mutates and returns ``detail``.
+    """
+    entries = detail.get("policy_status")
+    if isinstance(entries, Sequence) and not isinstance(entries, (str, bytes, bytearray)):
+        for item in entries:
+            if isinstance(item, dict):
+                code = item.get("status")
+                if isinstance(code, int) and not isinstance(code, bool):
+                    item["status_label"] = _POLICY_STATUS_CODE_LABELS.get(code, str(code))
+
+    uptime_raw = detail.pop("uptime", None)
+    if uptime_raw is not None:
+        try:
+            detail["uptime_minutes"] = int(uptime_raw)
+        except (TypeError, ValueError):
+            detail["uptime_minutes"] = uptime_raw
+
+    compliance = _build_compliance_summary(detail)
+    if compliance:
+        detail["compliance"] = compliance
+    return detail
+
+
 def _summarize_policy_status(
     entries: Any, *, limit: int = _POLICY_STATUS_LIMIT
 ) -> tuple[list[dict[str, Any]], int]:
@@ -971,6 +1003,7 @@ async def describe_device(
 
 __all__ = [
     "describe_device",
+    "enrich_raw_device_payload",
     "get_device_inventory",
     "list_device_inventory",
     "list_devices_needing_attention",

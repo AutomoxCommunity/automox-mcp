@@ -10,6 +10,7 @@ from ..client import AutomoxAPIError, AutomoxClient
 from ..utils import resolve_org_uuid
 from ..utils.response import build_pagination_metadata, require_org_id
 from ..utils.response import extract_list as _extract_list
+from .devices import enrich_raw_device_payload
 
 P = ParamSpec("P")
 T = TypeVar("T")
@@ -357,7 +358,10 @@ async def get_device_by_uuid(
     response = await client.get(f"/servers/{device_uuid}", params=params)
 
     if isinstance(response, Mapping):
-        detail = dict(response)
+        # Same ServerWithPolicies DTO as device_detail — carry the same legend
+        # (policy status_label, uptime_minutes, compliance rollup) so the raw
+        # integer codes and unit-less uptime never reach the model unexplained.
+        detail = enrich_raw_device_payload(dict(response))
     else:
         detail = {}
 

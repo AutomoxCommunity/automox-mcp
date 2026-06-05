@@ -76,6 +76,40 @@ _DEVICE_DETAIL = {
     "last_logged_in_user": "alice",
     "serial_number": "SN-001",
     "tags": [],
+    # Live shape (sanitized capture 2026-06-04): uptime is a bare numeric
+    # string of MINUTES; policy_status entries carry the integer enum
+    # (0 needs_remediation / 1 up_to_date / 2 pending).
+    "uptime": "1440",
+    "policy_status": [
+        {
+            "id": 910001,
+            "organization_id": 42,
+            "policy_id": 11,
+            "server_id": 123456,
+            "policy_name": "Monthly Patching",
+            "policy_type_name": "patch",
+            "status": 1,
+            "result": "{}",
+            "create_time": "2026-05-28T08:00:00+0000",
+            "next_remediation": "2026-05-29T01:00:00+0000",
+            "pending_count": 0,
+            "will_reboot": False,
+        },
+        {
+            "id": 910002,
+            "organization_id": 42,
+            "policy_id": 12,
+            "server_id": 123456,
+            "policy_name": "Disk Encryption Check",
+            "policy_type_name": "custom",
+            "status": 2,
+            "result": "{}",
+            "create_time": "2026-05-28T08:00:00+0000",
+            "next_remediation": "2026-05-29T01:00:00+0000",
+            "pending_count": 0,
+            "will_reboot": False,
+        },
+    ],
 }
 
 _METADATA_FIELDS = [
@@ -368,6 +402,18 @@ async def test_device_by_uuid_returns_detail() -> None:
     assert method == "GET"
     assert called_path == "/servers/dev-001"
     assert params == {"o": 42, "includeDetails": 1}
+
+    # The raw payload carries the same legend as device_detail (PR #149):
+    # integer policy codes gain a status_label sibling, the unit-less uptime
+    # is replaced by uptime_minutes, and a compliance rollup is attached.
+    detail = result["data"]
+    assert [p["status_label"] for p in detail["policy_status"]] == ["up_to_date", "pending"]
+    assert [p["status"] for p in detail["policy_status"]] == [1, 2]  # raw codes kept
+    assert "uptime" not in detail
+    assert detail["uptime_minutes"] == 1440
+    assert detail["compliance"]["device_compliant"] is True
+    assert detail["compliance"]["policy_status_counts"] == {"up_to_date": 1, "pending": 1}
+    assert "needs_remediation_policies" not in detail["compliance"]
 
 
 @pytest.mark.asyncio

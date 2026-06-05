@@ -157,9 +157,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     @server.tool(
         name="list_organizations",
         description=(
-            "List organizations visible to the API key, with tier, device count, "
-            "device limit, parent org, and trial end time. Useful for MSP/multi-org "
-            "navigation, feature-tier checks, capacity posture, and trial warnings."
+            "List organizations visible to the API key, with device count, device "
+            "limit, parent org, and trial end time. Useful for MSP/multi-org "
+            "navigation, capacity posture, and trial warnings. A `tier` slug may be "
+            "present per spec but has no defined feature ordering and is absent on some "
+            "tenants — do not infer a paid-plan or capability ranking from it."
         ),
         annotations={
             "readOnlyHint": True,
@@ -269,7 +271,9 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         name="get_account_user",
         description=(
             "Get an account-scoped user record by UUID: status, account RBAC "
-            "role, verification, and 2FA state."
+            "role, verification, and 2FA type. A null/absent "
+            "two_factor_authentication is ambiguous (may mean disabled or "
+            "not-reported) — see metadata.field_notes."
         ),
         annotations=_READ_ANNOTATIONS,
     )

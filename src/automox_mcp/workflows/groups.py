@@ -7,6 +7,17 @@ from typing import Any
 
 from ..client import AutomoxClient
 
+# refresh_interval is the group's agent check-in / scan cadence. The unit is
+# MINUTES (live-verified 2026-06-05: console 24h/4h cadences read back as
+# 1440/240). Spec range is 240-1440. The projection keeps the raw integer for
+# fidelity; this note travels in metadata.field_notes so the model does not
+# mistake the value for seconds/hours.
+_REFRESH_INTERVAL_NOTE = (
+    "refresh_interval is the group's agent check-in / scan cadence in MINUTES "
+    "(live-verified 2026-06-05: console 24h/4h cadences read back as 1440/240). "
+    "Spec range: 240-1440. The raw integer is preserved as-is."
+)
+
 
 def _summarize_group(group: Mapping[str, Any]) -> dict[str, Any]:
     """Extract key fields from a server group record."""
@@ -53,6 +64,7 @@ async def list_server_groups(
         },
         "metadata": {
             "deprecated_endpoint": False,
+            "field_notes": {"refresh_interval": _REFRESH_INTERVAL_NOTE},
         },
     }
 
@@ -77,6 +89,7 @@ async def get_server_group(
         "data": data,
         "metadata": {
             "deprecated_endpoint": False,
+            "field_notes": {"refresh_interval": _REFRESH_INTERVAL_NOTE},
         },
     }
 
@@ -120,6 +133,7 @@ async def create_server_group(
         "data": data,
         "metadata": {
             "deprecated_endpoint": False,
+            "field_notes": {"refresh_interval": _REFRESH_INTERVAL_NOTE},
         },
     }
 
@@ -164,6 +178,7 @@ async def update_server_group(
         "data": data,
         "metadata": {
             "deprecated_endpoint": False,
+            "field_notes": {"refresh_interval": _REFRESH_INTERVAL_NOTE},
         },
     }
 

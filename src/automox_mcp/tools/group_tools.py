@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
 from fastmcp import FastMCP
+from pydantic import Field
 
 from .. import workflows
 from ..client import AutomoxClient
@@ -29,7 +30,9 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     @server.tool(
         name="list_server_groups",
         description=(
-            "List all Automox server groups with their device counts and assigned policies."
+            "List all Automox server groups with their device counts and assigned policies. "
+            "refresh_interval is the agent check-in/scan cadence in minutes "
+            "(live-verified; spec range 240-1440) — see metadata.field_notes."
         ),
         annotations={
             "readOnlyHint": True,
@@ -59,7 +62,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
 
     @server.tool(
         name="get_server_group",
-        description="Get detailed information about a specific Automox server group.",
+        description=(
+            "Get detailed information about a specific Automox server group. "
+            "refresh_interval is the agent check-in/scan cadence in minutes "
+            "(live-verified; spec range 240-1440) — see metadata.field_notes."
+        ),
         annotations={
             "readOnlyHint": True,
             "destructiveHint": False,
@@ -85,7 +92,10 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
 
         @server.tool(
             name="create_server_group",
-            description="Create a new Automox server group.",
+            description=(
+                "Create a new Automox server group. refresh_interval is the agent "
+                "check-in/scan cadence in minutes (live-verified; spec range 240-1440)."
+            ),
             annotations={
                 "readOnlyHint": False,
                 "destructiveHint": True,
@@ -95,7 +105,15 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         )
         async def create_server_group(
             name: str,
-            refresh_interval: int,
+            refresh_interval: Annotated[
+                int,
+                Field(
+                    description=(
+                        "Agent check-in/scan cadence in minutes "
+                        "(live-verified; spec range 240-1440)"
+                    )
+                ),
+            ],
             parent_server_group_id: int,
             ui_color: str | None = None,
             notes: str | None = None,
@@ -126,7 +144,10 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
 
         @server.tool(
             name="update_server_group",
-            description="Update an existing Automox server group.",
+            description=(
+                "Update an existing Automox server group. refresh_interval is the agent "
+                "check-in/scan cadence in minutes (live-verified; spec range 240-1440)."
+            ),
             annotations={
                 "readOnlyHint": False,
                 "destructiveHint": True,
@@ -137,7 +158,15 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         async def update_server_group(
             group_id: int,
             name: str,
-            refresh_interval: int,
+            refresh_interval: Annotated[
+                int,
+                Field(
+                    description=(
+                        "Agent check-in/scan cadence in minutes "
+                        "(live-verified; spec range 240-1440)"
+                    )
+                ),
+            ],
             parent_server_group_id: int,
             ui_color: str | None = None,
             notes: str | None = None,

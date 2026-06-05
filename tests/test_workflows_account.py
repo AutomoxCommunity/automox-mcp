@@ -173,6 +173,10 @@ async def test_list_api_keys_handles_non_list():
 # ---------------------------------------------------------------------------
 
 
+# Org 42 includes a spec `tier` slug (present on some tenants). Org 43 mirrors
+# the LIVE GET /orgs key set on the probed tenant (2026-06-05): NO `tier` field
+# at all — keys observed were id, uuid, name, device_count, soft_device_limit,
+# create_time. The projection drops absent keys, so tier must simply not appear.
 _ORGS = [
     {
         "id": 42,
@@ -185,15 +189,14 @@ _ORGS = [
         "parent_id": None,
         "trial_end_time": None,
         "create_time": "2024-01-01T00:00:00Z",
-        "access_key": "should-not-be-surfaced",
     },
     {
         "id": 43,
         "uuid": "org-uuid-43",
         "name": "Acme Child",
-        "tier": "patch",
         "device_count": 50,
-        "parent_id": 42,
+        "soft_device_limit": 100,
+        "create_time": "2024-02-01T00:00:00Z",
     },
 ]
 
@@ -206,17 +209,20 @@ async def test_list_organizations_projects_expected_fields():
     data = result["data"]
     assert data["total_organizations"] == 2
 
+    # (a) tier forwarded when present in the input item.
     parent = next(o for o in data["organizations"] if o["id"] == 42)
     assert parent["tier"] == "enterprise"
     assert parent["device_count"] == 1200
     assert parent["device_limit"] == 2000
-    # access_key is not part of the projection -> never surfaced
-    assert "access_key" not in parent
 
+    # (b) tier omitted (no error) when absent — the live-tenant case from the
+    # probe, where GET /orgs returns no tier field at all.
     child = next(o for o in data["organizations"] if o["id"] == 43)
-    assert child["parent_id"] == 42
-    # None-valued fields are omitted, not echoed as null
+    assert "tier" not in child
+    assert child["device_count"] == 50
+    # None-valued / absent fields are omitted, not echoed as null.
     assert "trial_end_time" not in child
+    assert "parent_id" not in child
 
 
 @pytest.mark.asyncio
@@ -289,6 +295,31 @@ async def test_get_user_detail_projection_redacts_secret():
 
 
 @pytest.mark.asyncio
+async def test_get_user_carries_plan_legend_and_forwards_orgs_verbatim():
+    # Spec-shaped orgs blob: per spec each org may carry a `plan` slug
+    # (basic/manage/tier3). Live capture blocked — orgs[].plan was absent on the
+    # probed tenant (2026-06-05) — so this fixture is spec-shaped, not captured.
+    record = {
+        "id": 7,
+        "firstname": "Ada",
+        "email": "ada@example.com",
+        "orgs": [{"id": 42, "plan": "basic"}, {"id": 43, "plan": "manage"}],
+    }
+    client = StubClient(get_responses={"/users/7": [record]})
+    result = await get_user(cast(AutomoxClient, client), org_id=42, user_id=7)
+
+    # orgs blob (including plan) forwarded verbatim.
+    assert result["data"]["orgs"] == [
+        {"id": 42, "plan": "basic"},
+        {"id": 43, "plan": "manage"},
+    ]
+    # Legend present, attributing the vocabulary to spec (not asserting live).
+    note = result["metadata"]["field_notes"]["orgs[].plan"]
+    assert "plan" in note.lower()
+    assert "spec" in note.lower()
+
+
+@pytest.mark.asyncio
 async def test_get_account_passthrough():
     account = {"id": 1, "name": "Acme", "type": "msp", "created_at": "2024-01-01T00:00:00Z"}
     client = StubClient(get_responses={f"/accounts/{_ACCT}": [account]})
@@ -309,10 +340,36 @@ async def test_list_account_rbac_roles_unwraps_envelope():
 @pytest.mark.asyncio
 async def test_get_account_user_passthrough():
     user = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
-    record = {"user_id": user, "email": "x@y.z", "status": "active", "account_rbac_role": "admin"}
+    # Spec-shaped AccountUser fixture: live capture blocked (the /users probe
+    # returned a generic API error on this key, 2026-06-05), so the 2FA field is
+    # spec-shaped (anyOf[enum['email','google'], null]), not captured.
+    record = {
+        "user_id": user,
+        "email": "x@y.z",
+        "status": "active",
+        "account_rbac_role": "admin",
+        "two_factor_authentication": "email",
+    }
     client = StubClient(get_responses={f"/accounts/{_ACCT}/users/{user}": [record]})
     result = await get_account_user(cast(AutomoxClient, client), account_id=_ACCT, user_id=user)
     assert result["data"]["status"] == "active"
+    # Raw 2FA value forwarded unchanged.
+    assert result["data"]["two_factor_authentication"] == "email"
+    # Ambiguity legend present.
+    note = result["metadata"]["field_notes"]["two_factor_authentication"]
+    assert "ambiguous" in note.lower()
+
+
+@pytest.mark.asyncio
+async def test_get_account_user_forwards_null_tfa_and_legend():
+    user = "cccccccc-cccc-cccc-cccc-cccccccccccc"
+    # Spec-shaped: two_factor_authentication may be null (the ambiguous case).
+    record = {"user_id": user, "status": "active", "two_factor_authentication": None}
+    client = StubClient(get_responses={f"/accounts/{_ACCT}/users/{user}": [record]})
+    result = await get_account_user(cast(AutomoxClient, client), account_id=_ACCT, user_id=user)
+    # null forwarded verbatim, not coerced.
+    assert result["data"]["two_factor_authentication"] is None
+    assert "two_factor_authentication" in result["metadata"]["field_notes"]
 
 
 @pytest.mark.asyncio

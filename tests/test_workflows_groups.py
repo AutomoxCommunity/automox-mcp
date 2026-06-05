@@ -23,7 +23,8 @@ _GROUP_A: dict[str, Any] = {
     "policies": [301, 302],
     "ui_color": "#FF0000",
     "notes": "Prod servers",
-    "refresh_interval": 360,
+    # 1440 = console 24h scan cadence (live-observed minute value, 2026-06-05).
+    "refresh_interval": 1440,
 }
 
 _GROUP_B: dict[str, Any] = {
@@ -35,7 +36,8 @@ _GROUP_B: dict[str, Any] = {
     "policies": [301],
     "ui_color": None,
     "notes": None,
-    "refresh_interval": 720,
+    # 240 = console 4h scan cadence (live-observed minute value, 2026-06-05).
+    "refresh_interval": 240,
 }
 
 
@@ -53,6 +55,12 @@ async def test_list_groups_returns_summaries() -> None:
     names = [g["name"] for g in result["data"]["groups"]]
     assert "Production" in names
     assert "Staging" in names
+
+    # refresh_interval legend present and stating the unit; raw integers preserved.
+    note = result["metadata"]["field_notes"]["refresh_interval"]
+    assert "minute" in note.lower()
+    intervals = {g["refresh_interval"] for g in result["data"]["groups"]}
+    assert intervals == {1440, 240}
 
 
 @pytest.mark.asyncio
@@ -94,7 +102,10 @@ async def test_get_group_returns_detail() -> None:
     result = await get_server_group(cast(AutomoxClient, client), org_id=555, group_id=10)
 
     assert result["data"]["name"] == "Production"
-    assert result["data"]["refresh_interval"] == 360
+    assert result["data"]["refresh_interval"] == 1440
+    # get_server_group carries the same minutes legend.
+    note = result["metadata"]["field_notes"]["refresh_interval"]
+    assert "minute" in note.lower()
 
 
 @pytest.mark.asyncio
@@ -118,12 +129,16 @@ async def test_create_group_returns_created_flag() -> None:
         cast(AutomoxClient, client),
         org_id=555,
         name="Production",
-        refresh_interval=360,
+        refresh_interval=1440,
         parent_server_group_id=0,
     )
 
     assert result["data"]["created"] is True
     assert result["data"]["name"] == "Production"
+    # refresh_interval round-trips unchanged (no unit transformation introduced).
+    assert client.calls[0][2]["refresh_interval"] == 1440
+    assert result["data"]["refresh_interval"] == 1440
+    assert "minute" in result["metadata"]["field_notes"]["refresh_interval"].lower()
 
 
 @pytest.mark.asyncio
@@ -186,18 +201,20 @@ async def test_update_group_returns_updated_flag() -> None:
 @pytest.mark.asyncio
 async def test_update_group_sends_body_to_correct_path() -> None:
     client = StubClient(put_responses={"/servergroups/10": [_GROUP_A]})
-    await update_server_group(
+    result = await update_server_group(
         cast(AutomoxClient, client),
         org_id=555,
         group_id=10,
         name="Production",
-        refresh_interval=720,
+        refresh_interval=240,
     )
 
     assert client.calls[0][0] == "PUT"
     assert client.calls[0][1] == "/servergroups/10"
     body = client.calls[0][2]
-    assert body["refresh_interval"] == 720
+    # refresh_interval round-trips unchanged (no unit transformation introduced).
+    assert body["refresh_interval"] == 240
+    assert "minute" in result["metadata"]["field_notes"]["refresh_interval"].lower()
 
 
 # ---------------------------------------------------------------------------

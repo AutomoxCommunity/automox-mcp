@@ -105,7 +105,7 @@ Richer policy execution reporting via the `/policy-history` API with UUID-based 
 
 ## Group Management (5 tools)
 
-- **`list_server_groups`** - List all server groups with device counts, assigned policies, and group `uuid` (needed by policy windows tools).
+- **`list_server_groups`** - List all server groups with device counts, assigned policies, and group `uuid` (needed by policy windows tools). `refresh_interval` is the agent check-in/scan cadence in minutes (live-verified; spec range 240-1440).
 - **`get_server_group`** - Get detailed information about a specific server group.
 - **`create_server_group`** - Create a new server group with name, refresh interval, and optional parent group, policies, and notes.
 - **`update_server_group`** - Update an existing server group.
@@ -168,12 +168,12 @@ Manage vulnerability remediation workflows via the Vuln Sync API. Supports CSV-b
 - **`invite_user_to_account`** *(write)* - Invite a user to the Automox account with optional zone assignments.
 - **`remove_user_from_account`** *(write)* - Remove a user from the Automox account by UUID.
 - **`list_org_api_keys`** - List API keys for the organization. Returns key names and IDs only — secrets are never exposed.
-- **`list_organizations`** - List organizations visible to the API key, with tier, device count, device limit, parent org, and trial end time. Useful for MSP/multi-org navigation, feature-tier checks, capacity posture, and trial warnings.
+- **`list_organizations`** - List organizations visible to the API key, with device count, device limit, parent org, and trial end time. Useful for MSP/multi-org navigation, capacity posture, and trial warnings. A `tier` slug may be present per spec but has no defined feature ordering and is absent on some tenants — do not infer a paid-plan or capability ranking from it.
 - **`list_users`** - List users in the organization with name, email, and RBAC roles (lean projection). Secrets such as `intercom_hmac` are never surfaced.
 - **`get_user`** - Get a single user by numeric ID, including org/server-group membership and RBAC roles. Secrets are never surfaced.
 - **`get_account`** - Get account detail (id, name, type, timestamps).
 - **`list_account_rbac_roles`** - List the RBAC roles available in the account.
-- **`get_account_user`** - Get an account-scoped user record by UUID: status, account RBAC role, verification, and 2FA state.
+- **`get_account_user`** - Get an account-scoped user record by UUID: status, account RBAC role, verification, and 2FA type. A null/absent `two_factor_authentication` is ambiguous (may mean disabled or not-reported); see `metadata.field_notes`.
 - **`list_zones_for_user`** - List the zones (organizations) a given user belongs to.
 - **`list_zones`** - List the zones (organizations) in the account (paginated).
 - **`get_zone`** - Get a single zone by UUID. The zone `access_key` is never surfaced.

@@ -73,6 +73,45 @@ def test_highest_patch_severity_none_severity_field() -> None:
     assert _highest_patch_severity(patches) == "low"
 
 
+def test_highest_patch_severity_all_no_known_cves_not_unknown() -> None:
+    """Finding 31 witness: an all-no_known_cves device reports 'no_known_cves'.
+
+    This must NOT collapse to 'unknown' — the two are distinct states (a patch
+    with no associated CVE vs. severity absent/undetermined). Live-verified
+    2026-06-05 that the upstream payload carries 'no_known_cves' as a severity.
+    """
+    patches = [{"severity": "no_known_cves"}, {"severity": "no_known_cves"}]
+    assert _highest_patch_severity(patches) == "no_known_cves"
+
+
+def test_highest_patch_severity_spec_unknown_value_returns_unknown() -> None:
+    """The spec literal 'unknown' severity returns 'unknown' (rank below no_known_cves)."""
+    patches = [{"severity": "unknown"}]
+    assert _highest_patch_severity(patches) == "unknown"
+
+
+def test_highest_patch_severity_no_known_cves_outranks_unknown() -> None:
+    """A mix of no_known_cves and unknown reports 'no_known_cves' (it ranks higher)."""
+    patches = [{"severity": "unknown"}, {"severity": "no_known_cves"}]
+    assert _highest_patch_severity(patches) == "no_known_cves"
+
+
+def test_highest_patch_severity_none_outranks_no_known_cves() -> None:
+    """Chosen ordering: spec value 'none' (rank 0) ranks above 'no_known_cves' (-1)."""
+    patches = [{"severity": "no_known_cves"}, {"severity": "none"}]
+    assert _highest_patch_severity(patches) == "none"
+
+
+def test_highest_patch_severity_none_string_survives_or_chain() -> None:
+    """A truthy string 'none' must NOT fall through the `or` chain to 'unknown'.
+
+    Guards against a future refactor fumbling the truthy-string handling: 'none'
+    is a truthy string, so it survives `severity or cve_severity or ''` and must
+    rank as the spec 'none' value, not the absent-data 'unknown' bucket.
+    """
+    assert _highest_patch_severity([{"severity": "none"}]) == "none"
+
+
 # ===========================================================================
 # _extract_devices
 # ===========================================================================
@@ -246,6 +285,142 @@ async def test_get_prepatch_report_severity_counters() -> None:
     assert summary["unknown"] == 1
 
 
+# Captured & sanitized live prepatch shape (2026-06-05). Device keys and patch
+# keys mirror the live payload; severities include 'no_known_cves' alongside an
+# assessed value, and the summary carries the live bucket set
+# {total, needsAttention, none, low, medium, high, critical, no_known_cves,
+# unknown}. The per-severity buckets intentionally do NOT sum to summary['total']
+# (live: total=54 vs bucket sum=36) — this keeps the total_pending_patches caveat
+# honest and prevents a future 'sum==total' assertion from creeping back in.
+_LIVE_PREPATCH_RESPONSE: dict[str, Any] = {
+    "prepatch": {
+        "total": 54,
+        "needsAttention": 5,
+        "none": 0,
+        "low": 0,
+        "medium": 0,
+        "high": 1,
+        "critical": 3,
+        "no_known_cves": 0,
+        "unknown": 32,
+        "devices": [
+            {
+                "id": 1001,
+                "name": "device-a",
+                "group": "Default Group",
+                "os_family": "Windows",
+                "connected": True,
+                "compliant": True,
+                "needsReboot": False,
+                "createTime": "2025-01-01T00:00:00Z",
+                "patches": [
+                    {
+                        "id": 5001,
+                        "name": "patch-a1",
+                        "severity": "no_known_cves",
+                        "cve": None,
+                        "needsApproval": False,
+                        "packageVersionId": 9001,
+                        "createTime": "2025-01-01T00:00:00Z",
+                        "patchTime": "2025-01-02T00:00:00Z",
+                    },
+                    {
+                        "id": 5002,
+                        "name": "patch-a2",
+                        "severity": "no_known_cves",
+                        "cve": None,
+                        "needsApproval": False,
+                        "packageVersionId": 9002,
+                        "createTime": "2025-01-01T00:00:00Z",
+                        "patchTime": "2025-01-02T00:00:00Z",
+                    },
+                ],
+            },
+            {
+                "id": 1002,
+                "name": "device-b",
+                "group": "Default Group",
+                "os_family": "Windows",
+                "connected": True,
+                "compliant": False,
+                "needsReboot": True,
+                "createTime": "2025-01-01T00:00:00Z",
+                "patches": [
+                    {
+                        "id": 5003,
+                        "name": "patch-b1",
+                        "severity": "critical",
+                        "cve": "CVE-0000-0000",
+                        "needsApproval": True,
+                        "packageVersionId": 9003,
+                        "createTime": "2025-01-01T00:00:00Z",
+                        "patchTime": None,
+                    },
+                ],
+            },
+            {
+                "id": 1003,
+                "name": "device-c",
+                "group": "Default Group",
+                "os_family": "Linux",
+                "connected": True,
+                "compliant": True,
+                "needsReboot": False,
+                "createTime": "2025-01-01T00:00:00Z",
+                "patches": [],
+            },
+        ],
+    }
+}
+
+
+@pytest.mark.asyncio
+async def test_get_prepatch_report_live_shape_separates_no_known_cves() -> None:
+    """Integration witness for finding 31 against a captured live shape.
+
+    The all-no_known_cves device projects highest_severity == 'no_known_cves'
+    (NOT 'unknown'); the recomputed summary carries a distinct no_known_cves
+    bucket; the raw upstream summary is passed through unmodified under
+    api_summary; and metadata.field_notes documents the semantics.
+    """
+    client = StubClient(get_responses={"/reports/prepatch": [_LIVE_PREPATCH_RESPONSE]})
+
+    result = await get_prepatch_report(cast(AutomoxClient, client), org_id=42, limit=500)
+    data = result["data"]
+
+    by_id = {d["server_id"]: d for d in data["devices"]}
+    # All-no_known_cves device must not collapse to 'unknown'.
+    assert by_id[1001]["highest_severity"] == "no_known_cves"
+    assert by_id[1002]["highest_severity"] == "critical"
+    # Empty patches → 'unknown'.
+    assert by_id[1003]["highest_severity"] == "unknown"
+
+    summary = data["summary"]
+    # Recomputed summary has a distinct no_known_cves bucket counted separately.
+    assert summary["no_known_cves"] == 1
+    assert summary["unknown"] == 1
+    assert summary["critical"] == 1
+
+    # Raw upstream summary passes through unmodified, with both raw buckets.
+    api_summary = data["api_summary"]
+    assert api_summary["no_known_cves"] == 0
+    assert api_summary["unknown"] == 32
+    assert api_summary["total"] == 54
+
+    # total_pending_patches is the upstream relabel; buckets do NOT sum to it.
+    assert data["total_pending_patches"] == 54
+    bucket_sum = sum(
+        summary[k]
+        for k in ("critical", "high", "medium", "low", "none", "no_known_cves", "unknown")
+    )
+    assert bucket_sum != data["total_pending_patches"]
+
+    notes = result["metadata"]["field_notes"]
+    assert "highest_severity" in notes
+    assert "compliant" in notes
+    assert "total_pending_patches" in notes
+
+
 @pytest.mark.asyncio
 async def test_get_prepatch_report_with_group_id() -> None:
     """group_id parameter is forwarded as 'groupId' in the API request."""
@@ -417,6 +592,89 @@ async def test_get_noncompliant_report_with_failing_policies() -> None:
     policy_ids = [p["id"] for p in dev["failing_policies"]]
     assert 101 in policy_ids
     assert 102 in policy_ids
+
+
+# Captured & sanitized live needs-attention policy shape (2026-06-05). Live
+# reasonForFail is a verbose multi-line log blob (~600-840 chars) containing
+# third-party app names and ISO timestamps; replaced here with neutral
+# placeholder text long enough to exceed the 2000-char truncation cap.
+_LONG_REASON = (
+    "Patch installation could not complete on the target device. "
+    "Step output follows: " + ("placeholder remediation log line. " * 80)
+)
+
+
+@pytest.mark.asyncio
+async def test_get_noncompliant_report_failing_policy_fields_surfaced() -> None:
+    """Finding 33: each failing policy carries type, severity, reason_for_fail, package_count.
+
+    Fixture mirrors the captured live policy object shape (keys id, name,
+    packages, policyCreateTime, reasonForFail, severity, type).
+    """
+    device = {
+        "id": 20,
+        "customName": "device-with-failures",
+        "policies": [
+            {
+                "id": 101,
+                "name": "Policy A",
+                "type": "patch",
+                "severity": "unknown",
+                "reasonForFail": "short failure reason",
+                "packages": [{"id": 1}, {"id": 2}],
+                "policyCreateTime": "2025-01-01T00:00:00Z",
+            },
+        ],
+    }
+    client = StubClient(
+        get_responses={"/reports/needs-attention": [_make_noncompliant_response([device])]},
+    )
+
+    result = await get_noncompliant_report(cast(AutomoxClient, client), org_id=42)
+
+    pol = result["data"]["devices"][0]["failing_policies"][0]
+    assert pol["id"] == 101
+    assert pol["name"] == "Policy A"
+    assert pol["type"] == "patch"
+    assert pol["severity"] == "unknown"
+    assert pol["reason_for_fail"] == "short failure reason"
+    assert pol["package_count"] == 2
+
+    notes = result["metadata"]["field_notes"]
+    assert "reason_for_fail" in notes
+    assert "severity" in notes
+    assert "type" in notes
+
+
+@pytest.mark.asyncio
+async def test_get_noncompliant_report_reason_for_fail_truncated() -> None:
+    """A long reasonForFail is truncated with a marker; a short one passes through."""
+    device = {
+        "id": 21,
+        "name": "long-reason-device",
+        "policies": [
+            {"id": 201, "name": "Long", "reasonForFail": _LONG_REASON, "packages": None},
+            {"id": 202, "name": "Short", "reasonForFail": "ok", "packages": []},
+        ],
+    }
+    client = StubClient(
+        get_responses={"/reports/needs-attention": [_make_noncompliant_response([device])]},
+    )
+
+    result = await get_noncompliant_report(cast(AutomoxClient, client), org_id=42)
+    pols = {p["id"]: p for p in result["data"]["devices"][0]["failing_policies"]}
+
+    assert len(_LONG_REASON) > 2000
+    long_reason = pols[201]["reason_for_fail"]
+    assert long_reason.startswith(_LONG_REASON[:2000])
+    assert "... [truncated" in long_reason
+    assert f"[truncated {len(_LONG_REASON) - 2000} chars]" in long_reason
+    # packages=None → package_count None
+    assert pols[201]["package_count"] is None
+
+    # Short reason passes through verbatim; empty list → count 0.
+    assert pols[202]["reason_for_fail"] == "ok"
+    assert pols[202]["package_count"] == 0
 
 
 @pytest.mark.asyncio

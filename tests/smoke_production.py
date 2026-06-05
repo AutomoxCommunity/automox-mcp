@@ -659,7 +659,27 @@ async def run_readonly_tools() -> None:
         # ---- Reports ----
         # 23. noncompliant_report
         resp = await _safe_call(session, "noncompliant_report", {})
-        record("noncompliant_report", resp is not None and "data" in (resp or {}), _data_keys(resp))
+        nc_ok = resp is not None and "data" in (resp or {})
+        nc_detail = _data_keys(resp)
+        if nc_ok:
+            # Correctness: when a device with failing_policies is present, at least
+            # one policy should carry a non-empty reason_for_fail (finding 33;
+            # live-verified populated 2026-06-05). Tenant state drifts and smoke
+            # is manual/not-in-CI, so guard on presence rather than failing on a
+            # healthy/empty tenant.
+            ncdevs = (resp or {}).get("data", {}).get("devices", [])
+            pols = [
+                p for d in ncdevs if isinstance(d, dict) for p in (d.get("failing_policies") or [])
+            ]
+            if pols:
+                has_reason = any(
+                    isinstance(p.get("reason_for_fail"), str) and p["reason_for_fail"].strip()
+                    for p in pols
+                )
+                has_fields = all(("type" in p and "severity" in p) for p in pols)
+                nc_ok = has_reason and has_fields
+                nc_detail = f"{len(pols)} policies; reason_for_fail+fields={nc_ok}"
+        record("noncompliant_report", nc_ok, nc_detail)
 
         # 24. get_compliance_snapshot
         resp = await _safe_call(session, "get_compliance_snapshot", {})
@@ -686,7 +706,33 @@ async def run_readonly_tools() -> None:
         # ---- More reports ----
         # 28. prepatch_report
         resp = await _safe_call(session, "prepatch_report", {})
-        record("prepatch_report", resp is not None and "data" in (resp or {}), _data_keys(resp))
+        pp_ok = resp is not None and "data" in (resp or {})
+        pp_detail = _data_keys(resp)
+        if pp_ok:
+            data = (resp or {}).get("data", {})
+            meta = (resp or {}).get("metadata", {})
+            # Correctness: the field_notes legend must be present, and any device
+            # whose patches are all no_known_cves must project highest_severity ==
+            # 'no_known_cves' (finding 31; not 'unknown'). The all-no_known_cves
+            # device is tenant-state dependent — guard on finding one rather than
+            # requiring it unconditionally.
+            has_notes = bool(meta.get("field_notes"))
+            has_nkc_bucket = "no_known_cves" in data.get("summary", {})
+            # If the recomputed summary counted any no_known_cves device, at least
+            # one device must carry highest_severity == 'no_known_cves'.
+            nkc_count = data.get("summary", {}).get("no_known_cves", 0)
+            devs = data.get("devices", [])
+            nkc_devices = [
+                d
+                for d in devs
+                if isinstance(d, dict) and d.get("highest_severity") == "no_known_cves"
+            ]
+            collapse_ok = (nkc_count == 0) or (len(nkc_devices) >= 1)
+            pp_ok = has_notes and has_nkc_bucket and collapse_ok
+            pp_detail = (
+                f"notes={has_notes} nkc_bucket={has_nkc_bucket} nkc_devices={len(nkc_devices)}"
+            )
+        record("prepatch_report", pp_ok, pp_detail)
 
         # 29. patch_approvals_summary
         resp = await _safe_call(session, "patch_approvals_summary", {})

@@ -11,17 +11,58 @@ from ..client import AutomoxClient
 # Safety cap on auto-pagination to prevent runaway loops.
 _MAX_PAGINATION_PAGES = 50
 
+# Cap on the per-policy reasonForFail free-text blob. Live (2026-06-05) these
+# run ~600-840 chars and can be larger; cap to bound token usage while keeping
+# the raw prefix and an explicit truncation marker.
+_REASON_FOR_FAIL_CAP = 2000
+
+
+def _truncate_reason(value: Any) -> Any:
+    """Cap a reasonForFail string at _REASON_FOR_FAIL_CAP with a marker.
+
+    Non-string values (incl. None) pass through unchanged.
+    """
+    if not isinstance(value, str) or len(value) <= _REASON_FOR_FAIL_CAP:
+        return value
+    dropped = len(value) - _REASON_FOR_FAIL_CAP
+    return f"{value[:_REASON_FOR_FAIL_CAP]}... [truncated {dropped} chars]"
+
+
+# Severity ordering for the per-device "highest_severity" projection.
+#
+# Finding 31: the upstream prepatch payload carries DISTINCT `no_known_cves`
+# and `unknown` states (both live-verified as separate summary buckets on
+# 2026-06-05). They must not collapse into one string:
+#   - "no_known_cves" = the patch carries no associated CVE (benign / low
+#     priority). Ranked -1: below every assessed severity (incl. "none") so it
+#     is never mistaken for an assessed risk, but strictly ABOVE "unknown".
+#   - "unknown" = severity absent or undetermined (the spec also defines a
+#     literal "unknown" value). Ranked -2 — also the default rank for an
+#     absent/unparseable severity, which is correct: both mean "no assessed
+#     CVE severity available". Separating the spec "unknown" from the no-data
+#     fallthrough is out of scope (a single string field cannot carry both).
 _SEVERITY_RANK: dict[str, int] = {
     "critical": 4,
     "high": 3,
     "medium": 2,
     "low": 1,
     "none": 0,
+    "no_known_cves": -1,
+    "unknown": -2,
 }
+
+# Default rank for a severity string the table does not recognize (absent,
+# empty, or unparseable) — same bucket as the spec "unknown" value.
+_SEVERITY_DEFAULT_RANK = -2
 
 
 def _highest_patch_severity(patches: Any) -> str:
-    """Return the highest severity found across a device's patches."""
+    """Return the highest severity found across a device's patches.
+
+    Returns ``"no_known_cves"`` only when that is genuinely the device's max
+    (its patches carry no CVEs); ``"unknown"`` covers both the spec literal
+    "unknown" value and the absent/unparseable-data fallthrough.
+    """
     if not patches:
         return "unknown"
     items: Sequence[Any]
@@ -32,12 +73,14 @@ def _highest_patch_severity(patches: Any) -> str:
     else:
         return "unknown"
 
-    max_rank = -1
+    # Seed below every known rank (incl. "unknown" at -2) so an empty or
+    # all-unparseable item set falls through to the literal "unknown" return.
+    max_rank = -3
     for patch in items:
         if not isinstance(patch, Mapping):
             continue
         sev = str(patch.get("severity") or patch.get("cve_severity") or "").lower().strip()
-        rank = _SEVERITY_RANK.get(sev, -1)
+        rank = _SEVERITY_RANK.get(sev, _SEVERITY_DEFAULT_RANK)
         if rank > max_rank:
             max_rank = rank
 
@@ -198,6 +241,7 @@ async def get_prepatch_report(
         "medium": severity_counter.get("medium", 0),
         "low": severity_counter.get("low", 0),
         "none": severity_counter.get("none", 0),
+        "no_known_cves": severity_counter.get("no_known_cves", 0),
         "unknown": severity_counter.get("unknown", 0),
     }
 
@@ -211,6 +255,43 @@ async def get_prepatch_report(
         },
         "metadata": {
             "deprecated_endpoint": False,
+            "field_notes": {
+                "highest_severity": (
+                    "Per device: the highest patch severity across its pending "
+                    "patches. Full enum per spec (unverified live): "
+                    "critical/high/medium/low/none/no_known_cves/unknown. "
+                    "Live-observed on this tenant (2026-06-05): no_known_cves, "
+                    "high, critical, unknown. 'no_known_cves' = patches carry no "
+                    "associated CVE (benign / low priority); 'unknown' = severity "
+                    "absent or undetermined (NOT inherently high risk). These two "
+                    "are distinct states (the upstream summary carries separate "
+                    "no_known_cves/unknown counters) and are never collapsed."
+                ),
+                "compliant": (
+                    "Upstream device compliance boolean, passed through raw. "
+                    "Platform rule (per #149/#155): a device is non-compliant "
+                    "only when a policy needs remediation; pending work alone does "
+                    "not count against compliance. A device can be compliant:true "
+                    "while still listed here with pending patches — this is not a "
+                    "contradiction. The relationship of this boolean to the rule "
+                    "is attributed to the platform, not recomputed by this wrapper."
+                ),
+                "total_pending_patches": (
+                    "Upstream prepatch summary 'total' (spec describes it only as "
+                    "'Total property' — unit not spec-stated; this wrapper "
+                    "relabels it). The per-severity buckets are NOT guaranteed to "
+                    "sum to it (live 2026-06-05: total=54 vs severity-bucket "
+                    "sum=36). Treat it as an upstream-reported pending count, not "
+                    "a recomputed device count, and do not assume it is org-wide."
+                ),
+                "summary": (
+                    "Per-severity device counts RECOMPUTED by this wrapper from "
+                    "highest_severity, including a distinct 'no_known_cves' bucket. "
+                    "The raw upstream summary counters (which already included "
+                    "no_known_cves and unknown separately) are passed through "
+                    "unmodified under 'api_summary'."
+                ),
+            },
         },
     }
 
@@ -290,7 +371,16 @@ async def get_noncompliant_report(
         policies = item.get("policies")
         if isinstance(policies, list):
             entry["failing_policies"] = [
-                {"id": p.get("id"), "name": p.get("name")}
+                {
+                    "id": p.get("id"),
+                    "name": p.get("name"),
+                    "type": p.get("type"),
+                    "severity": p.get("severity"),
+                    "reason_for_fail": _truncate_reason(p.get("reasonForFail")),
+                    "package_count": (
+                        len(p["packages"]) if isinstance(p.get("packages"), list) else None
+                    ),
+                }
                 for p in policies
                 if isinstance(p, Mapping)
             ]
@@ -307,5 +397,29 @@ async def get_noncompliant_report(
         },
         "metadata": {
             "deprecated_endpoint": False,
+            "field_notes": {
+                "reason_for_fail": (
+                    "Per failing policy: the upstream free-text failure reason "
+                    "(reasonForFail). A verbose multi-line log blob (live "
+                    "2026-06-05: ~600-840 chars, can be larger); truncated to "
+                    f"{_REASON_FOR_FAIL_CAP} chars with a '... [truncated N "
+                    "chars]' marker when longer."
+                ),
+                "severity": (
+                    "Per failing policy: the policy severity. Full enum per spec "
+                    "(unverified live): no_known_cves/none/unknown/low/medium/"
+                    "high/critical. Live-observed on this tenant (2026-06-05): "
+                    "unknown, high, critical."
+                ),
+                "type": (
+                    "Per failing policy: the policy type (e.g. 'patch' observed "
+                    "live 2026-06-05; other values per spec, unverified live)."
+                ),
+                "package_count": (
+                    "Per failing policy: count of entries in the upstream "
+                    "'packages' list (the full package array is not surfaced to "
+                    "stay lean); null when no packages list is present."
+                ),
+            },
         },
     }

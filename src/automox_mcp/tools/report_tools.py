@@ -25,7 +25,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         name="prepatch_report",
         description=(
             "Retrieve the Automox pre-patch readiness report showing devices "
-            "with pending patches before the next scheduled patch window."
+            "with pending patches before the next scheduled patch window. "
+            "Per-device 'highest_severity' distinguishes 'no_known_cves' (patches "
+            "carry no associated CVE — benign) from 'unknown' (severity "
+            "undetermined). 'compliant' follows the platform rule: a device is "
+            "non-compliant only when a policy needs remediation; pending work "
+            "alone does not count against it."
         ),
         annotations={
             "readOnlyHint": True,
@@ -59,7 +64,10 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         name="noncompliant_report",
         description=(
             "Retrieve the Automox non-compliant devices report showing devices "
-            "that need attention due to policy failures or missing patches."
+            "that need attention due to policy failures or missing patches. Each "
+            "failing policy includes 'reason_for_fail' (upstream failure text, "
+            "may be truncated), 'severity', and 'type' so you can state why a "
+            "device is non-compliant and prioritize across devices."
         ),
         annotations={
             "readOnlyHint": True,

@@ -160,8 +160,8 @@ Manage vulnerability remediation workflows via the Vuln Sync API. Supports CSV-b
 
 ## Reports (2 tools)
 
-- **`prepatch_report`** - Retrieve the pre-patch readiness report showing devices with pending patches before the next scheduled patch window.
-- **`noncompliant_report`** - Retrieve the non-compliant devices report showing devices that need attention due to policy failures or missing patches.
+- **`prepatch_report`** - Retrieve the pre-patch readiness report showing devices with pending patches before the next scheduled patch window. Per-device `highest_severity` distinguishes `no_known_cves` (no associated CVE — benign) from `unknown` (severity undetermined); `compliant` follows the platform rule (pending work alone does not count against compliance).
+- **`noncompliant_report`** - Retrieve the non-compliant devices report showing devices that need attention due to policy failures or missing patches. Each failing policy now carries `reason_for_fail` (upstream failure text, truncated when long), `severity`, and `type`.
 
 ## Account Management (24 tools)
 

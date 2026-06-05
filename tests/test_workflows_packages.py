@@ -12,52 +12,101 @@ from automox_mcp.workflows.packages import (
     search_org_packages,
 )
 
+# Fixtures below are built from the live `Packages` DTO key set captured by a
+# sanitized read-only probe of both `/servers/{id}/packages` and
+# `/orgs/{id}/packages` on 2026-06-05. The live responses do NOT contain
+# `status`, `patch_status`, `awaiting`, or `device_count` (verified across 800+
+# org packages and the device inventory). Names/IDs are scrubbed to generic
+# placeholders. Severity values use the live distribution: high, no_known_cves,
+# and JSON null (None) for the device fixture; critical/high/medium added for
+# the org fixture.
 _DEVICE_PACKAGES: list[dict[str, Any]] = [
     {
         "id": 1,
-        "display_name": "Google Chrome",
+        "display_name": "Example App",
         "version": "120.0.6099",
         "installed": True,
-        "repo": "Google",
+        "repo": "vendor",
         "severity": "high",
-        "status": "installed",
         "is_managed": True,
+        "organization_id": 0,
+        "server_id": 0,
+        "package_id": 11,
+        "package_version_id": 111,
+        "software_id": 1111,
+        "agent_severity": None,
+        "cve_score": None,
+        "cves": None,
+        "kev_cves": None,
+        "epss_score": None,
+        "impact": None,
+        "ignored": False,
+        "group_ignored": False,
+        "is_uninstallable": True,
+        "requires_reboot": False,
+        "patch_scope": "all",
+        "patch_classification_category_id": None,
+        "os_name": "Windows",
+        "os_version": "10",
+        "os_version_id": 1,
+        "create_time": "2026-01-01T00:00:00Z",
+        "deferred_until": None,
+        "group_deferred_until": None,
+        "secondary_id": None,
     },
     {
         "id": 2,
-        "name": "curl",  # uses name instead of display_name
+        "name": "example-cli",  # uses name instead of display_name
         "version": "8.0.1",
         "installed": True,
-        "repo": "homebrew",
-        "patch_status": "available",  # uses patch_status instead of status
+        "repo": "vendor",
+        "severity": "no_known_cves",
+        "is_managed": True,
+        "organization_id": 0,
+        "server_id": 0,
     },
     {
         "id": 3,
-        "display_name": "Firefox",
+        "display_name": "Example Browser",
         "version": "121.0",
         "installed": False,
-        "repo": "Mozilla",
+        "repo": "vendor",
+        "severity": None,  # JSON null severity is a real, common live value
+        "organization_id": 0,
+        "server_id": 0,
     },
 ]
 
 _ORG_PACKAGES: list[dict[str, Any]] = [
     {
         "id": 100,
-        "display_name": "Chrome",
+        "display_name": "Example App",
         "version": "120.0",
         "severity": "high",
-        "device_count": 42,
         "is_managed": True,
-        "awaiting": False,
+        "installed": True,
+        "organization_id": 0,
+        "server_id": 0,
     },
     {
         "id": 101,
-        "name": "openssl",  # uses name instead of display_name
+        "name": "example-lib",  # uses name instead of display_name
         "version": "3.1.4",
         "severity": "critical",
-        "device_count": 100,
         "is_managed": True,
-        "awaiting": True,
+        "installed": False,
+        "organization_id": 0,
+        "server_id": 0,
+    },
+    {
+        "id": 102,
+        "display_name": "Example Tool",
+        "version": "2.0",
+        "severity": None,  # JSON null severity
+        "is_managed": True,
+        "installed": True,
+        "organization_id": 0,
+        "server_id": 0,
     },
 ]
 
@@ -83,8 +132,8 @@ async def test_list_packages_prefers_display_name() -> None:
     result = await list_device_packages(cast(AutomoxClient, client), org_id=555, device_id=101)
 
     names = [p["name"] for p in result["data"]["packages"]]
-    assert "Google Chrome" in names
-    assert "curl" in names  # falls back to name field
+    assert "Example App" in names
+    assert "example-cli" in names  # falls back to name field
 
 
 @pytest.mark.asyncio
@@ -92,14 +141,18 @@ async def test_list_packages_includes_optional_fields() -> None:
     client = StubClient(get_responses={"/servers/101/packages": [_DEVICE_PACKAGES]})
     result = await list_device_packages(cast(AutomoxClient, client), org_id=555, device_id=101)
 
-    chrome = next(p for p in result["data"]["packages"] if p["name"] == "Google Chrome")
-    assert chrome["severity"] == "high"
-    assert chrome["patch_status"] == "installed"
-    assert chrome["is_managed"] is True
+    app = next(p for p in result["data"]["packages"] if p["name"] == "Example App")
+    assert app["severity"] == "high"
+    assert app["is_managed"] is True
+    assert app["installed"] is True
 
-    curl = next(p for p in result["data"]["packages"] if p["name"] == "curl")
-    assert curl["patch_status"] == "available"  # from patch_status field
-    assert "severity" not in curl  # no severity on this package
+    cli = next(p for p in result["data"]["packages"] if p["name"] == "example-cli")
+    assert cli["severity"] == "no_known_cves"
+
+    # The phantom `patch_status` projection is gone — it is never emitted because
+    # the live Packages DTO has neither `status` nor `patch_status`.
+    for entry in result["data"]["packages"]:
+        assert "patch_status" not in entry
 
 
 @pytest.mark.asyncio
@@ -107,10 +160,32 @@ async def test_list_packages_omits_absent_optional_fields() -> None:
     client = StubClient(get_responses={"/servers/101/packages": [_DEVICE_PACKAGES]})
     result = await list_device_packages(cast(AutomoxClient, client), org_id=555, device_id=101)
 
-    firefox = next(p for p in result["data"]["packages"] if p["name"] == "Firefox")
-    assert "severity" not in firefox
-    assert "patch_status" not in firefox
-    assert "is_managed" not in firefox
+    browser = next(p for p in result["data"]["packages"] if p["name"] == "Example Browser")
+    # null severity is dropped from the per-package entry (the legend documents
+    # that absence); is_managed absent on this package.
+    assert "severity" not in browser
+    assert "patch_status" not in browser
+    assert "is_managed" not in browser
+
+
+@pytest.mark.asyncio
+async def test_list_packages_severity_field_note() -> None:
+    """The severity legend is attached unconditionally and marks live vs spec values."""
+    client = StubClient(get_responses={"/servers/101/packages": [_DEVICE_PACKAGES]})
+    result = await list_device_packages(cast(AutomoxClient, client), org_id=555, device_id=101)
+
+    note = result["metadata"]["field_notes"]["severity"]
+    assert "no_known_cves" in note["observed_live"]
+    assert any("null" in v for v in note["observed_live"])
+    for spec_only in ("low", "none", "unknown"):
+        assert spec_only in note["spec_only_unverified"]
+
+    # A no_known_cves package and a null-severity package both round-trip with
+    # raw severity preserved (no rewriting).
+    cli = next(p for p in result["data"]["packages"] if p["name"] == "example-cli")
+    assert cli["severity"] == "no_known_cves"
+    browser = next(p for p in result["data"]["packages"] if p["name"] == "Example Browser")
+    assert "severity" not in browser  # raw None not coerced to a label
 
 
 @pytest.mark.asyncio
@@ -201,10 +276,10 @@ async def test_search_org_packages_returns_summaries() -> None:
     client = StubClient(get_responses={"/orgs/555/packages": [_ORG_PACKAGES]})
     result = await search_org_packages(cast(AutomoxClient, client), org_id=555)
 
-    assert result["data"]["total_packages"] == 2
+    assert result["data"]["total_packages"] == 3
     names = [p["name"] for p in result["data"]["packages"]]
-    assert "Chrome" in names
-    assert "openssl" in names
+    assert "Example App" in names
+    assert "example-lib" in names
 
 
 @pytest.mark.asyncio
@@ -212,10 +287,31 @@ async def test_search_org_packages_includes_optional_fields() -> None:
     client = StubClient(get_responses={"/orgs/555/packages": [_ORG_PACKAGES]})
     result = await search_org_packages(cast(AutomoxClient, client), org_id=555)
 
-    chrome = next(p for p in result["data"]["packages"] if p["name"] == "Chrome")
-    assert chrome["device_count"] == 42
-    assert chrome["is_managed"] is True
-    assert chrome["awaiting"] is False
+    app = next(p for p in result["data"]["packages"] if p["name"] == "Example App")
+    assert app["is_managed"] is True
+    assert app["severity"] == "high"
+
+    # The phantom `awaiting` output projection is gone (the awaiting INPUT
+    # filter is exercised separately and remains correct). `device_count` is
+    # also absent from the live Packages DTO and is no longer projected.
+    for entry in result["data"]["packages"]:
+        assert "awaiting" not in entry
+        assert "device_count" not in entry
+
+
+@pytest.mark.asyncio
+async def test_search_org_packages_severity_field_note() -> None:
+    """Org search attaches the same severity legend as the device tool (shared constant)."""
+    from automox_mcp.workflows.packages import _SEVERITY_FIELD_NOTE
+
+    client = StubClient(get_responses={"/orgs/555/packages": [_ORG_PACKAGES]})
+    result = await search_org_packages(cast(AutomoxClient, client), org_id=555)
+
+    note = result["metadata"]["field_notes"]["severity"]
+    assert note is _SEVERITY_FIELD_NOTE
+    assert "no_known_cves" in note["observed_live"]
+    for spec_only in ("low", "none", "unknown"):
+        assert spec_only in note["spec_only_unverified"]
 
 
 @pytest.mark.asyncio

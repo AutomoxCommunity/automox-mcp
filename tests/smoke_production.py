@@ -644,17 +644,33 @@ async def run_readonly_tools() -> None:
             resp = await _safe_call(session, "list_device_packages", {"device_id": device_id})
             complete = (resp or {}).get("metadata", {}).get("complete")
             total = (resp or {}).get("data", {}).get("total_packages")
+            pkgs = (resp or {}).get("data", {}).get("packages", []) or []
+            # Phantom regression detector: `patch_status` is not a live field
+            # and must never reappear in any entry. The severity legend is
+            # attached unconditionally.
+            no_phantom = all("patch_status" not in p for p in pkgs)
+            has_legend = "severity" in (resp or {}).get("metadata", {}).get("field_notes", {})
             record(
                 "list_device_packages",
-                resp is not None and complete is True,
-                f"total={total} complete={complete}",
+                resp is not None and complete is True and no_phantom and has_legend,
+                f"total={total} complete={complete} "
+                f"no_patch_status={no_phantom} legend={has_legend}",
             )
         else:
             record("list_device_packages", False, "skipped — no device_id")
 
-        # 22. search_org_packages
+        # 22. search_org_packages — assert phantom `awaiting` output key never
+        # reappears and the severity legend is present (unconditional), not just
+        # a bare not-None check (which would pass on wrong-but-200 data).
         resp = await _safe_call(session, "search_org_packages", {"limit": 2})
-        record("search_org_packages", resp is not None, _count_or_err(resp))
+        org_pkgs = (resp or {}).get("data", {}).get("packages", []) or []
+        no_awaiting = all("awaiting" not in p for p in org_pkgs)
+        org_legend = "severity" in (resp or {}).get("metadata", {}).get("field_notes", {})
+        record(
+            "search_org_packages",
+            resp is not None and no_awaiting and org_legend,
+            f"{_count_or_err(resp)} no_awaiting={no_awaiting} legend={org_legend}",
+        )
 
         # ---- Reports ----
         # 23. noncompliant_report

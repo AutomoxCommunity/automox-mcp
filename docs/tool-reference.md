@@ -100,8 +100,8 @@ Richer policy execution reporting via the `/policy-history` API with UUID-based 
 
 ## Package Management (2 tools)
 
-- **`list_device_packages`** - List software packages installed on a specific device. Returns package names, versions, patch status, and severity.
-- **`search_org_packages`** - Search packages across the organization. Filter by managed status or packages awaiting installation.
+- **`list_device_packages`** - List software packages on a specific device. Returns name, version, install state (`installed`), `severity`, `repo`, and `is_managed` (no patch-status field is returned).
+- **`search_org_packages`** - Search packages across the organization. Filter by managed status or packages awaiting installation (`awaiting` is a request filter, not a response field). Returns name, version, `severity`, `is_managed`.
 
 ## Group Management (5 tools)
 

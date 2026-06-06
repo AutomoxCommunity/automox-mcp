@@ -241,7 +241,7 @@ def test_main_refuses_remote_transport_when_upload_flag_set(monkeypatch):
 
 
 def test_main_stdio_transport_calls_run(monkeypatch):
-    import automox_mcp as init_mod
+    from automox_mcp import main, mcp
 
     monkeypatch.setenv("AUTOMOX_API_KEY", "env-key")
     monkeypatch.setenv("AUTOMOX_ACCOUNT_UUID", "account-uuid")
@@ -255,16 +255,16 @@ def test_main_stdio_transport_calls_run(monkeypatch):
         def run(self, *, transport, show_banner, **kwargs):
             run_calls.append({"transport": transport, "show_banner": show_banner, **kwargs})
 
-    monkeypatch.setattr(init_mod.mcp, "_instance", FakeServer())
+    monkeypatch.setattr(mcp, "_instance", FakeServer())
 
-    init_mod.main([])
+    main([])
 
     assert len(run_calls) == 1
     assert run_calls[0]["transport"] == "stdio"
 
 
 def test_main_http_transport_sets_defaults(monkeypatch):
-    import automox_mcp as init_mod
+    from automox_mcp import main, mcp
 
     monkeypatch.setenv("AUTOMOX_API_KEY", "env-key")
     monkeypatch.setenv("AUTOMOX_ACCOUNT_UUID", "account-uuid")
@@ -281,16 +281,16 @@ def test_main_http_transport_sets_defaults(monkeypatch):
         def run(self, *, transport, show_banner, **kwargs):
             run_calls.append({"transport": transport, **kwargs})
 
-    monkeypatch.setattr(init_mod.mcp, "_instance", FakeServer())
+    monkeypatch.setattr(mcp, "_instance", FakeServer())
 
-    init_mod.main(["--transport", "http"])
+    main(["--transport", "http"])
 
     assert run_calls[0]["host"] == "127.0.0.1"
     assert run_calls[0]["port"] == 8000
 
 
 def test_main_http_transport_with_explicit_host_port(monkeypatch):
-    import automox_mcp as init_mod
+    from automox_mcp import main, mcp
 
     monkeypatch.setenv("AUTOMOX_API_KEY", "env-key")
     monkeypatch.setenv("AUTOMOX_ACCOUNT_UUID", "account-uuid")
@@ -304,16 +304,16 @@ def test_main_http_transport_with_explicit_host_port(monkeypatch):
         def run(self, *, transport, show_banner, **kwargs):
             run_calls.append({"transport": transport, **kwargs})
 
-    monkeypatch.setattr(init_mod.mcp, "_instance", FakeServer())
+    monkeypatch.setattr(mcp, "_instance", FakeServer())
 
-    init_mod.main(["--transport", "http", "--host", "127.0.0.1", "--port", "7777"])
+    main(["--transport", "http", "--host", "127.0.0.1", "--port", "7777"])
 
     assert run_calls[0]["host"] == "127.0.0.1"
     assert run_calls[0]["port"] == 7777
 
 
 def test_main_http_non_loopback_host_rejected_without_flag(monkeypatch):
-    import automox_mcp as init_mod
+    from automox_mcp import main, mcp
 
     monkeypatch.setenv("AUTOMOX_API_KEY", "env-key")
     monkeypatch.setenv("AUTOMOX_ACCOUNT_UUID", "account-uuid")
@@ -326,16 +326,16 @@ def test_main_http_non_loopback_host_rejected_without_flag(monkeypatch):
         def run(self, *, transport, show_banner, **kwargs):
             pass
 
-    monkeypatch.setattr(init_mod.mcp, "_instance", FakeServer())
+    monkeypatch.setattr(mcp, "_instance", FakeServer())
 
     with pytest.raises(SystemExit, match="allow-remote-bind"):
-        init_mod.main(["--transport", "http", "--host", "0.0.0.0", "--port", "8080"])
+        main(["--transport", "http", "--host", "0.0.0.0", "--port", "8080"])
 
 
 def test_main_http_non_loopback_host_allowed_with_flag(monkeypatch, caplog):
     import logging
 
-    import automox_mcp as init_mod
+    from automox_mcp import main, mcp
 
     monkeypatch.setenv("AUTOMOX_API_KEY", "env-key")
     monkeypatch.setenv("AUTOMOX_ACCOUNT_UUID", "account-uuid")
@@ -347,10 +347,10 @@ def test_main_http_non_loopback_host_allowed_with_flag(monkeypatch, caplog):
         def run(self, *, transport, show_banner, **kwargs):
             pass
 
-    monkeypatch.setattr(init_mod.mcp, "_instance", FakeServer())
+    monkeypatch.setattr(mcp, "_instance", FakeServer())
 
     with caplog.at_level(logging.WARNING, logger="automox_mcp"):
-        init_mod.main(
+        main(
             [
                 "--transport",
                 "http",
@@ -366,7 +366,7 @@ def test_main_http_non_loopback_host_allowed_with_flag(monkeypatch, caplog):
 
 
 def test_main_http_port_from_env(monkeypatch):
-    import automox_mcp as init_mod
+    from automox_mcp import main, mcp
 
     monkeypatch.setenv("AUTOMOX_API_KEY", "env-key")
     monkeypatch.setenv("AUTOMOX_ACCOUNT_UUID", "account-uuid")
@@ -382,14 +382,14 @@ def test_main_http_port_from_env(monkeypatch):
         def run(self, *, transport, show_banner, **kwargs):
             run_calls.append(kwargs)
 
-    monkeypatch.setattr(init_mod.mcp, "_instance", FakeServer())
-    init_mod.main(["--transport", "http"])
+    monkeypatch.setattr(mcp, "_instance", FakeServer())
+    main(["--transport", "http"])
 
     assert run_calls[0]["port"] == 9999
 
 
 def test_main_http_path_kwarg(monkeypatch):
-    import automox_mcp as init_mod
+    from automox_mcp import main, mcp
 
     monkeypatch.setenv("AUTOMOX_API_KEY", "env-key")
     monkeypatch.setenv("AUTOMOX_ACCOUNT_UUID", "account-uuid")
@@ -405,22 +405,22 @@ def test_main_http_path_kwarg(monkeypatch):
         def run(self, *, transport, show_banner, **kwargs):
             run_calls.append(kwargs)
 
-    monkeypatch.setattr(init_mod.mcp, "_instance", FakeServer())
-    init_mod.main(["--transport", "sse", "--path", "/custom"])
+    monkeypatch.setattr(mcp, "_instance", FakeServer())
+    main(["--transport", "sse", "--path", "/custom"])
 
     assert run_calls[0]["path"] == "/custom"
 
 
 def test_main_lazy_server_creates_instance(monkeypatch):
     """_LazyServer.__getattr__ triggers create_server on first access."""
-    import automox_mcp as init_mod
+    from automox_mcp import _LazyServer
 
     monkeypatch.setenv("AUTOMOX_API_KEY", "env-key")
     monkeypatch.setenv("AUTOMOX_ACCOUNT_UUID", "account-uuid")
     monkeypatch.setenv("AUTOMOX_ORG_ID", "17")
     monkeypatch.setenv("AUTOMOX_MCP_SKIP_DOTENV", "1")
 
-    lazy = init_mod._LazyServer()
+    lazy = _LazyServer()
     assert lazy._instance is None
     # Access an attribute to trigger creation
     name = lazy.name

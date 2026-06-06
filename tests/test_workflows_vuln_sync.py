@@ -20,8 +20,10 @@ from automox_mcp.workflows.vuln_sync import (
 
 # Fixture shape mirrors the actual /orgs/{org}/remediations/action-sets
 # response: a `source` object with `name`/`type`, plus a nested
-# `statistics` block holding per-bucket counts. The summarizer flattens
-# this into a top-level `name`, `issue_count`, `solution_count`, etc.
+# `statistics` block holding per-bucket counts. The summarizer extracts
+# the top-level `name` from `source.name` and computes `issue_count` /
+# `solution_count` by summing the nested `statistics.issues` /
+# `statistics.solutions` buckets.
 _ACTION_SETS = [
     {
         "id": 1,

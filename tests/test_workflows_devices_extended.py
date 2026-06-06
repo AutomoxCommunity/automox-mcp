@@ -975,14 +975,14 @@ class FullStubClient:
 
 def _fresh_describe_device():
     """Return the describe_device function from the live (possibly re-imported) module."""
-    import automox_mcp.workflows.devices as mod
+    from automox_mcp.workflows import devices as mod
 
     return mod.describe_device
 
 
 def _patch_get_device_inventory(**kwargs):
     """Return a context manager that patches get_device_inventory in the live module."""
-    import automox_mcp.workflows.devices as mod
+    from automox_mcp.workflows import devices as mod
 
     return patch.object(mod, "get_device_inventory", **kwargs)
 

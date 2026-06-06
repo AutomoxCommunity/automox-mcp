@@ -36,7 +36,6 @@ from automox_mcp.workflows.vuln_sync import (
 )
 
 _ORG_UUID = "11111111-2222-3333-4444-555555555555"
-_ACCT_UUID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 
 
 # ---------------------------------------------------------------------------

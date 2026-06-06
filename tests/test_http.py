@@ -164,7 +164,7 @@ def test_resolve_user_agent_fallback_to_env_var(monkeypatch):
     """When the package is not installed, fall back to AUTOMOX_MCP_VERSION env var."""
     import importlib.metadata
 
-    import automox_mcp.client as client_module
+    from automox_mcp import client as client_module
 
     monkeypatch.setenv("AUTOMOX_MCP_VERSION", "9.8.7")
 
@@ -181,7 +181,7 @@ def test_resolve_user_agent_fallback_default_when_no_env(monkeypatch):
     """When the package is not installed and AUTOMOX_MCP_VERSION is unset, use 0.0.0+dev."""
     import importlib.metadata
 
-    import automox_mcp.client as client_module
+    from automox_mcp import client as client_module
 
     monkeypatch.delenv("AUTOMOX_MCP_VERSION", raising=False)
 

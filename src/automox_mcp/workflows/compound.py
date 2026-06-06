@@ -86,9 +86,14 @@ async def get_patch_tuesday_readiness(
 
     # "Pending" here means *awaiting a manual decision*. The decision axis is
     # `manual_approval` (spec/#154: True=approved, False=rejected, null=awaiting
-    # decision), NOT the `status` field — live approval records carry
-    # status='active' while still awaiting a decision, so keying on
-    # status in ('pending','Pending') silently undercounts (audit finding 51).
+    # decision), NOT the `status` field. Live-verified on a device-bearing test
+    # org (2026-06-06, issue #165): on decided rows `status` carries the DECISION
+    # OUTCOME, not an execution status — manual_approval=true co-occurred 1:1 with
+    # status='approved' (8/8) and false with status='rejected' (4/4). status while
+    # *awaiting* a decision was not observed (no awaiting row could be generated in
+    # the cycle), so we do NOT assert any particular awaiting value. Either way,
+    # keying the pending count on `status` would be wrong (it's the decision word,
+    # not 'pending'); key on `manual_approval is None` (audit finding 51).
     pending_approval_count = 0
     approval_items = approvals_data.get("approvals") or []
     if isinstance(approval_items, list):

@@ -52,12 +52,13 @@ _PREPATCH_RESPONSE = {
 # manual_approval — NOT the flat title/severity/device_count shape the old
 # fixture invented (which let the silent-zero envelope bug pass tests).
 #
-# The "awaiting decision" record carries status='active' with
-# manual_approval=null (the decision axis, per #154/audit finding 51). It is
-# deliberately NOT status='pending': live records never use that string, and a
-# fixture that set it would agree with the old status-keyed pending count even
-# though that code was wrong (the #132 trap). With status='active' the pending
-# count is only correct when keyed on manual_approval is None.
+# The "awaiting decision" record is keyed by manual_approval=null (the decision
+# axis, per #154/audit finding 51). Live-verified 2026-06-06 (#165): on DECIDED
+# rows `status` carries the decision outcome (approved/rejected), so the second
+# record below uses status='approved' with manual_approval=True. The awaiting
+# row's `status` was never observed live, so this fixture deliberately gives it
+# a non-'pending', non-decision marker — the pending count is only correct when
+# keyed on manual_approval is None, never on `status` (the #132 trap).
 _APPROVALS_RESPONSE = {
     "size": 2,
     "results": [
@@ -65,7 +66,7 @@ _APPROVALS_RESPONSE = {
             "id": 201,
             "manual_approval": None,
             "manual_approval_time": None,
-            "status": "active",
+            "status": "awaiting-unverified",
             "software": {
                 "id": 137,
                 "software_version_id": 324,
@@ -205,10 +206,10 @@ async def test_patch_tuesday_readiness_returns_all_sections() -> None:
     assert len(data["prepatch_report"]["devices"]) == 2
 
     # Approvals section populated. Exactly one record awaits a decision
-    # (manual_approval is null); the other is approved (manual_approval True).
-    # Both records have status='active'/'approved', NOT 'pending' — so this
-    # only reaches 1 when the count keys on manual_approval, not status
-    # (audit finding 51). Under the old status-keyed code this would be 0.
+    # (manual_approval is null); the other is approved (manual_approval True,
+    # status='approved'). Neither status is 'pending' — so this only reaches 1
+    # when the count keys on manual_approval, not status (audit finding 51).
+    # Under the old status-keyed code this would be 0.
     assert data["patch_approvals"]["pending_count"] == 1
 
     # Policy schedules section populated
@@ -294,10 +295,10 @@ async def test_patch_tuesday_readiness_caps_inner_lists_at_detail_limit() -> Non
         "results": [
             {
                 "id": i,
-                # status='active' is the live shape for an awaiting-decision
-                # record (NOT 'pending'); manual_approval=null is the decision
-                # axis (audit finding 51).
-                "status": "active",
+                # The awaiting-decision row's `status` was never observed live
+                # (#165); manual_approval=null is the decision axis and the only
+                # reliable key for the pending count (audit finding 51).
+                "status": "awaiting-unverified",
                 "manual_approval": None,
                 "software": {"display_name": f"Approval {i}", "version": "1.0", "cves": []},
                 "policy": {"id": 1, "name": "P"},
@@ -376,10 +377,10 @@ async def test_patch_tuesday_readiness_detail_limit_zero_returns_summary_only() 
     }
     approvals_payload = {
         "size": 5,
-        # Awaiting-decision records: status='active' (live shape, not 'pending')
-        # with manual_approval=null — the count keys on manual_approval.
+        # Awaiting-decision records: status-while-awaiting unobserved live (#165),
+        # manual_approval=null — the count keys on manual_approval, never status.
         "results": [
-            {"id": i, "title": f"A{i}", "status": "active", "manual_approval": None}
+            {"id": i, "title": f"A{i}", "status": "awaiting-unverified", "manual_approval": None}
             for i in range(5)
         ],
     }

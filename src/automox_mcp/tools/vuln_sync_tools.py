@@ -142,7 +142,8 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "or configurations to resolve vulnerabilities. Per-vulnerability `severity` "
             "and per-device `status` are coded strings with no API-enumerated value set "
             "(severity scale/ceiling spec-derived and unverified live; device status "
-            "observed live as 'not-started') — see metadata.field_notes."
+            "observed live transitioning not-started -> in_progress, note the mixed "
+            "hyphen/underscore separators) — see metadata.field_notes."
         ),
         annotations={
             "readOnlyHint": True,

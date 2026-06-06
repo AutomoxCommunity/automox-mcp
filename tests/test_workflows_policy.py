@@ -1306,20 +1306,27 @@ async def test_describe_policy_omits_dnd_block_when_absent() -> None:
 @pytest.mark.asyncio
 async def test_patch_approvals_unwraps_results_envelope() -> None:
     """Live /approvals returns {size, results}; the old bare-Sequence guard
-    silently reported zero approvals for every conforming response."""
+    silently reported zero approvals for every conforming response.
+
+    Fixture mirrors the live-verified decided-row correlation (2026-06-06,
+    issue #165): manual_approval=true <-> status='approved',
+    manual_approval=false <-> status='rejected'; manual_approval_time is a
+    'YYYY-MM-DD HH:MM:SS' string; no top-level severity, software.severity null.
+    """
     envelope = {
         "size": 2,
         "results": [
             {
                 "id": 351,
-                "manual_approval": None,
-                "manual_approval_time": None,
-                "status": "pending",
+                "manual_approval": True,
+                "manual_approval_time": "2023-09-08 16:59:43",
+                "status": "approved",
                 "software": {
                     "id": 137,
                     "display_name": "Adobe Refresh Manager",
                     "version": "0.0.19",
                     "os_family": "Mac",
+                    "severity": None,
                     "cves": ["CVE-2026-1111"],
                 },
                 "policy": {"id": 5, "name": "A Manual Policy"},
@@ -1327,9 +1334,9 @@ async def test_patch_approvals_unwraps_results_envelope() -> None:
             {
                 "id": 352,
                 "manual_approval": False,
-                "manual_approval_time": "2026-06-01T00:00:00Z",
+                "manual_approval_time": "2024-10-23 17:43:34",
                 "status": "rejected",
-                "software": {"id": 138, "display_name": "Other App", "cves": []},
+                "software": {"id": 138, "display_name": "Other App", "severity": None, "cves": []},
                 "policy": {"id": 5, "name": "A Manual Policy"},
             },
         ],
@@ -1340,17 +1347,66 @@ async def test_patch_approvals_unwraps_results_envelope() -> None:
     result = await summarize_patch_approvals(cast(AutomoxClient, stub), org_id=42)
     data = result["data"]
     assert data["total_approvals_considered"] == 2
-    assert data["status_breakdown"] == {"pending": 1, "rejected": 1}
-    # No severity field exists upstream — bucketed as unspecified, not "unknown".
+    # status is the decision outcome on decided rows (approved/rejected).
+    assert data["status_breakdown"] == {"approved": 1, "rejected": 1}
+    # No top-level severity, software.severity null — bucketed unspecified, not "unknown".
     assert data["severity_breakdown"] == {"unspecified": 2}
 
     first = data["approvals"][0]
     assert first["approval_id"] == 351
     assert first["title"] == "Adobe Refresh Manager"  # from software.display_name
-    assert first["manual_approval"] is None  # awaiting decision
+    assert first["manual_approval"] is True  # decided: approved
+    assert first["status"] == "approved"
+    assert first["manual_approval_time"] == "2023-09-08 16:59:43"
     assert first["software"] == {"version": "0.0.19", "os_family": "Mac"}
     assert first["cves"] == ["CVE-2026-1111"]
     assert first["policy"] == {"id": 5, "name": "A Manual Policy"}
+
+    # Legend locks the live-verified decision-axis + envelope claims.
+    field_notes = result["metadata"]["field_notes"]
+    assert "decision" in field_notes["manual_approval"].lower()
+    assert "approved" in field_notes["manual_approval"]
+    assert "rejected" in field_notes["manual_approval"]
+    assert "{results, size}" in field_notes["severity_breakdown"]
+
+
+@pytest.mark.asyncio
+async def test_patch_approvals_nested_software_severity_fallback() -> None:
+    """summarize_patch_approvals reads top-level severity, but the live record
+    carries severity under software.severity. When top-level is absent and
+    software.severity is set, the row buckets under that severity; a null
+    software.severity falls through to 'unspecified' (issue #165)."""
+    envelope = {
+        "size": 2,
+        "results": [
+            {
+                "id": 401,
+                "manual_approval": True,
+                "status": "approved",
+                # No top-level severity; nested software.severity is populated.
+                "software": {"display_name": "App A", "severity": "Critical", "cves": []},
+                "policy": {"id": 5, "name": "P"},
+            },
+            {
+                "id": 402,
+                "manual_approval": False,
+                "status": "rejected",
+                # Nested severity null -> unspecified (unchanged behavior).
+                "software": {"display_name": "App B", "severity": None, "cves": []},
+                "policy": {"id": 5, "name": "P"},
+            },
+        ],
+    }
+    stub = StubClient(get_responses={"/approvals": [envelope]})
+    stub.org_id = 42  # type: ignore[attr-defined]
+
+    result = await summarize_patch_approvals(cast(AutomoxClient, stub), org_id=42)
+    data = result["data"]
+    assert data["severity_breakdown"] == {"critical": 1, "unspecified": 1}
+    # The populated nested severity is also surfaced on the entry.
+    by_id = {a["approval_id"]: a for a in data["approvals"]}
+    assert by_id[401]["severity"] == "Critical"
+    assert "severity" not in by_id[402]
 
 
 @pytest.mark.asyncio

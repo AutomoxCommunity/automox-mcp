@@ -143,18 +143,20 @@ async def get_action_set_detail(
             "deprecated_endpoint": False,
             "field_notes": {
                 "status": (
-                    "Action-set processing lifecycle. Provenance differs per value: "
-                    "'ready' is the only value OBSERVED LIVE on this tenant (both "
-                    "action sets returned 'ready', 2026-06-05). 'active' is the spec "
-                    "example (ActionSet.status = {type:string, example:'active'}); "
-                    "'building' is this wrapper's default-on-upload constant for the "
-                    "async create path — NEITHER 'active' nor 'building' was observed "
-                    "live here. The spec defines no enum, so the value set is open and "
-                    "the terminal/ready-to-act value and transition order are NOT "
-                    "confirmed (no upload-to-completion poll). Do not assert which "
-                    "value is terminal. As a cross-check, non-zero issue_count/"
-                    "solution_count indicate processing has produced results "
-                    "regardless of the status string."
+                    "Action-set processing lifecycle. Observed live on this tenant "
+                    "via a full upload-to-completion poll (2026-06-06): the value "
+                    "set is {'building','ready'} and the transition order is building "
+                    "-> ready (settled in ~2s). 'building' is emitted by the API "
+                    "itself in the upload create response (HTTP 201 body, "
+                    "statistics=null), NOT merely a wrapper default. 'ready' is the "
+                    "confirmed TERMINAL value (stable across 0/15/31/46s polls; "
+                    "updated_at advanced 2s past created_at then held). 'active' is "
+                    "the spec example value only (ActionSet.status example:'active') "
+                    "and was NOT reproduced in this probe. The spec defines no enum, "
+                    "so the value set is open and values beyond building/ready (e.g. "
+                    "an error state) are possible but unobserved here. As a cross-"
+                    "check, non-zero issue_count/solution_count indicate processing "
+                    "produced results regardless of the status string."
                 ),
             },
         },

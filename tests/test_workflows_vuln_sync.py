@@ -225,15 +225,16 @@ async def test_detail_returns_info() -> None:
     assert "issues" in detail["statistics"]
     assert "solutions" in detail["statistics"]
     # The status legend documents the lifecycle vocabulary with HONEST per-value
-    # provenance: only 'ready' was observed live (2026-06-05); 'active' is the
-    # spec example and 'building' is the wrapper's upload default — neither was
-    # observed live. The legend must not overstate active/building as live.
+    # provenance from the 2026-06-06 upload-to-completion poll: building -> ready,
+    # with 'ready' the confirmed terminal value. 'building' was emitted live by
+    # the API in the 201 create body (not just a wrapper default), and 'active'
+    # is the spec example only (never reproduced live).
     status_note = result["metadata"]["field_notes"]["status"]
-    assert "active" in status_note
-    assert "ready" in status_note
     assert "building" in status_note
-    assert "OBSERVED LIVE" in status_note  # 'ready' only
-    assert "spec example" in status_note  # 'active'
+    assert "ready" in status_note
+    assert "building -> ready" in status_note  # confirmed transition order
+    assert "TERMINAL" in status_note  # 'ready' is terminal
+    assert "spec example value only" in status_note  # 'active'
     # The old text claimed all three were "Observed live on this tenant".
     assert "active, ready, building" not in status_note
 

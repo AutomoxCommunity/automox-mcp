@@ -567,8 +567,14 @@ async def test_get_window_emits_field_notes() -> None:
 
     notes = result["metadata"]["field_notes"]
     assert {"status", "recurrence", "dtstart", "use_local_tz"} <= set(notes)
-    # The use_local_tz=true half is spec-only, not live-verified.
-    assert "not live-verified" in notes["dtstart"]
+    # use_local_tz=true is rejected upstream (HTTP 400); the true-case semantics
+    # are spec-only / device-side and unprovable from the entity.
+    assert "rejects" in notes["dtstart"]
+    assert "400" in notes["dtstart"]
+    assert "rejected" in notes["use_local_tz"].lower()
+    assert "400" in notes["use_local_tz"]
+    # duration_minutes recompute on recurrence=once is documented.
+    assert "389494" in notes["duration_minutes"]
 
 
 @pytest.mark.asyncio
@@ -582,7 +588,8 @@ async def test_search_windows_emits_field_notes() -> None:
 
     notes = result["metadata"]["field_notes"]
     assert {"status", "recurrence", "dtstart", "use_local_tz"} <= set(notes)
-    assert "not live-verified" in notes["dtstart"]
+    assert "rejects" in notes["dtstart"]
+    assert "400" in notes["dtstart"]
 
 
 @pytest.mark.asyncio

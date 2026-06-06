@@ -42,11 +42,17 @@ _RRULE_FIELD_DESCRIPTION = (
 )
 
 _DTSTART_FIELD_DESCRIPTION = (
-    "Start datetime, ISO 8601 (e.g. 2026-01-01T02:00:00Z). When "
-    "use_local_tz=false this is UTC (live-verified 2026-06-05). When "
-    "use_local_tz=true the same wall-clock is applied in each device's local "
-    "timezone, so the trailing Z does NOT mean UTC (per spec/input semantics, "
-    "not live-verified — the controlled-object probe used use_local_tz=false)."
+    "Start datetime, ISO 8601 (e.g. 2026-01-01T02:00:00Z), echoed verbatim "
+    "with no normalization. When use_local_tz=false this is literal UTC — the "
+    "only persistable case here, since the upstream rejects use_local_tz=true "
+    'with HTTP 400 (invalidFields.useLocalTz="use_local_tz cannot be set to '
+    'true", verified 2026-06-06, unconditional of recurrence on this tenant — '
+    "may be tenant/plan-conditional). The use_local_tz=true wall-clock-in-each-"
+    "device's-local-timezone meaning is spec-only AND device-side: the entity "
+    "exposes no timezone-resolution field, so it is unprovable from the API "
+    "even where the flag is allowed. NOTE: duration_minutes may be recomputed "
+    "upstream for recurrence=once (live 2026-06-06: sent 30, stored 389494), so "
+    "read back the echoed value."
 )
 
 

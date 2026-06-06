@@ -16,7 +16,7 @@ A tool's name and count appear in several hand-maintained places. When you chang
 | `tests/smoke_production.py` | live read-side coverage for new read tools (not destructive writes) | ❌ **manual, not in CI** |
 | `CHANGELOG.md` | the entry under the active version | ❌ manual |
 
-The current split is **130 tools / 84 read / 46 write**. `discover_capabilities` is intentionally excluded from `_DOMAIN_CATALOG`.
+The current split is **133 tools / 85 read / 48 write**. `discover_capabilities` is intentionally excluded from `_DOMAIN_CATALOG`.
 
 ## Local gate before every push
 

@@ -131,7 +131,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         name="list_org_api_keys",
         description=(
             "List API keys for the Automox organization. "
-            "Returns key names and IDs only — secrets are never exposed."
+            "Returns key metadata (name, enabled, expiry) only — secrets are never exposed."
         ),
         annotations={
             "readOnlyHint": True,

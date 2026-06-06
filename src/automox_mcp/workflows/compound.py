@@ -84,13 +84,16 @@ async def get_patch_tuesday_readiness(
     prepatch_data = prepatch.get("data") or {}
     approvals_data = approvals.get("data") or {}
 
+    # "Pending" here means *awaiting a manual decision*. The decision axis is
+    # `manual_approval` (spec/#154: True=approved, False=rejected, null=awaiting
+    # decision), NOT the `status` field — live approval records carry
+    # status='active' while still awaiting a decision, so keying on
+    # status in ('pending','Pending') silently undercounts (audit finding 51).
     pending_approval_count = 0
     approval_items = approvals_data.get("approvals") or []
     if isinstance(approval_items, list):
         pending_approval_count = sum(
-            1
-            for a in approval_items
-            if isinstance(a, Mapping) and a.get("status") in ("pending", "Pending")
+            1 for a in approval_items if isinstance(a, Mapping) and a.get("manual_approval") is None
         )
 
     prepatch_devices_full = prepatch_data.get("devices") or []
@@ -103,9 +106,15 @@ async def get_patch_tuesday_readiness(
             "status": p.get("status"),
             "schedule_days": p.get("schedule_days"),
             "schedule_time": p.get("schedule_time"),
-            "next_run": p.get("next_run"),
             "server_groups": p.get("server_groups"),
         }
+        # The /policies list endpoint never returns `next_run` (audit finding
+        # N8 — it was a confident-null phantom); policy_catalog now projects the
+        # spec-defined `next_remediation` instead, and only when present. Carry
+        # it through here when it exists; never emit a phantom next-run key.
+        next_remediation = p.get("next_remediation")
+        if next_remediation is not None:
+            policy_entry["next_remediation"] = next_remediation
         # schedule_days arrives pre-decoded from policy_catalog when present;
         # otherwise decode the raw bitmask so schedules are self-describing.
         decoded = p.get("schedule_days_decoded")

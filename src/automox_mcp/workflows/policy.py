@@ -395,7 +395,6 @@ async def summarize_policies(
             "server_groups": policy_item.get("server_groups"),
             "schedule_days": policy_item.get("schedule_days"),
             "schedule_time": policy_item.get("schedule_time"),
-            "next_run": policy_item.get("next_run"),
             "installation_do_not_disturb_honored": policy_item.get(
                 "installation_do_not_disturb_honored"
             ),
@@ -408,6 +407,14 @@ async def summarize_policies(
             preview_entry["schedule_days_decoded"] = _decode_schedule_days_bitmask(schedule_days)[
                 "interpretation"
             ]
+        # The old projection read `next_run`, a key the /policies list endpoint
+        # never returns (confirmed absent live 2026-06-05) — it emitted a
+        # confident `next_run: null` that read as "nothing scheduled" (audit
+        # finding N8). The spec-defined field is `next_remediation`; surface it
+        # only when present so we never confabulate a next-run timestamp.
+        next_remediation = policy_item.get("next_remediation")
+        if next_remediation is not None:
+            preview_entry["next_remediation"] = next_remediation
         preview.append(preview_entry)
 
     stats_data: Any = None
@@ -494,6 +501,15 @@ async def summarize_policies(
         "current_page": normalized_page,
         "limit": limit,
         "pagination": pagination,
+        "field_notes": {
+            "next_remediation": (
+                "Spec-defined next-remediation timestamp (per spec, not "
+                "observed live on this tenant 2026-06-05 — the /policies list "
+                "endpoint omitted it). Surfaced only when the upstream returns "
+                "a value; absence does NOT mean 'nothing scheduled' — derive "
+                "the next run from schedule_days + schedule_time when needed."
+            ),
+        },
     }
     if total_available is not None:
         metadata["total_policies_available"] = total_available

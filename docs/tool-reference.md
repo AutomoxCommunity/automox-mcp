@@ -167,7 +167,7 @@ Manage vulnerability remediation workflows via the Vuln Sync API. Supports CSV-b
 
 - **`invite_user_to_account`** *(write)* - Invite a user to the Automox account with optional zone assignments.
 - **`remove_user_from_account`** *(write)* - Remove a user from the Automox account by UUID.
-- **`list_org_api_keys`** - List API keys for the organization. Returns key names and IDs only — secrets are never exposed.
+- **`list_org_api_keys`** - List API keys for the organization. Returns key metadata (name, enabled, expiry) only — secrets are never exposed.
 - **`list_organizations`** - List organizations visible to the API key, with device count, device limit, parent org, and trial end time. Useful for MSP/multi-org navigation, capacity posture, and trial warnings. A `tier` slug may be present per spec but has no defined feature ordering and is absent on some tenants — do not infer a paid-plan or capability ranking from it.
 - **`list_users`** - List users in the organization with name, email, and RBAC roles (lean projection). Secrets such as `intercom_hmac` are never surfaced.
 - **`get_user`** - Get a single user by numeric ID, including org/server-group membership and RBAC roles. Secrets are never surfaced.

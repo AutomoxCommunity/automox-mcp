@@ -96,7 +96,7 @@ def test_create_server_rejects_negative_org_id(monkeypatch):
 
 
 def test_create_server_calls_dotenv_when_not_skipped(monkeypatch):
-    import automox_mcp.server as server_mod
+    from automox_mcp import server as server_mod
 
     monkeypatch.setenv("AUTOMOX_API_KEY", "env-key")
     monkeypatch.setenv("AUTOMOX_ACCOUNT_UUID", "account-uuid")

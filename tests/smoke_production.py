@@ -374,7 +374,7 @@ async def run_http_tests() -> None:
                             same,
                             f"cid1={cid1}, cid2={cid2}",
                         )
-        except BaseException as exc:
+        except Exception as exc:
             record("idempotency — cached response", False, str(exc))
 
         # -- 5. Markdown output ------------------------------------------------

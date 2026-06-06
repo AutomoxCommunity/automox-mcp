@@ -1017,7 +1017,7 @@ class TestRegisterToolsFiltering:
         assert "list_server_groups" in server.tools
 
     def test_module_filtering_via_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        import automox_mcp.tools as tools_mod
+        from automox_mcp import tools as tools_mod
         from automox_mcp.tools import register_tools
 
         monkeypatch.setattr(tools_mod, "get_enabled_modules", lambda: {"events"})

@@ -221,7 +221,7 @@ def test_format_error_falls_back_to_repr_on_type_error(monkeypatch):
     """If json.dumps raises TypeError, format_error falls back to repr()."""
     import json as json_mod
 
-    import automox_mcp.utils.tooling as tooling_mod
+    from automox_mcp.utils import tooling as tooling_mod
 
     original_dumps = json_mod.dumps
 

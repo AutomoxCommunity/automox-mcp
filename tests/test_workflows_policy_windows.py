@@ -30,7 +30,7 @@ _WINDOW_A: dict[str, Any] = {
     "window_description": "No patching during nightly backups",
     "org_uuid": _ORG_UUID,
     # RECURRING grammar (validator-enforced): FREQ=YEARLY + BYMONTH(1-12) +
-    # BYDAY(+N weekday). recurrence is UPPERCASE on read (probe 2026-06-05).
+    # BYDAY(+N weekday). recurrence is UPPERCASE on read (live API verification 2026-06-05).
     "rrule": "FREQ=YEARLY;BYMONTH=3;BYDAY=+2TU",
     "duration_minutes": 120,
     "dtstart": "2026-01-01T02:00:00Z",
@@ -160,7 +160,7 @@ async def test_get_window_returns_detail() -> None:
     assert result["data"]["duration_minutes"] == 120
     assert result["data"]["status"] == "active"
     # recurrence is UPPERCASE on read even though create accepts lowercase
-    # (probe 2026-06-05); the projection forwards it raw.
+    # (live API verification 2026-06-05); the projection forwards it raw.
     assert result["data"]["recurrence"] == "RECURRING"
 
 

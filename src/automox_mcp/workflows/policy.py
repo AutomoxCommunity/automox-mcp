@@ -913,11 +913,23 @@ async def summarize_patch_approvals(
         approval_status = str(approval_item.get("status") or "unknown").lower()
         status_counts[approval_status] += 1
 
-        # The documented approval record carries no severity field; CVE ids
-        # ride under software.cves. Count a real severity when one appears
-        # (forward-compat), and bucket the rest as "unspecified" — distinct
-        # from an upstream value that literally says "unknown".
-        severity_raw = approval_item.get("severity") or approval_item.get("cvss_severity")
+        # The approval record carries NO top-level severity field (confirmed
+        # live 2026-06-06 across a 12-row device-bearing queue, issue #165) —
+        # CVE ids ride under software.cves. The nested `software.severity` key
+        # DOES exist in the live shape (null on every observed row), so fall
+        # back to it before bucketing to "unspecified". Count a real severity
+        # when one appears from either source (forward-compat), and bucket the
+        # rest as "unspecified" — distinct from an upstream value that literally
+        # says "unknown".
+        software_for_severity = approval_item.get("software")
+        nested_severity = (
+            software_for_severity.get("severity")
+            if isinstance(software_for_severity, Mapping)
+            else None
+        )
+        severity_raw = (
+            approval_item.get("severity") or approval_item.get("cvss_severity") or nested_severity
+        )
         severity_counts[str(severity_raw).lower() if severity_raw else "unspecified"] += 1
 
         if status_filter and approval_status != status_filter:
@@ -973,6 +985,28 @@ async def summarize_patch_approvals(
         "org_id": resolved_org_id,
         "status_filter": status_filter or None,
         "requested_limit": limit,
+        "field_notes": {
+            "manual_approval": (
+                "The decision axis: True=approved, False=rejected, null=awaiting "
+                "a manual decision. Live-verified on a device-bearing test org "
+                "(2026-06-06, issue #165): on decided rows it co-occurs 1:1 with "
+                "`status` — true<->status='approved' (8/8), false<->status='rejected' "
+                "(4/4) — and `manual_approval_time` is a 'YYYY-MM-DD HH:MM:SS' "
+                "string. So `status` on a decided row is the DECISION OUTCOME, not "
+                "an execution status. The value of `status` while a row is still "
+                "awaiting was NOT observed, so it is unknown; identify "
+                "awaiting rows by `manual_approval is None`, not by `status`."
+            ),
+            "severity_breakdown": (
+                "Bucketed CVE severity. The approval record carries NO top-level "
+                "severity field (confirmed live 2026-06-06, 12/12 rows); a nested "
+                "`software.severity` key exists in the live shape (null on every "
+                "observed row) and is read as a fallback. Rows with no severity from "
+                "either source are bucketed 'unspecified' (distinct from an upstream "
+                "value that literally says 'unknown'). The envelope is "
+                "{results, size}."
+            ),
+        },
     }
 
     return {

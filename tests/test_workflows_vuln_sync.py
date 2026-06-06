@@ -311,11 +311,20 @@ async def test_solutions_field_notes_marked_unverified() -> None:
     )
     field_notes = result["metadata"]["field_notes"]
     assert "unverified-live" in field_notes["vulnerabilities[].severity"].lower()
-    # Device status legend must report the live-observed value, not invent siblings.
-    assert "not-started" in field_notes["devices[].status"]
-    assert "open" in field_notes["devices[].status"].lower()
-    # solutions[].status must be flagged spec-defined but not-observed-live.
-    assert "not-observed-live" in field_notes["solutions[].status"].lower()
+    # Device status legend must report the live-observed values + transition.
+    # Live 2026-06-06 (#165): not-started -> in_progress, with the separator
+    # inconsistency called out (hyphen vs underscore). Value set stays open.
+    device_status_note = field_notes["devices[].status"]
+    assert "not-started" in device_status_note
+    assert "in_progress" in device_status_note
+    assert "not-started -> in_progress" in device_status_note
+    assert "separator inconsistency" in device_status_note.lower()
+    assert "open" in device_status_note.lower()
+    # solutions[].status must be flagged spec-defined but not-observed-live, and
+    # note that patch-now dispatches a direct device command (no persistent policy).
+    solutions_status_note = field_notes["solutions[].status"]
+    assert "not-observed-live" in solutions_status_note.lower()
+    assert "policy_id=0" in solutions_status_note
 
 
 # ---------------------------------------------------------------------------

@@ -226,8 +226,10 @@ async def get_action_set_solutions(
             # Legend only — the raw `solutions` payload is forwarded verbatim
             # (no per-item severity/status mutation). The spec types these
             # fields as bare strings with no enum; vocabulary notes below mark
-            # what was/wasn't confirmed against the live tenant (2026-06-05; only
-            # rapid7-solution entries were observed on this tenant).
+            # what was/wasn't confirmed against the live tenant. Device status
+            # vocabulary was extended by a full gated patch-now execution on a
+            # device-bearing test org (2026-06-06, issue #165); the 2026-06-05
+            # probe had only observed rapid7-solution entries.
             "field_notes": {
                 "vulnerabilities[].severity": (
                     "Per-CVE severity string. The remediation API does NOT enumerate "
@@ -244,22 +246,43 @@ async def get_action_set_solutions(
                     "most/least severe'."
                 ),
                 "devices[].status": (
-                    "Per-device remediation status. Spec types it `{type: string}` with "
-                    "the single example 'pending'; no enum. Observed live on this tenant: "
-                    "'not-started' (the spec's 'pending' example was NOT seen live, and "
-                    "other values such as completed/failed/in-progress are neither "
-                    "documented nor confirmed). The full value set is open — do not "
-                    "assert what a given status means without confirming against the "
-                    "device's patch/event history."
+                    "Per-device remediation status. Spec types it `{type: string}` "
+                    "with the single example 'pending'; no enum. Observed live across "
+                    "a full gated patch-now execution (2026-06-06): the value set is "
+                    "{'not-started','in_progress'} with transition order not-started "
+                    "-> in_progress. 'not-started' is the PRE-execution value (also "
+                    "held by sibling devices in the same action set that were not "
+                    "targeted — status is per-device and execution-scoped, not "
+                    "action-set-wide). 'in_progress' is emitted within seconds of the "
+                    "execute call returning HTTP 202. NOTE THE SEPARATOR "
+                    "INCONSISTENCY: 'not-started' is hyphenated, 'in_progress' is "
+                    "underscored — do not assume a uniform convention. The spec's "
+                    "'pending' example was NOT seen live. A TERMINAL value "
+                    "(completed/failed/etc.) exists by inference — the device held "
+                    "'in_progress' for a full ~24-minute poll while its InstallUpdate "
+                    "command sat queued (the agent accepted but had not reported "
+                    "back) — but the terminal string was NOT captured and remains "
+                    "unconfirmed. The value set is open; confirm any status against "
+                    "the device's patch/command-queue history before asserting "
+                    "meaning."
                 ),
                 "solutions[].status": (
-                    "A solution-LEVEL status string is defined for the rapid7-solution "
-                    "and solution_type 'unmatched' (schema UnmatchedCVE) sub-types in the "
-                    "spec (example 'pending'), but it was NOT present on the live "
-                    "rapid7-solution entries observed on this tenant (2026-06-05) — those "
-                    "carry status on devices[] only. Spec-defined / not-observed-live: do "
-                    "not rely on a solution-level status being present, and apply the same "
-                    "undocumented free-string caveat as devices[].status if one appears."
+                    "A solution-LEVEL status string is defined in the spec for the "
+                    "rapid7-solution and solution_type 'unmatched' (schema "
+                    "UnmatchedCVE) sub-types (example 'pending'). Confirmed live "
+                    "(2026-06-06) NULL/absent on automox-patch solutions across the "
+                    "entire lifecycle (pre-execution, immediately post-execution, and "
+                    "~24 min of polling); the prior 2026-06-05 probe likewise found "
+                    "no solution-level status on rapid7-solution entries. For both "
+                    "automox-patch and rapid7-solution sub-types observed on this "
+                    "tenant, status lives on devices[] only. Spec-defined / "
+                    "not-observed-live: do not rely on a solution-level status being "
+                    "present; if one appears, apply the same undocumented free-string "
+                    "caveat as devices[].status. ADDITIONAL CONFIRMED PROVENANCE: "
+                    "patch-now execution does NOT create a persistent policy object — "
+                    "the work dispatches as a direct device command (InstallUpdate, "
+                    "policy_id=0 in the command queue), so do not look for a policy "
+                    "named after the action set."
                 ),
             },
         },

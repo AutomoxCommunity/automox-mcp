@@ -837,9 +837,30 @@ async def run_readonly_tools() -> None:
 
         log.info(f"\n{BOLD}Phase 3: Org API Keys{RESET}")
 
-        # 38. list_org_api_keys
+        # 38. list_org_api_keys — correctness, not just 200. GET
+        # /orgs/{id}/api_keys returns a {"results", "size"} envelope; a regressed
+        # unwrap (the N1 bug) returned zero keys while size was 21. Assert the
+        # projected key count reconciles to the envelope size (count == size),
+        # per the CLAUDE.md wrong-but-200 smoke convention.
         resp = await _safe_call(session, "list_org_api_keys", {})
-        record("list_org_api_keys", resp is not None, _count_or_err(resp))
+        if resp is None:
+            record("list_org_api_keys", False, _count_or_err(resp))
+        else:
+            data = resp.get("data") or {}
+            meta = resp.get("metadata") or {}
+            total_keys = data.get("total_keys")
+            total_size = meta.get("total_size")
+            # Default page returns the full set on this tenant, so count==size.
+            reconciles = (
+                isinstance(total_size, int)
+                and isinstance(total_keys, int)
+                and total_keys == total_size
+            )
+            record(
+                "list_org_api_keys",
+                reconciles,
+                f"total_keys={total_keys} reconciles to size={total_size}",
+            )
 
         log.info(f"\n{BOLD}Phase 3: Policy History v2{RESET}")
 

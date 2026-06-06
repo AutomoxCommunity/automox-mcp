@@ -173,7 +173,7 @@ Manage vulnerability remediation workflows via the Vuln Sync API. Supports CSV-b
 - **`get_user`** - Get a single user by numeric ID, including org/server-group membership and RBAC roles. Secrets are never surfaced.
 - **`get_account`** - Get account detail (id, name, type, timestamps).
 - **`list_account_rbac_roles`** - List the RBAC roles available in the account.
-- **`get_account_user`** - Get an account-scoped user record by UUID: status, account RBAC role, verification, and 2FA type. A null/absent `two_factor_authentication` is ambiguous (may mean disabled or not-reported); see `metadata.field_notes`.
+- **`get_account_user`** - Get an account-scoped user record by UUID: status, account RBAC role, verification, and 2FA type. `two_factor_authentication` carries the literal string `"disabled"` when 2FA is OFF (do not read it as a configured type); a null/absent value is ambiguous (may mean disabled or not-reported); see `metadata.field_notes`.
 - **`list_zones_for_user`** - List the zones (organizations) a given user belongs to.
 - **`list_zones`** - List the zones (organizations) in the account (paginated).
 - **`get_zone`** - Get a single zone by UUID. The zone `access_key` is never surfaced.

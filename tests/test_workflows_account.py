@@ -116,49 +116,98 @@ async def test_remove_user_with_uuid_objects():
 # list_org_api_keys
 # ---------------------------------------------------------------------------
 
-_API_KEYS = [
-    {
-        "id": 1,
-        "name": "CI Key",
-        "created_at": "2026-01-01T00:00:00Z",
-        "enabled": True,
-    },
-    {
-        "id": 2,
-        "name": "Dev Key",
-        "expires_at": "2027-01-01T00:00:00Z",
-    },
-]
+# Captured (sanitized) shape of GET /orgs/{id}/api_keys, probed live
+# 2026-06-05: a {"results": [...], "size": N} envelope (NOT a bare list), with
+# each item keyed id/name/created_at/expires_at/is_enabled/user. The prior
+# fixture was an invented bare list with an `enabled` key the API never returns
+# — the #132 "stub from the code's own wrong mental model" trap that let the
+# envelope-drop bug pass CI while the live tool returned zero keys. Identifiers,
+# the embedded user blob, and timestamps are sanitized.
+_API_KEYS_ENVELOPE = {
+    "results": [
+        {
+            "id": 1001,
+            "name": "ci-automation",
+            "created_at": "2026-01-01T00:00:00Z",
+            "expires_at": None,
+            "is_enabled": True,
+            "user": {
+                "id": 5001,
+                "email": "redacted@example.com",
+                "firstname": "Red",
+                "lastname": "Acted",
+            },
+        },
+        {
+            "id": 1002,
+            "name": "dev-readonly",
+            "created_at": "2026-02-01T00:00:00Z",
+            "expires_at": "2027-01-01T00:00:00Z",
+            "is_enabled": False,
+            "user": {
+                "id": 5002,
+                "email": "redacted2@example.com",
+                "firstname": "Also",
+                "lastname": "Redacted",
+            },
+        },
+    ],
+    "size": 2,
+}
 
 
 @pytest.mark.asyncio
-async def test_list_api_keys_returns_summary():
-    client = StubClient(get_responses={"/orgs/42/api_keys": [_API_KEYS]})
+async def test_list_api_keys_unwraps_envelope():
+    """Reconciles to the envelope size, not zero (the N1 regression witness)."""
+    client = StubClient(get_responses={"/orgs/42/api_keys": [_API_KEYS_ENVELOPE]})
     result = await list_org_api_keys(cast(AutomoxClient, client), org_id=42)
 
     assert result["data"]["total_keys"] == 2
     assert len(result["data"]["api_keys"]) == 2
+    # Envelope size surfaced for count==size reconciliation.
+    assert result["metadata"]["total_size"] == 2
 
 
 @pytest.mark.asyncio
-async def test_list_api_keys_includes_optional_fields():
-    client = StubClient(get_responses={"/orgs/42/api_keys": [_API_KEYS]})
+async def test_list_api_keys_projects_real_fields():
+    client = StubClient(get_responses={"/orgs/42/api_keys": [_API_KEYS_ENVELOPE]})
     result = await list_org_api_keys(cast(AutomoxClient, client), org_id=42)
 
-    ci = next(k for k in result["data"]["api_keys"] if k["name"] == "CI Key")
-    assert ci["enabled"] is True
+    ci = next(k for k in result["data"]["api_keys"] if k["name"] == "ci-automation")
+    # Live DTO key is `is_enabled`, not the previously-read phantom `enabled`.
+    assert ci["is_enabled"] is True
+    assert "enabled" not in ci
     assert ci["created_at"] == "2026-01-01T00:00:00Z"
 
-    dev = next(k for k in result["data"]["api_keys"] if k["name"] == "Dev Key")
+    dev = next(k for k in result["data"]["api_keys"] if k["name"] == "dev-readonly")
     assert dev["expires_at"] == "2027-01-01T00:00:00Z"
-    assert "enabled" not in dev
+    # is_enabled=False is a real value and must be surfaced (not dropped as falsy
+    # the way the projection drops None-valued optionals).
+    assert dev["is_enabled"] is False
+
+    # The embedded user blob (email/name PII) is never forwarded.
+    for key in result["data"]["api_keys"]:
+        assert "user" not in key
 
 
 @pytest.mark.asyncio
-async def test_list_api_keys_handles_empty():
-    client = StubClient(get_responses={"/orgs/42/api_keys": [[]]})
+async def test_list_api_keys_handles_empty_envelope():
+    client = StubClient(get_responses={"/orgs/42/api_keys": [{"results": [], "size": 0}]})
     result = await list_org_api_keys(cast(AutomoxClient, client), org_id=42)
     assert result["data"]["total_keys"] == 0
+    assert result["metadata"]["total_size"] == 0
+
+
+@pytest.mark.asyncio
+async def test_list_api_keys_handles_bare_list_fallback():
+    """Defensive parity: a bare list (no envelope) still projects."""
+    client = StubClient(
+        get_responses={"/orgs/42/api_keys": [[{"id": 1, "name": "legacy", "is_enabled": True}]]}
+    )
+    result = await list_org_api_keys(cast(AutomoxClient, client), org_id=42)
+    assert result["data"]["total_keys"] == 1
+    # No envelope => no size to reconcile.
+    assert "total_size" not in result["metadata"]
 
 
 @pytest.mark.asyncio
@@ -256,7 +305,13 @@ _USER_RECORD = {
     "account_rbac_roles": ["global-admin"],
     "rbac_roles": ["admin"],
     "tfa_type": "totp",
-    "orgs": [42, 43],
+    # orgs[] is a list of org objects (each can carry a per-org access_key
+    # secret upstream); the detail projection re-projects each through
+    # _USER_ORG_FIELDS to strip access_key/saml/metadata.
+    "orgs": [
+        {"id": 42, "name": "Acme Prod", "access_key": "SECRET-ORG-KEY-DO-NOT-LEAK"},
+        {"id": 43, "name": "Acme Child", "saml": {"idp": "x"}, "metadata": {"k": "v"}},
+    ],
     "server_groups": [1, 2],
     "intercom_hmac": "SECRET-HMAC-DO-NOT-LEAK",
     "prefs": {"theme": "dark"},
@@ -288,27 +343,41 @@ async def test_get_user_detail_projection_redacts_secret():
     result = await get_user(cast(AutomoxClient, client), org_id=42, user_id=7)
     data = result["data"]
     assert data["email"] == "ada@example.com"
-    assert data["orgs"] == [42, 43]  # detail view includes membership
+    # detail view includes membership, re-projected to strip per-org secrets
+    assert data["orgs"] == [
+        {"id": 42, "name": "Acme Prod"},
+        {"id": 43, "name": "Acme Child"},
+    ]
+    # No per-org access_key / saml / metadata is ever forwarded (N3 redaction).
+    import json as _json
+
+    blob = _json.dumps(data)
+    assert "access_key" not in blob
+    assert "SECRET-ORG-KEY-DO-NOT-LEAK" not in blob
     assert "intercom_hmac" not in data
     _, _path, params = client.calls[0]
     assert params == {"o": 42}
 
 
 @pytest.mark.asyncio
-async def test_get_user_carries_plan_legend_and_forwards_orgs_verbatim():
+async def test_get_user_carries_plan_legend_and_projects_orgs():
     # Spec-shaped orgs blob: per spec each org may carry a `plan` slug
     # (basic/manage/tier3). Live capture blocked — orgs[].plan was absent on the
     # probed tenant (2026-06-05) — so this fixture is spec-shaped, not captured.
+    # access_key here proves the projection strips the secret while keeping plan.
     record = {
         "id": 7,
         "firstname": "Ada",
         "email": "ada@example.com",
-        "orgs": [{"id": 42, "plan": "basic"}, {"id": 43, "plan": "manage"}],
+        "orgs": [
+            {"id": 42, "plan": "basic", "access_key": "LEAK"},
+            {"id": 43, "plan": "manage"},
+        ],
     }
     client = StubClient(get_responses={"/users/7": [record]})
     result = await get_user(cast(AutomoxClient, client), org_id=42, user_id=7)
 
-    # orgs blob (including plan) forwarded verbatim.
+    # plan is preserved (so the legend below is meaningful); access_key stripped.
     assert result["data"]["orgs"] == [
         {"id": 42, "plan": "basic"},
         {"id": 43, "plan": "manage"},
@@ -355,9 +424,26 @@ async def test_get_account_user_passthrough():
     assert result["data"]["status"] == "active"
     # Raw 2FA value forwarded unchanged.
     assert result["data"]["two_factor_authentication"] == "email"
-    # Ambiguity legend present.
+    # Legend covers both the live 'disabled'=off case and the null ambiguity.
     note = result["metadata"]["field_notes"]["two_factor_authentication"]
     assert "ambiguous" in note.lower()
+    assert "disabled" in note.lower()
+
+
+@pytest.mark.asyncio
+async def test_get_account_user_disabled_tfa_legend_says_off():
+    # Live-observed (re-audit 2026-06-05): when 2FA is off the field carries the
+    # literal string 'disabled', NOT null. The legend must tell the model this
+    # means OFF, not a configured 2FA type.
+    user = "dddddddd-dddd-dddd-dddd-dddddddddddd"
+    record = {"user_id": user, "status": "active", "two_factor_authentication": "disabled"}
+    client = StubClient(get_responses={f"/accounts/{_ACCT}/users/{user}": [record]})
+    result = await get_account_user(cast(AutomoxClient, client), account_id=_ACCT, user_id=user)
+    assert result["data"]["two_factor_authentication"] == "disabled"
+    note = result["metadata"]["field_notes"]["two_factor_authentication"].lower()
+    # The note must distinguish 'disabled'=OFF from a configured type.
+    assert "'disabled' means 2fa is off" in note
+    assert "live-verified" in note
 
 
 @pytest.mark.asyncio

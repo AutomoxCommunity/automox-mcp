@@ -16,6 +16,7 @@ from conftest import FakeClient, StubServer
 from automox_mcp.tools import (
     account_tools,
     audit_tools,
+    data_extract_tools,
     device_tools,
     event_tools,
     group_tools,
@@ -78,6 +79,52 @@ class TestEventToolsDispatch:
 
         assert recorded.get("event_name") == "patch.apply"
         assert recorded.get("policy_id") == 99
+
+
+# ---------------------------------------------------------------------------
+# data_extract_tools
+# ---------------------------------------------------------------------------
+
+
+class TestDataExtractToolsDispatch:
+    @pytest.mark.asyncio
+    async def test_get_data_extract_coerces_int_id_to_str(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        recorded: dict[str, Any] = {}
+
+        async def fake_get(client, **kwargs):
+            recorded.update(kwargs)
+            return _success()
+
+        monkeypatch.setattr(data_extract_tools, "_get_data_extract", fake_get)
+
+        server = StubServer()
+        data_extract_tools.register(server, client=FakeClient(org_id=42))
+
+        # Live extract ids are ints; a model relays an int — the tool must
+        # accept it and hand the workflow a string for the URL path.
+        await server.tools["get_data_extract"](extract_id=479737)
+
+        assert recorded.get("extract_id") == "479737"
+        assert isinstance(recorded["extract_id"], str)
+
+    @pytest.mark.asyncio
+    async def test_get_data_extract_accepts_str_id(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        recorded: dict[str, Any] = {}
+
+        async def fake_get(client, **kwargs):
+            recorded.update(kwargs)
+            return _success()
+
+        monkeypatch.setattr(data_extract_tools, "_get_data_extract", fake_get)
+
+        server = StubServer()
+        data_extract_tools.register(server, client=FakeClient(org_id=42))
+
+        await server.tools["get_data_extract"](extract_id="479737")
+
+        assert recorded.get("extract_id") == "479737"
 
 
 # ---------------------------------------------------------------------------

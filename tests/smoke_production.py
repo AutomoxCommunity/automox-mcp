@@ -831,9 +831,30 @@ async def run_readonly_tools() -> None:
 
         log.info(f"\n{BOLD}Phase 3: Data Extracts{RESET}")
 
-        # 37. list_data_extracts
+        # 37. list_data_extracts — assert ENVELOPE-UNWRAP CORRECTNESS, not just
+        # "got a response". The live endpoint returns a {results, size} envelope
+        # (the #163 fix unwraps it). A regressed unwrap that left the whole
+        # envelope dict as a single row would still pass resp-is-not-None: it
+        # would surface extracts=[{results:[...], size:N}] (one row, no `id`)
+        # while reporting total_extracts=1. So reconcile the envelope: every
+        # row must be an extract dict carrying an `id` (never a nested
+        # `results` key), and total_extracts (the envelope `size`) must be an
+        # int >= the page row count (size is the grand total across pages; the
+        # rows are a single page, so rows can be < size but never > size).
         resp = await _safe_call(session, "list_data_extracts", {})
-        record("list_data_extracts", resp is not None, _count_or_err(resp))
+        data = (resp or {}).get("data", {})
+        total = data.get("total_extracts")
+        rows = data.get("extracts", []) or []
+        unwrap_ok = (
+            resp is not None
+            and isinstance(total, int)
+            and isinstance(rows, list)
+            and total >= len(rows)
+            and all(isinstance(r, dict) and "results" not in r for r in rows)
+            # non-empty page rows must each carry the unwrapped `id` key
+            and all("id" in r for r in rows)
+        )
+        record("list_data_extracts", unwrap_ok, f"size={total} rows={len(rows)}")
 
         log.info(f"\n{BOLD}Phase 3: Org API Keys{RESET}")
 

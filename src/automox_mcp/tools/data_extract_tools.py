@@ -77,13 +77,16 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         },
     )
     async def get_data_extract(
-        extract_id: str,
+        extract_id: int | str,
         output_format: str | None = "json",
     ) -> dict[str, Any]:
+        # Live extract ids are ints (list_data_extracts returns them as ints),
+        # so a model commonly passes an int. Accept int|str and coerce to a
+        # string for the URL path.
         result = await call_tool_workflow(
             client,
             _get_data_extract,
-            {"extract_id": extract_id},
+            {"extract_id": str(extract_id)},
             params_model=GetDataExtractParams,
         )
         return maybe_format_markdown(result, output_format)

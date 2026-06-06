@@ -15,6 +15,7 @@ from automox_mcp.schemas import (
     CreateSavedSearchParams,
     DeviceSearchParams,
     ForbidExtraModel,
+    GetDataExtractParams,
     InviteUserParams,
     IssueDeviceCommandParams,
     PolicyChangeRequestParams,
@@ -149,6 +150,30 @@ class TestCreateDataExtractParams:
         huge = {"data": "x" * 60_000}
         with pytest.raises(ValidationError, match="50 KB"):
             CreateDataExtractParams(org_id=1, extract_data=huge)
+
+
+class TestGetDataExtractParams:
+    def test_string_id_accepted(self):
+        p = GetDataExtractParams(org_id=1, extract_id="479737")
+        assert p.extract_id == "479737"
+
+    def test_int_id_coerced_to_str(self):
+        # Live extract ids ARE ints (list_data_extracts returns e.g. 479737),
+        # so a model relays an int — it must be accepted and coerced to str
+        # for the URL path, not rejected with a string_type error.
+        p = GetDataExtractParams(org_id=1, extract_id=479737)
+        assert p.extract_id == "479737"
+        assert isinstance(p.extract_id, str)
+
+    def test_bool_not_treated_as_int(self):
+        # bool is an int subclass; it must not silently coerce to "True"/"False"
+        # and slip past the regex — it should fail validation.
+        with pytest.raises(ValidationError):
+            GetDataExtractParams(org_id=1, extract_id=True)
+
+    def test_path_traversal_id_rejected(self):
+        with pytest.raises(ValidationError):
+            GetDataExtractParams(org_id=1, extract_id="../secrets")
 
 
 # ---------------------------------------------------------------------------

@@ -11,10 +11,11 @@ from ..utils.response import build_pagination_metadata
 
 # Field-level legends surfaced in metadata.field_notes so the model can read
 # the verified vocabularies/units alongside the raw projection. All claims here
-# are live-verified (controlled-object probe 2026-06-05) EXCEPT the
-# use_local_tz=true timezone semantics, which the probe could not exercise
-# (the probed object used use_local_tz=false) and are therefore attributed to
-# the spec/input semantics, not verified live.
+# are live-verified (controlled-object probes 2026-06-05/2026-06-06). The
+# use_local_tz=true timezone semantics remain spec-attributed by construction:
+# the upstream rejects use_local_tz=true outright on this tenant (2026-06-06),
+# and even where allowed the entity exposes no device-resolved time field, so
+# the true-case behavior is device-side and unprovable from the API entity.
 _WINDOW_FIELD_NOTES: dict[str, str] = {
     "status": "Lowercase: active | inactive (live-verified 2026-06-05).",
     "recurrence": (
@@ -22,16 +23,31 @@ _WINDOW_FIELD_NOTES: dict[str, str] = {
         "create/update accept lowercase (once/recurring) — live-verified 2026-06-05."
     ),
     "dtstart": (
-        "ISO 8601, echoed exactly as submitted. When use_local_tz=false the "
-        "trailing Z is literal UTC (live-verified 2026-06-05). When "
-        "use_local_tz=true the same wall-clock is applied in each device's "
-        "local timezone, so the Z suffix does NOT mean UTC (per spec/input "
-        "semantics, not live-verified)."
+        "ISO 8601, echoed verbatim with no normalization (live-verified "
+        "2026-06-06: sent and read back identically, trailing Z preserved). "
+        "When use_local_tz=false this is literal UTC — the only persistable "
+        "case here, since the upstream rejects use_local_tz=true with HTTP 400 "
+        '(invalidFields.useLocalTz="use_local_tz cannot be set to true", '
+        "unconditional of recurrence on this tenant — may be tenant/plan-"
+        "conditional, not asserted universal). The use_local_tz=true wall-clock-"
+        "in-each-device's-local-timezone semantics are spec-only AND device-side: "
+        "the entity carries no timezone-resolution field, so even where the flag "
+        "is allowed the API cannot confirm them."
     ),
     "use_local_tz": (
-        "false = interpret dtstart as UTC (live-verified); true = interpret "
-        "dtstart's wall-clock in each device's local timezone (per spec/input "
-        "semantics, not live-verified)."
+        "false = interpret dtstart as UTC (live-verified; the only persistable "
+        "value here). true is REJECTED at create with HTTP 400 "
+        '(invalidFields.useLocalTz="use_local_tz cannot be set to true", '
+        "verified 2026-06-06, unconditional of recurrence on this tenant — may "
+        "be tenant/plan-conditional). Its spec meaning (interpret dtstart's "
+        "wall-clock in each device's local timezone) is device-side and carries "
+        "no entity field, so it is structurally unprovable from the API."
+    ),
+    "duration_minutes": (
+        "May be recomputed upstream for recurrence=once windows: live "
+        "2026-06-06 sent 30, create AND get echoed 389494 (≈ the dtstart→UNTIL "
+        "span). The wrapper passes the value verbatim, so read back the echoed "
+        "value rather than trusting the submitted input."
     ),
 }
 

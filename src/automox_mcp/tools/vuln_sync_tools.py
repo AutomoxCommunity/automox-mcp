@@ -86,9 +86,10 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         name="get_action_set_detail",
         description=(
             "Get details for a specific vulnerability remediation action set. The "
-            "`status` field is a processing-lifecycle string observed live as "
-            "active/ready/building (spec defines no enum; terminal value unconfirmed) "
-            "— see metadata.field_notes."
+            "`status` field is a processing-lifecycle string; observed live "
+            "(2026-06-06) as building -> ready, with 'ready' the confirmed terminal "
+            "value. 'active' is the spec example only and was not reproduced. See "
+            "metadata.field_notes."
         ),
         annotations={
             "readOnlyHint": True,

@@ -18,8 +18,9 @@ from automox_mcp.workflows.packages import (
 # `status`, `patch_status`, `awaiting`, or `device_count` (verified across 800+
 # org packages and the device inventory). Names/IDs are scrubbed to generic
 # placeholders. Severity values use the live distribution: high, no_known_cves,
-# and JSON null (None) for the device fixture; critical/high/medium added for
-# the org fixture.
+# and JSON null (None) for the device fixture; critical/high/medium/low added
+# for the org fixture (`low` was observed live in the org severity distribution
+# on 2026-06-05, alongside critical/high/medium/no_known_cves/null).
 _DEVICE_PACKAGES: list[dict[str, Any]] = [
     {
         "id": 1,
@@ -108,6 +109,16 @@ _ORG_PACKAGES: list[dict[str, Any]] = [
         "organization_id": 0,
         "server_id": 0,
     },
+    {
+        "id": 103,
+        "display_name": "Example Utility",
+        "version": "5.0",
+        "severity": "low",  # observed live (2026-06-05) — not spec-only
+        "is_managed": True,
+        "installed": True,
+        "organization_id": 0,
+        "server_id": 0,
+    },
 ]
 
 
@@ -177,8 +188,13 @@ async def test_list_packages_severity_field_note() -> None:
     note = result["metadata"]["field_notes"]["severity"]
     assert "no_known_cves" in note["observed_live"]
     assert any("null" in v for v in note["observed_live"])
-    for spec_only in ("low", "none", "unknown"):
+    # `low` was observed live on the probed tenant (2026-06-05): the org
+    # severity distribution returned `low` packages, so it sits in observed_live,
+    # not spec_only_unverified.
+    assert "low" in note["observed_live"]
+    for spec_only in ("none", "unknown"):
         assert spec_only in note["spec_only_unverified"]
+    assert "low" not in note["spec_only_unverified"]
 
     # A no_known_cves package and a null-severity package both round-trip with
     # raw severity preserved (no rewriting).
@@ -276,7 +292,10 @@ async def test_search_org_packages_returns_summaries() -> None:
     client = StubClient(get_responses={"/orgs/555/packages": [_ORG_PACKAGES]})
     result = await search_org_packages(cast(AutomoxClient, client), org_id=555)
 
-    assert result["data"]["total_packages"] == 3
+    # The org endpoint returns a bare list with no total; the count is
+    # page-scoped (returned_package_count), NOT a fleet-wide total.
+    assert result["data"]["returned_package_count"] == 4
+    assert "total_packages" not in result["data"]
     names = [p["name"] for p in result["data"]["packages"]]
     assert "Example App" in names
     assert "example-lib" in names
@@ -290,6 +309,10 @@ async def test_search_org_packages_includes_optional_fields() -> None:
     app = next(p for p in result["data"]["packages"] if p["name"] == "Example App")
     assert app["is_managed"] is True
     assert app["severity"] == "high"
+
+    # A `low`-severity package (observed live) round-trips with raw severity.
+    util = next(p for p in result["data"]["packages"] if p["name"] == "Example Utility")
+    assert util["severity"] == "low"
 
     # The phantom `awaiting` output projection is gone (the awaiting INPUT
     # filter is exercised separately and remains correct). `device_count` is
@@ -310,8 +333,46 @@ async def test_search_org_packages_severity_field_note() -> None:
     note = result["metadata"]["field_notes"]["severity"]
     assert note is _SEVERITY_FIELD_NOTE
     assert "no_known_cves" in note["observed_live"]
-    for spec_only in ("low", "none", "unknown"):
+    assert "low" in note["observed_live"]
+    for spec_only in ("none", "unknown"):
         assert spec_only in note["spec_only_unverified"]
+
+
+@pytest.mark.asyncio
+async def test_search_org_packages_page_scoped_count_and_truncation() -> None:
+    """A full page (count == limit) flags has_more; the count is page-scoped.
+
+    The live endpoint is a bare list with no total, so a page that fills to the
+    requested limit is the only signal that more packages exist. The data key is
+    `returned_package_count` (this page), never a fleet-wide `total_packages`.
+    """
+    full_page = [
+        {"id": i, "display_name": f"pkg{i}", "version": "1.0", "severity": None} for i in range(25)
+    ]
+    client = StubClient(get_responses={"/orgs/555/packages": [full_page]})
+    result = await search_org_packages(cast(AutomoxClient, client), org_id=555, page=0, limit=25)
+
+    assert result["data"]["returned_package_count"] == 25
+    assert "total_packages" not in result["data"]
+    pagination = result["metadata"]["pagination"]
+    assert pagination["page"] == 0
+    assert pagination["page_size"] == 25
+    assert pagination["upstream_total"] is None  # bare list carries no total
+    assert pagination["has_more"] is True
+    assert "returned_package_count" in result["metadata"]["field_notes"]
+
+
+@pytest.mark.asyncio
+async def test_search_org_packages_short_page_signals_complete() -> None:
+    """A page shorter than the limit means no more pages (has_more False)."""
+    short_page = [
+        {"id": 1, "display_name": "only", "version": "1.0", "severity": "low"},
+    ]
+    client = StubClient(get_responses={"/orgs/555/packages": [short_page]})
+    result = await search_org_packages(cast(AutomoxClient, client), org_id=555, page=0, limit=25)
+
+    assert result["data"]["returned_package_count"] == 1
+    assert result["metadata"]["pagination"]["has_more"] is False
 
 
 @pytest.mark.asyncio

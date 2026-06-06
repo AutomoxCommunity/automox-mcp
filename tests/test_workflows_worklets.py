@@ -22,7 +22,9 @@ _WORKLET_LIST: list[dict[str, Any]] = [
         "os_family": "Windows",
         "language": "PowerShell",
         "version": "1.2.0",
-        "device_type": "endpoint",
+        # Live /wis/search returns device_type as a LIST (verified 2026-06-05:
+        # ['SERVER', 'WORKSTATION']), not a scalar string.
+        "device_type": ["SERVER", "WORKSTATION"],
         "verified": True,
         "access": "premium",
         "license_required": False,
@@ -40,13 +42,22 @@ _WORKLET_LIST: list[dict[str, Any]] = [
     },
 ]
 
+# Live /wis/search/{uuid} detail shape (sanitized capture 2026-06-05): `uuid`,
+# plural `categories`, `device_type` as a list, the `user_interaction_required`
+# safety flag, and the trust/availability signals — NO `status` field.
 _WORKLET_DETAIL: dict[str, Any] = {
-    "id": "wklt-001",
+    "uuid": "wklt-001",
     "name": "Disable USB Storage",
     "description": "Disables USB mass storage devices",
-    "category": "Security",
+    "categories": ["Security"],
     "os_family": "Windows",
-    "author": "Automox",
+    "device_type": ["SERVER", "WORKSTATION"],
+    "language": "PowerShell",
+    "version": "1.2.0",
+    "verified": True,
+    "access": "premium",
+    "license_required": False,
+    "user_interaction_required": False,
     "evaluation_code": "Get-ItemProperty -Path 'HKLM:\\SYSTEM'",
     "remediation_code": "Set-ItemProperty -Path 'HKLM:\\SYSTEM'",
     "notes": "Requires admin privileges",
@@ -130,6 +141,12 @@ async def test_detail_returns_full_info() -> None:
     assert result["data"]["evaluation_code"] == "Get-ItemProperty -Path 'HKLM:\\SYSTEM'"
     assert result["data"]["remediation_code"] == "Set-ItemProperty -Path 'HKLM:\\SYSTEM'"
     assert result["data"]["notes"] == "Requires admin privileges"
+    # Finding 46: the live `user_interaction_required` safety flag is surfaced
+    # (was dropped from the projection allowlist). False is a real live value
+    # and must round-trip, not be coerced away.
+    assert result["data"]["user_interaction_required"] is False
+    assert result["data"]["categories"] == ["Security"]
+    assert result["data"]["device_type"] == ["SERVER", "WORKSTATION"]
 
 
 @pytest.mark.asyncio

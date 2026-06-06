@@ -115,6 +115,12 @@ async def test_returns_all_events() -> None:
     # Real payloads have NO category_name field; the projection must not invent
     # one. The events still come through (pins the no-phantom-field contract).
     assert all("category_name" not in e for e in result["data"]["events"])
+    # The event identifier lives under `_id` + `metadata.uid` live — NOT a
+    # top-level `uid` (which is always absent). The projection must surface both
+    # real identifiers; reading a non-existent top-level `uid` yielded None.
+    e0 = result["data"]["events"][0]
+    assert e0["_id"] == "6a21c3d1106afe9d63dc377f"
+    assert e0["uid"] == "1f160432-e38d-6d70-982b-d3c30f874c91"  # from metadata.uid
 
 
 @pytest.mark.asyncio
@@ -344,7 +350,30 @@ async def test_unverified_prefix_labeled_in_field_notes() -> None:
     assert result["data"]["total_events"] == 0
     assert result["metadata"]["events_before_filter"] == 3
     assert result["metadata"]["applied_filters"]["category_name_matched"] is True
-    assert any("unverified live" in note for note in result["metadata"]["field_notes"])
+    notes = result["metadata"]["field_notes"]
+    assert any("unverified live" in note for note in notes)
+    # account_change has a spec example, so its provenance is "spec example",
+    # NOT "inferred".
+    assert any("spec example" in note for note in notes)
+    assert not any("inferred" in note for note in notes)
+
+
+@pytest.mark.asyncio
+async def test_user_access_prefix_labeled_inferred_not_spec_derived() -> None:
+    # The spec has NO "User Access:" example — the prefix is an inference, not
+    # spec-derived. The legend provenance must say "inferred", distinct from the
+    # spec-example provenance used for account_change.
+    path = f"/audit-service/v1/orgs/{_ORG_UUID}/events"
+    client = _make_client(get_responses={path: [_OCSF_EVENTS]})
+    result = await audit_events_ocsf(
+        cast(AutomoxClient, client),
+        org_id=42,
+        date="2026-03-25",
+        category_name="user_access",
+    )
+    assert result["metadata"]["applied_filters"]["category_name_matched"] is True
+    notes = result["metadata"]["field_notes"]
+    assert any("inferred (no spec example)" in note for note in notes)
 
 
 # ---------------------------------------------------------------------------

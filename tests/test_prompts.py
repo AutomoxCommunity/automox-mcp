@@ -44,6 +44,11 @@ def test_investigate_device_prompt_renders(server: FastMCP) -> None:
     result = prompt.fn(device_id="12345")
     assert "12345" in result
     assert "device_detail" in result
+    # N6: the prompt must not instruct filtering on the phantom `patch_status`
+    # field (removed from the package projection by #159). Install state comes
+    # from the `installed` boolean; risk from `severity`.
+    assert "patch_status" not in result
+    assert "installed" in result
 
 
 def test_patch_tuesday_prompt_renders(server: FastMCP) -> None:

@@ -50,15 +50,21 @@ _STATUS_ID_LABELS = {
 # non-existent `category_name` field.
 #
 # `authentication` / `entity_management` / `web_resource_activity` prefixes are
-# LIVE-VERIFIED (2026-06-05). `account_change` / `user_access` are SPEC-EXAMPLE
-# DERIVED ONLY (no events of those categories existed in the live tenant to
-# confirm the exact prefix) — labeled unverified in the field_notes legend.
+# LIVE-VERIFIED (2026-06-05). The other two are NOT live-confirmed (no events of
+# those categories existed in the tenant) and differ in provenance:
+#   * `account_change` — derived from a spec example ("Account Change: ..."),
+#     so the prefix has a documented basis but is still unconfirmed live.
+#   * `user_access` — the spec has NO "User Access:" example (the relevant
+#     example object is empty); this prefix is an INFERENCE/guess, not
+#     spec-derived. Treated the same as account_change for filtering (both flag
+#     "spec/inference, unverified live" in the field_notes legend) but the
+#     stronger "spec-derived" provenance claim only holds for account_change.
 _CATEGORY_TYPE_PREFIXES = {
     "authentication": "authentication: ",  # live-verified
     "entity_management": "entity management: ",  # live-verified
     "web_resource_activity": "web resources activity: ",  # live-verified
-    "account_change": "account change: ",  # spec-example only, unverified live
-    "user_access": "user access: ",  # spec-example only, unverified live
+    "account_change": "account change: ",  # spec-example derived, unverified live
+    "user_access": "user access: ",  # INFERRED (no spec example), unverified live
 }
 _CATEGORY_PREFIXES_VERIFIED = frozenset(
     {"authentication", "entity_management", "web_resource_activity"}
@@ -85,8 +91,20 @@ def _ocsf_time_to_iso(value: Any) -> Any:
 def _summarize_ocsf_event(event: Mapping[str, Any]) -> dict[str, Any]:
     """Extract key OCSF fields from an audit event."""
     entry: dict[str, Any] = {}
+    # The upstream OCSF events carry NO top-level `uid` (verified live
+    # 2026-06-05). The event identifier lives under `_id` (a Mongo-style
+    # ObjectId hex string) and a separate UUID under `metadata.uid`. Reading
+    # `uid` directly always yielded None, so no event id was ever surfaced —
+    # project both real identifiers (raw, no rewriting).
+    event_id = event.get("_id")
+    if event_id is not None:
+        entry["_id"] = event_id
+    event_metadata = event.get("metadata")
+    if isinstance(event_metadata, Mapping):
+        metadata_uid = event_metadata.get("uid")
+        if metadata_uid is not None:
+            entry["uid"] = metadata_uid
     for key in (
-        "uid",
         "time",
         "category_uid",
         "category_name",
@@ -234,11 +252,14 @@ async def audit_events_ocsf(
                 e for e in filtered if str(e.get("type_name") or "").lower().startswith(prefix)
             ]
             category_name_matched = True
-            source = (
-                "live-verified 2026-06-05"
-                if token in _CATEGORY_PREFIXES_VERIFIED
-                else "spec examples only, unverified live"
-            )
+            if token in _CATEGORY_PREFIXES_VERIFIED:
+                source = "live-verified 2026-06-05"
+            elif token == "user_access":  # nosec B105 — OCSF category token, not a secret
+                # No "User Access:" example exists in the spec — this prefix is
+                # an inference, not spec-derived.
+                source = "inferred (no spec example), unverified live"
+            else:
+                source = "spec example, unverified live"
             field_notes.append(
                 f"category_name filter is applied client-side against the event "
                 f"type_name prefix '{prefix}' (the upstream events carry no "

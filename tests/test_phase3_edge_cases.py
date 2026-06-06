@@ -282,16 +282,25 @@ async def test_metadata_fields_empty() -> None:
 
 
 def test_summarize_ocsf_event_minimal() -> None:
-    event = {"uid": "123", "activity": "Login"}
+    # Live events carry NO top-level `uid` — the identifier is `_id` plus
+    # `metadata.uid` (verified live 2026-06-05). The projection surfaces both;
+    # a top-level `uid` would always be None.
+    event = {
+        "_id": "6a21c3d1106afe9d63dc377f",
+        "metadata": {"uid": "1f160432-e38d-6d70-982b-d3c30f874c91"},
+        "activity": "Login",
+    }
     result = _summarize_ocsf_event(event)
-    assert result["uid"] == "123"
+    assert result["_id"] == "6a21c3d1106afe9d63dc377f"
+    assert result["uid"] == "1f160432-e38d-6d70-982b-d3c30f874c91"
     assert result["activity"] == "Login"
     assert "actor" not in result
 
 
 def test_summarize_ocsf_event_with_device() -> None:
     event = {
-        "uid": "456",
+        "_id": "6a21c3d1106afe9d63dc3780",
+        "metadata": {"uid": "1f160432-e38d-6d70-982b-d3c30f874c92"},
         "device": {"uid": "dev-1", "name": "host-1", "type": "server", "extra": "ignored"},
     }
     result = _summarize_ocsf_event(event)
@@ -304,7 +313,7 @@ async def test_audit_v2_no_next_cursor_from_events() -> None:
     """Test cursor extraction from last event metadata."""
     path = f"/audit-service/v1/orgs/{_ORG_UUID}/events"
     events = [
-        {"uid": "evt-1", "category_name": "auth", "metadata": {"uid": "cursor-123"}},
+        {"_id": "evt-1", "category_name": "auth", "metadata": {"uid": "cursor-123"}},
     ]
     client = StubClient(get_responses={path: [events]})
     client.org_uuid = _ORG_UUID

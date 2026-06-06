@@ -25,8 +25,8 @@ _MAX_PACKAGE_PAGES = 20
 # NOT seen live, so no safe/unsafe meaning is asserted for them.
 _SEVERITY_FIELD_NOTE: dict[str, Any] = {
     "meaning": "Security severity of the package version (Packages.severity).",
-    "observed_live": ["critical", "high", "medium", "no_known_cves", "null (JSON null)"],
-    "spec_only_unverified": ["low", "none", "unknown"],
+    "observed_live": ["critical", "high", "medium", "low", "no_known_cves", "null (JSON null)"],
+    "spec_only_unverified": ["none", "unknown"],
     "legend": {
         "null": (
             "No severity assessment recorded for this package (absence of an "
@@ -160,18 +160,23 @@ async def search_org_packages(
     raw_response = await client.get(f"/orgs/{org_id}/packages", params=params)
 
     packages: list[Any]
-    total: int
+    # `/orgs/{id}/packages` returns a bare list with NO total field (verified
+    # live 2026-06-05: top-level is a JSON array, not a {data,total} envelope),
+    # and pages by `limit`. `upstream_total` is therefore the count of rows in
+    # THIS page only — it is NOT a fleet-wide org package total. A full page
+    # means more packages may exist on later pages.
+    upstream_total: int | None = None
     if isinstance(raw_response, Mapping):
         packages = (
             raw_response.get("data", []) if isinstance(raw_response.get("data"), list) else []
         )
-        total = raw_response.get("total", len(packages))
+        raw_total = raw_response.get("total")
+        if isinstance(raw_total, int):
+            upstream_total = raw_total
     elif isinstance(raw_response, list):
         packages = raw_response
-        total = len(packages)
     else:
         packages = []
-        total = 0
     summary: list[dict[str, Any]] = []
     for pkg in packages:
         if not isinstance(pkg, Mapping):
@@ -187,13 +192,39 @@ async def search_org_packages(
             entry["is_managed"] = is_managed
         summary.append(entry)
 
+    page_count = len(summary)
+    # Effective page size: an explicit `limit`, else however many rows the page
+    # returned (the upstream applies a default when none is sent). A page that
+    # filled to the limit signals more pages may exist.
+    effective_page_size = limit if limit is not None else page_count
+    has_more = effective_page_size > 0 and page_count >= effective_page_size
+
     return {
         "data": {
-            "total_packages": total,
+            # Page-scoped: the number of packages on THIS page, not a fleet-wide
+            # org total (the upstream returns a bare list with no total). See
+            # metadata.field_notes.returned_package_count and metadata.pagination.
+            "returned_package_count": page_count,
             "packages": summary,
         },
         "metadata": {
             "deprecated_endpoint": False,
-            "field_notes": {"severity": _SEVERITY_FIELD_NOTE},
+            "pagination": {
+                "page": page,
+                "page_size": effective_page_size or None,
+                # The upstream sends no total; a full page is the only available
+                # truncation signal. None for upstream_total means "not provided".
+                "upstream_total": upstream_total,
+                "has_more": has_more,
+            },
+            "field_notes": {
+                "severity": _SEVERITY_FIELD_NOTE,
+                "returned_package_count": (
+                    "Count of packages on THIS page only — NOT a fleet-wide org "
+                    "package total. /orgs/{id}/packages returns a bare list with "
+                    "no total field; when has_more is true, fetch later pages "
+                    "(increment `page`) to enumerate the rest."
+                ),
+            },
         },
     }

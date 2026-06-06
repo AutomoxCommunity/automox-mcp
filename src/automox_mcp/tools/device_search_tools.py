@@ -121,7 +121,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             '"field": "tag", "operator": "IN", "values": ["Nginx"]}`. '
             "Use `get_searchable_fields` for valid scope/field/operator combos "
             "and `device_search_typeahead` to discover values. The org is scoped "
-            "automatically. `limit` sets the page size. Use an org-scoped API "
+            "automatically. `limit` sets the page size. On each returned device, "
+            "`outstanding_patch_severity` distinguishes the string 'none' "
+            "(assessed, no outstanding patches — clean) from JSON null/absent "
+            "(device not yet assessed — unknown, NOT clean); see "
+            "metadata.field_notes.outstanding_patch_severity. Use an org-scoped API "
             "key — global/account keys are unreliable on this endpoint and "
             "often return HTTP 403."
         ),

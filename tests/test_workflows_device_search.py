@@ -192,8 +192,15 @@ async def test_advanced_search_passes_body() -> None:
 async def test_advanced_search_parses_spring_page_envelope() -> None:
     """Live search returns a Spring Page (`content`/`total_elements`), not `data`."""
     path = f"/server-groups-api/v1/organizations/{_ORG_UUID}/device/search"
+    # outstanding_patch_severity values captured from the live ADS DTO
+    # (2026-06-05, sanitized): the string 'none' = assessed-clean, a real
+    # severity = patched-behind, JSON null = unassessed.
     envelope = {
-        "content": [{"id": 1, "name": "host-1"}, {"id": 2, "name": "host-2"}],
+        "content": [
+            {"id": 1, "name": "host-1", "outstanding_patch_severity": "none"},
+            {"id": 2, "name": "host-2", "outstanding_patch_severity": "critical"},
+            {"id": 3, "name": "host-3", "outstanding_patch_severity": None},
+        ],
         "total_elements": 227,
         "total_pages": 10,
         "number": 0,
@@ -208,8 +215,17 @@ async def test_advanced_search_parses_spring_page_envelope() -> None:
     )
 
     assert result["data"]["total_devices"] == 227
-    assert len(result["data"]["devices"]) == 2
+    assert len(result["data"]["devices"]) == 3
     assert result["metadata"]["pagination"]["has_more"] is True
+    # N5: raw 'none'/null/severity values pass through unchanged, and a
+    # field_note distinguishes assessed-clean ('none') from unassessed (null).
+    devices = result["data"]["devices"]
+    assert devices[0]["outstanding_patch_severity"] == "none"
+    assert devices[1]["outstanding_patch_severity"] == "critical"
+    assert devices[2]["outstanding_patch_severity"] is None
+    note = result["metadata"]["field_notes"]["outstanding_patch_severity"]
+    assert "'none'" in note and "null" in note
+    assert "assessed" in note and "NOT been assessed" in note
 
 
 # ---------------------------------------------------------------------------
@@ -596,6 +612,8 @@ async def test_get_saved_search_results_returns_devices() -> None:
     assert result["data"]["total_devices"] == 100
     assert len(result["data"]["devices"]) == 2
     assert result["data"]["saved_search_id"] == "ss-001"
+    # N5: the outstanding_patch_severity legend rides on saved-search results too.
+    assert "outstanding_patch_severity" in result["metadata"]["field_notes"]
     _, _, params = client.calls[0]
     assert params == {"page": 1, "limit": 25}
 
@@ -611,6 +629,7 @@ async def test_get_cached_search_results_returns_devices() -> None:
 
     assert result["data"]["search_id"] == "run-42"
     assert result["data"]["total_devices"] == 100
+    assert "outstanding_patch_severity" in result["metadata"]["field_notes"]
 
 
 @pytest.mark.asyncio
@@ -712,6 +731,7 @@ async def test_run_saved_search_extracts_page_envelope_and_pagination() -> None:
     assert result["data"]["total_devices"] == 2
     assert result["data"]["devices"][0]["hostname"] == "host-a"
     assert result["metadata"]["pagination"]["has_more"] is False
+    assert "outstanding_patch_severity" in result["metadata"]["field_notes"]
 
     _, _path, params = client.calls[0]
     assert params["page"] == 0

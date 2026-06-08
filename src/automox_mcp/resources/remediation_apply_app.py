@@ -88,6 +88,7 @@ _HTML_TEMPLATE = """<!doctype html>
   .btn:disabled { opacity: .5; cursor: default; }
   .rowstatus { font-size: 11px; color: var(--muted); margin-top: 6px; }
   .rowstatus.err { color: var(--bad); }
+  .note { font-size: 12px; color: var(--warn); margin-top: 8px; }
   .empty { padding: 16px 12px; color: var(--muted); }
 </style>
 </head>
@@ -146,11 +147,22 @@ _HTML_TEMPLATE = """<!doctype html>
     return best;
   }
 
+  // Whether patch-now is the available remediation for a solution. The action
+  // set's solution carries a remediation_type; patch-now is offered only when it
+  // is a direct patch. Worklet-based (or non-patch) remediations are shown for
+  // review but NOT actioned here — the worklet path is the arbitrary-code case
+  // the env gate exists for and stays a direct, explicit tool call.
+  function patchNowAvailable(s) {
+    var rt = String((s && s.remediation_type) || "").toLowerCase();
+    return rt.indexOf("patch") !== -1 && rt.indexOf("worklet") === -1;
+  }
+
   function solCard(s) {
     var sid = solutionId(s);
     var devs = deviceIds(s);
     var vulns = Array.isArray(s.vulnerabilities) ? s.vulnerabilities : [];
     var sev = maxSeverity(s);
+    var canPatchNow = patchNowAvailable(s);
     var card = document.createElement("div");
     card.className = "sol";
     var cveList = vulns.map(function (v) {
@@ -168,6 +180,20 @@ _HTML_TEMPLATE = """<!doctype html>
       (cveList ? '<div class="cves">' + cveList + "</div>" : "") +
       '<div class="rowstatus"></div>';
     var statusEl = card.querySelector(".rowstatus");
+
+    // Only solutions whose remediation is a direct patch get a patch-now button.
+    if (!canPatchNow) {
+      var note = document.createElement("div");
+      note.className = "note";
+      var rt = String(s.remediation_type || "").toLowerCase();
+      note.textContent = rt.indexOf("worklet") !== -1
+        ? "Worklet-based remediation — patch-now is not the available fix here; "
+          + "apply it as a worklet action outside this review."
+        : "No direct patch-now remediation is available for this solution.";
+      card.insertBefore(note, statusEl);
+      return card;
+    }
+
     var btn = document.createElement("button");
     btn.className = "btn apply";
     btn.textContent = "Apply patch-now to " + devs.length + " device(s)";

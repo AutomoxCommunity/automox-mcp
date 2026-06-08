@@ -5,9 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 from fastmcp import FastMCP
+from fastmcp.apps import AppConfig, ResourceCSP
 
 from .. import workflows
 from ..client import AutomoxClient
+from ..resources.patch_approval_app import PATCH_APPROVAL_APP_URI
 from ..schemas import (
     ClonePolicyParams,
     DeletePolicyToolParams,
@@ -15,6 +17,7 @@ from ..schemas import (
     GetPolicyStatsParams,
     ListDevicesForPoliciesParams,
     PatchApprovalDecisionParams,
+    PatchApprovalsSummaryResult,
     PatchApprovalSummaryParams,
     PolicyChangeRequestParams,
     PolicyDetailParams,
@@ -267,6 +270,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "idempotentHint": True,
             "openWorldHint": True,
         },
+        output_schema=PatchApprovalsSummaryResult.model_json_schema(),
+        # Write-flow MCP App (#179): Apps-capable hosts render the patch-approval
+        # review UI inline from this tool's structured output; the UI drives the
+        # existing Tier-1 decide_patch_approval write tool via the host CallTool
+        # bridge (host confirmation remains the gate). Self-contained UI → empty CSP.
+        app=AppConfig(resourceUri=PATCH_APPROVAL_APP_URI, csp=ResourceCSP()),
     )
     async def patch_approvals_summary(
         status: str | None = None,

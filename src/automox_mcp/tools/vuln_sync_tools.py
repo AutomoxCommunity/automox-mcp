@@ -160,7 +160,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         # review UI from this tool's structured output (solutions + affected devices).
         # The UI drives the gated apply_remediation_actions (patch-now) via the host
         # CallTool bridge; the env gate remains the control. Self-contained UI → empty CSP.
-        app=AppConfig(resourceUri=REMEDIATION_APPLY_APP_URI, csp=ResourceCSP()),
+        app=AppConfig(resource_uri=REMEDIATION_APPLY_APP_URI, csp=ResourceCSP()),
     )
     async def get_action_set_solutions(
         action_set_id: int,

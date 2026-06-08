@@ -81,9 +81,10 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         # (ui://automox/triage.html) inline using this tool's structured output.
         # The UI is self-contained (inline JS/CSS), so an empty CSP is declared
         # (no extra domains needed — host default-deny applies); non-Apps hosts
-        # ignore the app link and get the structured snapshot. AppConfig fields
-        # use camelCase wire aliases, hence `resourceUri`.
-        app=AppConfig(resourceUri=TRIAGE_APP_URI, csp=ResourceCSP()),
+        # ignore the app link and get the structured snapshot. The AppConfig
+        # constructor takes snake_case `resource_uri`; it still serializes to the
+        # camelCase `resourceUri` wire alias in the tool's `ui` meta.
+        app=AppConfig(resource_uri=TRIAGE_APP_URI, csp=ResourceCSP()),
     )
     async def get_compliance_snapshot(
         group_id: int | None = None,

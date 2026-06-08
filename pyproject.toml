@@ -20,7 +20,7 @@ classifiers = [
 ]
 dependencies = [
   "cryptography>=46.0.7",
-  "fastmcp>=3.2.0",
+  "fastmcp>=3.4.2",
   "httpx>=0.28",
   "pydantic>=2.12",
   "python-dotenv>=1.1"
@@ -86,10 +86,10 @@ exclude_dirs = ["tests", ".venv"]
 constraint-dependencies = [
   "authlib>=1.6.11",      # CVE-2025-68158, GHSA-jj8c-mmj3-mmgv: CSRF in cache-backed state storage
   "cryptography>=46.0.6", # CVE-2026-26007, CVE-2026-34073
-  "fastmcp>=3.2.0",       # CVE-2025-69196, CVE-2025-64340, CVE-2026-27124, GHSA-rcfx-77hg-w2wv
+  "fastmcp>=3.4.2",       # >=3.2.0: CVE-2025-69196, CVE-2025-64340, CVE-2026-27124, GHSA-rcfx-77hg-w2wv; >=3.4.2: OAuth-proxy/cache/header-forwarding hardening (3.2.4/3.3.0)
   "idna>=3.15",           # CVE-2026-45409 (DoS via crafted IDN encoding; supersedes CVE-2024-3651 fix)
   "jaraco-context>=6.1.0",# CVE-2026-23949
-  "mcp>=1.23.0",          # CVE-2025-66416
+  "mcp>=1.27.2",          # >=1.23.0: CVE-2025-66416; >=1.27.2: GHSA-jpw9-pfvf-9f58 (CVSS 7.1, transport session principal binding), GHSA-hvrp-rf83-w775 (CVSS 7.6, experimental-task isolation)
   "pygments>=2.20.0",     # CVE-2026-4539
   "pyjwt>=2.13.0",        # CVE-2026-32597; 2.13.0: PYSEC-2026-175/177/178/179
   "pytest>=9.0.3",            # CVE-2025-71176: /tmp/pytest-of-* privilege escalation

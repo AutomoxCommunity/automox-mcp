@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **Dependency security bumps (durably floored).** `mcp` 1.26.0 → **1.27.2** closes two high-severity advisories the prior lock was in-range for: **GHSA-jpw9-pfvf-9f58** (CVSS 7.1 — HTTP transport sessions not bound to the authenticated principal) and **GHSA-hvrp-rf83-w775** (CVSS 7.6 — experimental task handlers reachable across sessions). `fastmcp` 3.2.0 → **3.4.2** picks up first-party OAuth-proxy / response-cache / inbound-header-forwarding hardening landed in 3.2.4 and 3.3.0. Both floors were raised in `pyproject.toml` (`mcp>=1.27.2`, `fastmcp>=3.4.2`) so the fix survives a fresh resolve rather than living only in the lock.
+
+### Changed
+
+- **fastmcp 3.4 `AppConfig` migration.** fastmcp renamed the `AppConfig` constructor argument `resourceUri` → `resource_uri` (snake_case); the five MCP-App entry tools were updated accordingly. The serialized `ui` tool-meta still emits the camelCase `resourceUri` wire alias, so the App wire contract is unchanged (covered by the existing App tests).
+- **Maintenance dependency refresh (currency only — no open vuln above the prior lock).** cryptography 46.0.7 → 48.0.0, pydantic 2.12.5 → 2.13.4, starlette 1.1.0 → 1.2.1, requests 2.33.1 → 2.34.2, idna 3.16 → 3.18, authlib 1.7.1 → 1.7.2, uvicorn 0.42.0 → 0.49.0, python-multipart 0.0.27 → 0.0.32, plus sse-starlette and watchfiles. Each was checked against its changelog and the GitHub Advisory DB: every relevant CVE floor was already satisfied by the prior lock, so these carry no security fix above it.
+- **Dev tooling.** mypy 1.20.0 → 2.1.0 (whole-repo type-check passes clean under 2.x) and ruff 0.15.8 → 0.15.16 (no format or lint changes). Synced the `.pre-commit-config.yaml` hook pins to the lock — ruff `v0.14.1` → `v0.15.16`, bandit `1.8.3` → `1.9.4` — closing a commit-stage-hook vs. project-venv version skew.
+
 ## [2.2.0] - 2026-06-08
 
 **The MCP Apps release.** Ships five interactive `ui://` **MCP App** surfaces (the `io.modelcontextprotocol/ui` extension) on a new structured-output (`outputSchema`) foundation: a read-only compliance-triage pilot, plus patch-approval, policy blast-radius, remediation-apply, and RBAC access-certification review flows. Write-flow Apps drive the **existing gated tools** through the host's `CallTool` confirmation — no new tools and no new gates — and degrade gracefully to structured output on non-Apps hosts; every App UI is self-contained (inline JS/CSS, no external/CDN loads) under the host's deny-all CSP. The model-facing tool set is unchanged (133 tools / 85 read / 48 write); MCP resources grow 9 → 14. Also in this release: `outputSchema` on the compound and report tools (FastMCP validates returns at runtime, so the models are deliberately permissive), a demand-driven schema policy (`CLAUDE.md`), `maybe_format_markdown` now returns a `ToolResult` so markdown output and an object schema can coexist, and a `list_zone_users` secret-redaction hardening (V-182).

@@ -17,6 +17,7 @@ from .. import workflows
 from ..client import AutomoxClient
 from ..schemas import ForbidExtraModel
 from ..utils.tooling import (
+    ToolReturn,
     call_tool_workflow,
     check_idempotency,
     maybe_format_markdown,
@@ -255,7 +256,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         limit: int | None = None,
         cursor: str | None = None,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         params = {
             "org_uuid": org_uuid,
             "limit": limit,
@@ -319,7 +320,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         start_date: str | None = None,
         end_date: str | None = None,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         params = {
             "org_uuid": org_uuid,
             "webhook_id": webhook_id,

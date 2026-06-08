@@ -23,6 +23,7 @@ from ..schemas import (
     UpdateSavedSearchParams,
 )
 from ..utils.tooling import (
+    ToolReturn,
     call_tool_workflow,
     check_idempotency,
     maybe_format_markdown,
@@ -103,7 +104,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     )
     async def list_saved_searches(
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         result = await call_tool_workflow(client, _list_saved_searches, {})
         return maybe_format_markdown(result, output_format)
 
@@ -141,7 +142,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         page: int | None = None,
         limit: int | None = None,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         result = await call_tool_workflow(
             client,
             _advanced_device_search,
@@ -167,7 +168,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         field: str,
         prefix: str,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         result = await call_tool_workflow(
             client,
             _device_search_typeahead,
@@ -191,7 +192,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     )
     async def get_device_metadata_fields(
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         result = await call_tool_workflow(client, _get_device_metadata_fields, {})
         return maybe_format_markdown(result, output_format)
 
@@ -207,7 +208,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     )
     async def get_device_assignments(
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         result = await call_tool_workflow(client, _get_device_assignments, {})
         return maybe_format_markdown(result, output_format)
 
@@ -230,7 +231,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     async def get_device_by_uuid(
         device_uuid: str,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         result = await call_tool_workflow(
             client,
             _get_device_by_uuid,
@@ -259,7 +260,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     async def get_saved_search(
         saved_search_id: str,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         result = await call_tool_workflow(
             client,
             _get_saved_search,
@@ -286,7 +287,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         page: int | None = None,
         limit: int | None = None,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         result = await call_tool_workflow(
             client,
             _get_saved_search_results,
@@ -315,7 +316,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         page: int | None = None,
         limit: int | None = None,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         result = await call_tool_workflow(
             client,
             _get_cached_search_results,
@@ -340,7 +341,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     )
     async def get_search_scopes(
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         result = await call_tool_workflow(client, _get_search_scopes, {})
         return maybe_format_markdown(result, output_format)
 
@@ -360,7 +361,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     )
     async def get_searchable_fields(
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         result = await call_tool_workflow(client, _get_searchable_fields, {})
         return maybe_format_markdown(result, output_format)
 
@@ -382,7 +383,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         device_uuid: str,
         search_type: str | None = None,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         result = await call_tool_workflow(
             client,
             _list_searches_for_device,
@@ -412,7 +413,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         size: int | None = None,
         fields: list[str] | None = None,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         result = await call_tool_workflow(
             client,
             _run_saved_search,

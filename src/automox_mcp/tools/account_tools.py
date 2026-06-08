@@ -37,6 +37,7 @@ from ..schemas import (
     ZoneAssignment,
 )
 from ..utils.tooling import (
+    ToolReturn,
     call_tool_workflow,
     check_idempotency,
     maybe_format_markdown,
@@ -142,7 +143,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     )
     async def list_org_api_keys(
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         org_id = client.org_id
         if org_id is None:
             raise ToolError("org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly.")
@@ -174,7 +175,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         page: int | None = None,
         limit: int | None = None,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         result = await call_tool_workflow(
             client,
             workflows.list_organizations,
@@ -206,7 +207,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         page: int | None = None,
         limit: int | None = None,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         result = await call_tool_workflow(
             client,
             workflows.list_users,
@@ -226,7 +227,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     async def get_user(
         user_id: int,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         result = await call_tool_workflow(
             client,
             workflows.get_user,
@@ -242,7 +243,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     )
     async def get_account(
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         result = await call_tool_workflow(
             client,
             workflows.get_account,
@@ -258,7 +259,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     )
     async def list_account_rbac_roles(
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         result = await call_tool_workflow(
             client,
             workflows.list_account_rbac_roles,
@@ -281,7 +282,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     async def get_account_user(
         user_id: str,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         result = await call_tool_workflow(
             client,
             workflows.get_account_user,
@@ -298,7 +299,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     async def list_zones_for_user(
         user_id: str,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         result = await call_tool_workflow(
             client,
             workflows.list_zones_for_user,
@@ -316,7 +317,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         page: int | None = None,
         limit: int | None = None,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         result = await call_tool_workflow(
             client,
             workflows.list_zones,
@@ -335,7 +336,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     async def get_zone(
         zone_id: str,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         result = await call_tool_workflow(
             client,
             workflows.get_zone,
@@ -354,7 +355,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         page: int | None = None,
         limit: int | None = None,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         result = await call_tool_workflow(
             client,
             workflows.list_zone_users,
@@ -381,7 +382,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         page: int | None = None,
         limit: int | None = None,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         result = await call_tool_workflow(
             client,
             workflows.list_user_api_keys,
@@ -402,7 +403,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         user_id: int,
         key_id: int,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         result = await call_tool_workflow(
             client,
             workflows.get_user_api_key,
@@ -421,7 +422,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     )
     async def list_global_api_keys(
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         result = await call_tool_workflow(client, workflows.list_global_api_keys, {})
         return maybe_format_markdown(result, output_format)
 

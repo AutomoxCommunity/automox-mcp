@@ -17,6 +17,7 @@ from ..schemas import (
     UpdateServerGroupParams,
 )
 from ..utils.tooling import (
+    ToolReturn,
     call_tool_workflow,
     check_idempotency,
     maybe_format_markdown,
@@ -45,7 +46,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         page: int | None = None,
         limit: int | None = None,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         params = {
             "page": page,
             "limit": limit,

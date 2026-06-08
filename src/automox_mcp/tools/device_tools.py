@@ -21,6 +21,7 @@ from ..schemas import (
     UpdateDeviceParams,
 )
 from ..utils.tooling import (
+    ToolReturn,
     call_tool_workflow,
     check_idempotency,
     is_device_deletion_allowed,
@@ -55,7 +56,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         policy_status: str | None = None,
         managed: bool | None = None,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         params = {
             "group_id": group_id,
             "limit": limit,
@@ -121,7 +122,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         group_id: int | None = None,
         limit: int | None = 20,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         params = {
             "group_id": group_id,
             "limit": limit,
@@ -165,7 +166,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         group_id: int | None = None,
         limit: int | None = 50,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         params = {
             "hostname_contains": hostname_contains,
             "ip_address": ip_address,

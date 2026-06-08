@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from fastmcp import FastMCP
 
 from .. import workflows
 from ..client import AutomoxClient
 from ..schemas import GetEventsParams
 from ..utils.tooling import (
+    ToolReturn,
     call_tool_workflow,
     maybe_format_markdown,
 )
@@ -45,7 +44,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         start_date: str | None = None,
         end_date: str | None = None,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         params = {
             "page": page,
             "limit": limit,

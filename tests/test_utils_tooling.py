@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from fastmcp.tools import ToolResult
 
 from automox_mcp.client import AutomoxAPIError
 from automox_mcp.utils.tooling import (
@@ -16,6 +17,7 @@ from automox_mcp.utils.tooling import (
     format_as_markdown_table,
     format_error,
     get_enabled_modules,
+    maybe_format_markdown,
 )
 
 # ---------------------------------------------------------------------------
@@ -431,3 +433,60 @@ def test_markdown_table_none_values():
     lines = table.split("\n")
     # None renders as empty string
     assert "42" in lines[2]
+
+
+# ---------------------------------------------------------------------------
+# maybe_format_markdown — both branches (issue #177)
+# ---------------------------------------------------------------------------
+
+
+def test_maybe_format_markdown_non_markdown_returns_dict_unchanged():
+    """Non-markdown format returns the original envelope dict (FastMCP wraps it)."""
+    result = {"data": {"items": [{"a": 1}]}, "metadata": {"x": 1}}
+    out = maybe_format_markdown(result, "json")
+    assert out is result
+    assert isinstance(out, dict)
+
+
+def test_maybe_format_markdown_none_format_returns_dict_unchanged():
+    result = {"data": {"items": [{"a": 1}]}, "metadata": {}}
+    assert maybe_format_markdown(result, None) is result
+
+
+def test_maybe_format_markdown_markdown_returns_toolresult_preserving_structured():
+    """Markdown mode returns a ToolResult: markdown text as content, the FULL
+    original envelope as structured_content (so an object output_schema is
+    satisfied and schema-aware hosts/Apps still get the data)."""
+    result = {
+        "data": {"devices": [{"name": "dev-1", "os": "linux"}, {"name": "dev-2", "os": "win"}]},
+        "metadata": {"total_count": 2},
+    }
+    out = maybe_format_markdown(result, "markdown")
+    assert isinstance(out, ToolResult)
+    # structured_content is the unchanged envelope — NOT a markdown string.
+    assert out.structured_content == result
+    # content carries the rendered markdown table for human-facing hosts.
+    text = "".join(getattr(block, "text", "") for block in out.content)
+    assert "dev-1" in text and "| name |" in text.replace(" ", " ")
+    assert "name" in text and "os" in text
+
+
+def test_maybe_format_markdown_markdown_no_list_returns_dict_unchanged():
+    """Markdown mode with no tabulatable list falls back to the unchanged dict."""
+    result = {"data": {"summary": {"count": 5}}, "metadata": {}}
+    out = maybe_format_markdown(result, "markdown")
+    assert out is result
+
+
+def test_maybe_format_markdown_markdown_data_not_mapping_returns_unchanged():
+    """When data isn't a Mapping (e.g. a bare list), there's nothing to scan; unchanged."""
+    result = {"data": [{"a": 1}], "metadata": {}}
+    out = maybe_format_markdown(result, "markdown")
+    assert out is result
+
+
+def test_maybe_format_markdown_markdown_empty_list_returns_unchanged():
+    """An empty list is not tabulated (the `and value` guard); returns the dict."""
+    result = {"data": {"devices": []}, "metadata": {}}
+    out = maybe_format_markdown(result, "markdown")
+    assert out is result

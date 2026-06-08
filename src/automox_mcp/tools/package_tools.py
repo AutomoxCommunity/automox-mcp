@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from fastmcp import FastMCP
 
 from .. import workflows
@@ -13,6 +11,7 @@ from ..schemas import (
     GetOrganizationPackagesParams,
 )
 from ..utils.tooling import (
+    ToolReturn,
     call_tool_workflow,
     maybe_format_markdown,
 )
@@ -49,7 +48,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         page: int | None = None,
         limit: int | None = None,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         params = {
             "device_id": device_id,
             "page": page,
@@ -96,7 +95,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         page: int | None = None,
         limit: int | None = None,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         params = {
             "include_unmanaged": include_unmanaged,
             "awaiting": awaiting,

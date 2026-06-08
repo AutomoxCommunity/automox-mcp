@@ -9,8 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Structured `outputSchema` on the report tools** (`prepatch_report`, `noncompliant_report`). Both now advertise a JSON Schema for their `{"data", "metadata"}` envelope, derived from permissive Pydantic models in `schemas.py` (phase 2 of the structured-output work; see the compound tools above). The schema validates in both JSON and markdown modes.
 - **Read-only MCP App: compliance triage UI** (the `io.modelcontextprotocol/ui` Apps extension). `get_compliance_snapshot` now attaches an `AppConfig` pointing at a new `ui://automox/triage.html` resource (MIME `text/html;profile=mcp-app`); Apps-capable hosts render an interactive non-compliant-triage surface (compliance posture, non-compliant devices, stale devices, policy summary) inline, fed by the tool's structured output. The UI is fully self-contained (inline JS/CSS, no CDN imports), implements the ext-apps postMessage handshake by hand, and degrades gracefully — non-Apps hosts ignore the App link and receive the structured snapshot unchanged. No new model-facing tool; MCP resource count 9 → 10. Note: resource/App counts are not CI-guarded (see `CLAUDE.md`).
 - **Structured `outputSchema` on the three compound tools** (`get_compliance_snapshot`, `get_patch_tuesday_readiness`, `get_device_full_profile`). Each now advertises a JSON Schema (derived from a Pydantic model in `schemas.py`) for its `{"data", "metadata"}` envelope, so schema-aware MCP hosts can validate results and render them richly. The runtime return value is unchanged. The output models are deliberately permissive (all-optional fields, `dict[str, Any]` for variable sub-objects, never `extra="forbid"`) because FastMCP validates returned structured content against the schema at runtime — a too-strict schema would reject the legitimately-mutated envelope (token-budget truncation, section summaries, correlation id). Tool count unchanged.
+
+### Changed
+
+- **`maybe_format_markdown` now returns a FastMCP `ToolResult` in markdown mode** instead of replacing `data` with a markdown string. The `ToolResult` carries the rendered table as text content (for human-facing hosts) *and* the full, unchanged `{data, metadata}` object as `structuredContent` (for schema-aware hosts and MCP Apps). This unblocks advertising an object `outputSchema` on read tools while still offering markdown output — previously the markdown string could not satisfy an object schema. The return type of the ~66 markdown-capable read tools was widened accordingly (`ToolResult | dict`); their JSON-mode behavior is unchanged.
 
 ## [2.1.0] - 2026-06-06
 

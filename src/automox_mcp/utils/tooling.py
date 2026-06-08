@@ -9,8 +9,9 @@ import os
 import time
 from collections import deque
 from collections.abc import Awaitable, Callable, Mapping, Sequence
-from typing import Any, cast
+from typing import Any, TypeAlias, cast
 
+from fastmcp.tools import ToolResult
 from pydantic import BaseModel
 
 from ..client import AutomoxAPIError
@@ -19,6 +20,13 @@ from ..schemas import PaginationMetadata, ToolResponse
 from .sanitize import is_sanitization_enabled, sanitize_dict, sanitize_for_llm
 
 logger = logging.getLogger(__name__)
+
+#: Return type of read tools that may render markdown. Either a plain
+#: ``{data, metadata}`` envelope (FastMCP wraps it as ``structuredContent``), or a
+#: :class:`~fastmcp.tools.ToolResult` carrying both the markdown text (``content``,
+#: for human-facing hosts) and the structured object (``structured_content``, for
+#: schema-aware hosts / MCP Apps). See :func:`maybe_format_markdown` (issue #177).
+ToolReturn: TypeAlias = ToolResult | dict[str, Any]
 
 _VALID_MODULES: frozenset[str] = frozenset(
     {
@@ -595,10 +603,20 @@ def format_as_markdown_table(data: list[dict[str, Any]], *, max_col_width: int =
     return "\n".join([header, separator, *rows])
 
 
-def maybe_format_markdown(result: dict[str, Any], output_format: str | None) -> dict[str, Any]:
-    """If *output_format* is ``"markdown"``, convert the first list in *data* to a table.
+def maybe_format_markdown(result: dict[str, Any], output_format: str | None) -> ToolReturn:
+    """Render the first list in *data* as a markdown table when *output_format* is ``"markdown"``.
 
-    Returns the original *result* unchanged when the format is not markdown.
+    In markdown mode, returns a FastMCP :class:`~fastmcp.tools.ToolResult` whose
+    ``content`` is the rendered table (what human-facing hosts display) and whose
+    ``structured_content`` is the **full original** ``{data, metadata}`` envelope
+    (what schema-aware hosts / MCP Apps consume, and what FastMCP validates against
+    the tool's ``output_schema``). This is what lets a read tool advertise an object
+    ``output_schema`` *and* still offer markdown — the structured object is never
+    replaced by a string (issue #177). Previously this returned
+    ``{"data": "<markdown string>", ...}``, which could not satisfy an object schema.
+
+    Returns the original *result* dict unchanged when the format is not markdown, or
+    when there is no non-empty list in *data* to tabulate.
     """
     if output_format != "markdown":
         return result
@@ -606,8 +624,9 @@ def maybe_format_markdown(result: dict[str, Any], output_format: str | None) -> 
     if isinstance(data, Mapping):
         for _key, value in data.items():
             if isinstance(value, list) and value:
-                return {"data": format_as_markdown_table(value), "metadata": {"format": "markdown"}}
-    # Cannot convert to markdown table — return original result unchanged
+                table = format_as_markdown_table(value)
+                return ToolResult(content=table, structured_content=result)
+    # Nothing to tabulate — return the structured envelope unchanged.
     return result
 
 
@@ -709,6 +728,8 @@ __all__ = [
     "RateLimitError",
     "RateLimiter",
     "SENSITIVE_KEYWORDS",
+    "ToolResult",
+    "ToolReturn",
     "as_tool_response",
     "call_tool_workflow",
     "check_idempotency",

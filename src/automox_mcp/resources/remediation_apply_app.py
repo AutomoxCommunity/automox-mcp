@@ -89,6 +89,11 @@ _HTML_TEMPLATE = """<!doctype html>
   .rowstatus { font-size: 11px; color: var(--muted); margin-top: 6px; }
   .rowstatus.err { color: var(--bad); }
   .note { font-size: 12px; color: var(--warn); margin-top: 8px; }
+  details.scope > summary { cursor: pointer; }
+  details.scope > summary::marker { color: var(--muted); }
+  .devlist { margin: 6px 0 0 4px; padding-left: 10px; border-left: 2px solid var(--border); }
+  .devrow { font-size: 12px; color: var(--text); padding: 1px 0; }
+  .devrow .dim { color: var(--muted); }
   .empty { padding: 16px 12px; color: var(--muted); }
 </style>
 </head>
@@ -135,6 +140,18 @@ _HTML_TEMPLATE = """<!doctype html>
     }
     return ids;
   }
+  function deviceList(s) {
+    var devs = Array.isArray(s.devices) ? s.devices : [];
+    if (!devs.length) return '<div class="devrow dim">No target devices listed.</div>';
+    return devs.map(function (d) {
+      d = d || {};
+      var nm = d.custom_name || d.name || d.hostname || ("device " + (d.id != null ? d.id : "?"));
+      var os = d.os && (d.os.family || d.os.name);
+      var meta = [os, d.status].filter(Boolean).map(esc).join(" · ");
+      return '<div class="devrow">' + esc(nm) +
+        (meta ? ' <span class="dim">— ' + meta + "</span>" : "") + "</div>";
+    }).join("");
+  }
   function maxSeverity(s) {
     var order = { critical: 4, high: 3, medium: 2, low: 1 };
     var best = null, bestRank = 0;
@@ -175,8 +192,9 @@ _HTML_TEMPLATE = """<!doctype html>
           : "") +
         "</div>" +
       '<div class="summary">' + esc(solutionTitle(s)) + "</div>" +
-      '<div class="scope">Targets <b>' + devs.length + "</b> device(s) · " +
-        vulns.length + " vulnerability(ies)</div>" +
+      '<details class="scope"><summary>Targets <b>' + devs.length + "</b> device(s) · " +
+        vulns.length + " vulnerability(ies)</summary>" +
+        '<div class="devlist">' + deviceList(s) + "</div></details>" +
       (cveList ? '<div class="cves">' + cveList + "</div>" : "") +
       '<div class="rowstatus"></div>';
     var statusEl = card.querySelector(".rowstatus");

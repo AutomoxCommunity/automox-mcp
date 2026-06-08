@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Structured `outputSchema` on the three compound tools** (`get_compliance_snapshot`, `get_patch_tuesday_readiness`, `get_device_full_profile`). Each now advertises a JSON Schema (derived from a Pydantic model in `schemas.py`) for its `{"data", "metadata"}` envelope, so schema-aware MCP hosts can validate results and render them richly. The runtime return value is unchanged. The output models are deliberately permissive (all-optional fields, `dict[str, Any]` for variable sub-objects, never `extra="forbid"`) because FastMCP validates returned structured content against the schema at runtime — a too-strict schema would reject the legitimately-mutated envelope (token-budget truncation, section summaries, correlation id). Tool count unchanged.
+
 ## [2.1.0] - 2026-06-06
 
 **The projection-audit release.** Every model-facing tool output went through a 12-domain audit (54 adversarially-verified findings), an independent re-audit that live-verified each fix against the production API and caught 23 further defects, and a live verification campaign that upgraded dozens of field legends from spec-assumed to live-verified provenance — 24 PRs in total. The tool set is unchanged (130 tools); the theme is **self-describing output**: raw values are preserved for fidelity, with decoded siblings and `metadata.field_notes` legends stating verified units, vocabularies, and semantics, so a model no longer has to guess what an integer status, a unit-less number, or a bare enum string means. No tool signatures were removed or narrowed; some output shapes changed (phantom keys that never carried data were dropped, misdocumented fields renamed, flat counts regrouped) — each is detailed below. Where the audit found the *upstream* spec or API at fault, the affected legend says so explicitly rather than papering over it.

@@ -215,6 +215,17 @@ _USER_DETAIL_FIELDS = (
     "sso_enabled",
     "account_created_at",
 )
+# Projection for zone-member User DTOs (list_zone_users). The zone-users endpoint
+# returns the same User DTO that carries `intercom_hmac` (see SECURITY note above),
+# so it MUST be projected like every other user listing rather than forwarded raw.
+# Allowlist (deny-by-default): identity + RBAC roles + the membership key, plus
+# `uuid` if the endpoint emits one (the account-user UUID the UUID-keyed tools need
+# — see issue #193). `intercom_hmac` is absent from the allowlist and so dropped.
+_ZONE_USER_FIELDS = (
+    *_USER_LIST_FIELDS,
+    "user_id",
+    "uuid",
+)
 _ZONE_FIELDS = (
     "id",
     "organization_id",
@@ -457,6 +468,11 @@ async def list_zone_users(
         f"/accounts/{account_id}/zones/{zone_id}/users", params=params or None
     )
     users, meta = _envelope(response)
+    # SECURITY: project each zone-member User DTO through the allowlist so the
+    # `intercom_hmac` secret it carries is never forwarded to the model (the raw
+    # `_envelope` forward previously surfaced it — there is no downstream redaction
+    # for `intercom_hmac`). Mirrors list_users / get_user.
+    users = [_project(u, _ZONE_USER_FIELDS) for u in users if isinstance(u, Mapping)]
     meta["deprecated_endpoint"] = False
     meta["account_id"] = str(account_id)
 

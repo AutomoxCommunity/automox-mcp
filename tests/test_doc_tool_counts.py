@@ -7,6 +7,12 @@ documented per-domain breakdown match the *actually registered* tool set, so a
 future tool addition/removal that forgets a doc update fails CI instead of
 shipping a wrong number (#113).
 
+The **"N MCP resources"** count in ``docs/tool-reference.md`` and
+``mcpb/manifest.json`` is guarded the same way (real-FastMCP resource
+introspection) — closing the previously-silent resource-count drift now that
+``ui://`` MCP App resources exist. The resource-table *row* and the ``### MCP
+Apps`` note remain manual (not derivable from a count).
+
 The source of truth is the registered server, read under three gate
 configurations:
 
@@ -27,6 +33,7 @@ import pytest
 from conftest import StubClient
 from fastmcp import FastMCP
 
+from automox_mcp.resources import register_resources
 from automox_mcp.tools import _get_tool_names, register_tools
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -261,4 +268,41 @@ def test_manifest_counts(registered_counts: dict[str, int]) -> None:
     read_mentions = {int(n) for n in re.findall(r"(\d+) read tools", blob)}
     assert read_mentions == {read}, (
         f"manifest read-tool mentions {read_mentions}, expected {{{read}}}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# MCP resource count (incl. ui:// App resources) — mirrors the tool guard
+# ---------------------------------------------------------------------------
+
+
+def _registered_resource_count() -> int:
+    """Count registered MCP resources on a real FastMCP server.
+
+    Resources aren't gated, so no env configuration is needed — just build a
+    server, register every resource, and count the ``resource:`` components
+    (the same ``local_provider._components`` introspection ``_get_tool_names``
+    uses for tools).
+    """
+    server = FastMCP("resource-count-test")
+    register_resources(server, client=StubClient())
+    return sum(1 for key in server.local_provider._components if key.startswith("resource:"))
+
+
+def test_tool_reference_resource_count() -> None:
+    count = _registered_resource_count()
+    match = re.search(r"exposes (\d+) MCP resources", _TOOL_REFERENCE.read_text())
+    assert match, "could not find 'exposes N MCP resources' in docs/tool-reference.md"
+    assert int(match.group(1)) == count, (
+        f"docs/tool-reference.md says {match.group(1)} MCP resources, registered = {count}"
+    )
+
+
+def test_manifest_resource_count() -> None:
+    count = _registered_resource_count()
+    long_desc = json.loads(_MANIFEST.read_text())["long_description"]
+    match = re.search(r"(\d+) MCP resources", long_desc)
+    assert match, "could not find 'N MCP resources' in mcpb/manifest.json long_description"
+    assert int(match.group(1)) == count, (
+        f"mcpb/manifest.json says {match.group(1)} MCP resources, registered = {count}"
     )

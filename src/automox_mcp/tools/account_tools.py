@@ -6,10 +6,12 @@ import os
 from typing import Any, Literal
 
 from fastmcp import FastMCP
+from fastmcp.apps import AppConfig, ResourceCSP
 from fastmcp.exceptions import ToolError
 
 from .. import workflows
 from ..client import AutomoxClient
+from ..resources.access_certification_app import ACCESS_CERTIFICATION_APP_URI
 from ..schemas import (
     CreateGlobalApiKeyParams,
     CreateUserApiKeyParams,
@@ -34,6 +36,7 @@ from ..schemas import (
     UpdateGlobalApiKeyParams,
     UpdateUserApiKeyParams,
     UpdateUserParams,
+    UsersListResult,
     ZoneAssignment,
 )
 from ..utils.tooling import (
@@ -202,6 +205,13 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "Secrets (e.g. intercom_hmac) are never surfaced."
         ),
         annotations=_READ_ANNOTATIONS,
+        output_schema=UsersListResult.model_json_schema(),
+        # Read-first MCP App (#182): Apps-capable hosts render the access-
+        # certification (RBAC) review UI from this tool's structured output
+        # (users + roles + 2FA). Review/certify only — no change action is wired
+        # (no role-assignment write tool; list_users projects no user UUID).
+        # Self-contained UI → empty CSP.
+        app=AppConfig(resourceUri=ACCESS_CERTIFICATION_APP_URI, csp=ResourceCSP()),
     )
     async def list_users(
         page: int | None = None,

@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
 def register_resources(server: FastMCP, *, client: AutomoxClient) -> None:
     """Register all MCP resources with the server."""
+    from .access_certification_app import register as register_access_certification_app
     from .patch_approval_app import register as register_patch_approval_app
     from .platform_resources import register as register_platform_resources
     from .policy_blast_radius_app import register as register_policy_blast_radius_app
@@ -29,6 +30,7 @@ def register_resources(server: FastMCP, *, client: AutomoxClient) -> None:
     register_patch_approval_app(server)
     register_policy_blast_radius_app(server)
     register_remediation_apply_app(server)
+    register_access_certification_app(server)
 
 
 __all__ = ["register_resources"]

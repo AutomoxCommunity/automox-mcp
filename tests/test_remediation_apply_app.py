@@ -62,6 +62,8 @@ def test_resource_registered_and_self_contained() -> None:
     # patch-now is gated on availability: only solutions whose remediation is a
     # direct patch get the button; worklet-based solutions get a note instead.
     assert "patchNowAvailable" in html
+    # The target devices are listed in an expandable <details>, not just counted.
+    assert "deviceList" in html and "<details" in html
     assert "<script src" not in html and "https://" not in html
 
 

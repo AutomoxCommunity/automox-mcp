@@ -10,6 +10,7 @@ from fastmcp.apps import AppConfig, ResourceCSP
 from .. import workflows
 from ..client import AutomoxClient
 from ..resources.patch_approval_app import PATCH_APPROVAL_APP_URI
+from ..resources.policy_blast_radius_app import POLICY_BLAST_RADIUS_APP_URI
 from ..schemas import (
     ClonePolicyParams,
     DeletePolicyToolParams,
@@ -20,6 +21,7 @@ from ..schemas import (
     PatchApprovalsSummaryResult,
     PatchApprovalSummaryParams,
     PolicyChangeRequestParams,
+    PolicyChangeResult,
     PolicyDetailParams,
     PolicyDeviceFilterPreviewParams,
     PolicyExecutionTimelineParams,
@@ -487,6 +489,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "idempotentHint": False,
                 "openWorldHint": True,
             },
+            output_schema=PolicyChangeResult.model_json_schema(),
+            # Write-flow MCP App (#180): on a preview=true call, Apps-capable hosts
+            # render the blast-radius review UI from this tool's structured output;
+            # the UI re-invokes this same tool with preview=false to apply (Tier-1,
+            # host-confirmed). Self-contained UI → empty CSP.
+            app=AppConfig(resourceUri=POLICY_BLAST_RADIUS_APP_URI, csp=ResourceCSP()),
         )
         async def apply_policy_changes_tool(
             operations: list[dict[str, Any]],

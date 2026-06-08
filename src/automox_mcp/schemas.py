@@ -1680,3 +1680,26 @@ class PatchApprovalsSummaryResult(_StructuredToolResult):
     """Structured output of the ``patch_approvals_summary`` tool."""
 
     data: PatchApprovalsSummaryData | None = None
+
+
+# --- Policy-change output model (issue #180) ---
+# Entry-tool schema for the policy blast-radius review MCP App. Permissive: the
+# same envelope is returned in preview and apply modes, and the idempotency
+# duplicate-marker ({"duplicate": true, ...}) must also validate.
+
+
+class PolicyChangeData(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    operations: list[dict[str, Any]] | None = Field(
+        default=None,
+        description="Per-operation result; each carries action, policy fields, and request body",
+    )
+    preview: bool | None = Field(
+        default=None, description="True when no write was performed (dry-run review)"
+    )
+
+
+class PolicyChangeResult(_StructuredToolResult):
+    """Structured output of the ``apply_policy_changes`` tool."""
+
+    data: PolicyChangeData | None = None

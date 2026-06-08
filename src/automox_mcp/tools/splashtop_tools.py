@@ -38,6 +38,7 @@ from ..schemas import (
     SplashtopUninstallParams,
 )
 from ..utils.tooling import (
+    ToolReturn,
     call_tool_workflow,
     check_idempotency,
     is_splashtop_bulk_allowed,
@@ -102,7 +103,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     async def splashtop_device_status(
         device_uuid: str,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         result = await call_tool_workflow(
             client,
             _get_device_status,
@@ -134,7 +135,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         device_uuid: str,
         account_type: str | None = None,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         params: dict[str, Any] = {"device_uuid": device_uuid}
         if account_type is not None:
             params["account_type"] = account_type
@@ -163,7 +164,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     async def splashtop_get_attended_access(
         device_uuid: str,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         result = await call_tool_workflow(
             client,
             _get_attended_access,

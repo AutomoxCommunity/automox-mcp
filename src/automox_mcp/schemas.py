@@ -1606,3 +1606,51 @@ class DeviceFullProfileResult(_StructuredToolResult):
     """Structured output of ``get_device_full_profile``."""
 
     data: DeviceFullProfileData | None = None
+
+
+# --- Report-tool output models (issue #177) ---
+# Same permissiveness rules as the compound output models above: all-optional,
+# dict[str, Any] for variable sub-objects, never extra="forbid". These tools may
+# also return markdown via ``maybe_format_markdown`` (a ToolResult whose
+# structured_content is this same envelope), so the schema must accept the
+# structured object unchanged.
+
+
+class PrepatchReportData(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    total_pending_patches: int | None = Field(
+        default=None,
+        description="Upstream prepatch 'total' (pending-patch count, not a device count)",
+    )
+    total_devices: int | None = Field(default=None, description="Devices with pending patches")
+    summary: dict[str, Any] | None = Field(
+        default=None, description="Per-severity device counts recomputed from highest_severity"
+    )
+    api_summary: dict[str, Any] | None = Field(
+        default=None, description="Raw upstream prepatch summary, passed through"
+    )
+    devices: list[dict[str, Any]] | None = Field(
+        default=None, description="Per-device prepatch records"
+    )
+
+
+class PrepatchReportResult(_StructuredToolResult):
+    """Structured output of the ``prepatch_report`` tool."""
+
+    data: PrepatchReportData | None = None
+
+
+class NoncompliantReportData(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    total_devices: int | None = Field(default=None, description="Non-compliant devices")
+    summary: dict[str, Any] | None = Field(default=None, description="Upstream report summary")
+    devices: list[dict[str, Any]] | None = Field(
+        default=None,
+        description="Per-device records, each with a failing_policies list (id/name/type/severity)",
+    )
+
+
+class NoncompliantReportResult(_StructuredToolResult):
+    """Structured output of the ``noncompliant_report`` tool."""
+
+    data: NoncompliantReportData | None = None

@@ -19,6 +19,7 @@ from ..schemas import (
     UploadActionSetParams,
 )
 from ..utils.tooling import (
+    ToolReturn,
     call_tool_workflow,
     check_idempotency,
     is_remediation_allowed,
@@ -73,7 +74,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     )
     async def list_remediation_action_sets(
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         result = await call_tool_workflow(
             client,
             _list_remediation_action_sets,
@@ -101,7 +102,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     async def get_action_set_detail(
         action_set_id: int,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         result = await call_tool_workflow(
             client,
             _get_action_set_detail,
@@ -126,7 +127,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     async def get_action_set_issues(
         action_set_id: int,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         result = await call_tool_workflow(
             client,
             _get_action_set_issues,
@@ -155,7 +156,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     async def get_action_set_solutions(
         action_set_id: int,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         result = await call_tool_workflow(
             client,
             _get_action_set_solutions,
@@ -176,7 +177,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     )
     async def get_upload_formats(
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         result = await call_tool_workflow(
             client,
             _get_upload_formats,

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from fastmcp import FastMCP
 
 from ..client import AutomoxClient
@@ -12,6 +10,7 @@ from ..schemas import (
     SearchWisParams,
 )
 from ..utils.tooling import (
+    ToolReturn,
     call_tool_workflow,
     maybe_format_markdown,
 )
@@ -41,7 +40,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     async def search_worklet_catalog(
         query: str | None = None,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         params = {"query": query}
         result = await call_tool_workflow(
             client,
@@ -67,7 +66,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     async def get_worklet_detail(
         item_id: str,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         params = {"item_id": item_id}
         result = await call_tool_workflow(
             client,

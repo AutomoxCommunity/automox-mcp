@@ -17,6 +17,7 @@ from ..schemas import (
     PolicyRunsV2Params,
 )
 from ..utils.tooling import (
+    ToolReturn,
     call_tool_workflow,
     maybe_format_markdown,
 )
@@ -79,7 +80,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         page: int | None = None,
         limit: int | None = None,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         kwargs: dict[str, Any] = {
             "start_time": start_time,
             "end_time": end_time,
@@ -112,7 +113,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     async def policy_run_count(
         days: int | None = None,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         kwargs: dict[str, Any] = {"days": days}
         result = await call_tool_workflow(
             client, _policy_run_count, kwargs, params_model=PolicyRunCountParams
@@ -134,7 +135,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     )
     async def policy_runs_by_policy(
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         kwargs: dict[str, Any] = {}
         result = await call_tool_workflow(
             client, _policy_runs_by_policy, kwargs, params_model=PolicyRunsByPolicyParams
@@ -158,7 +159,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         policy_uuid: str,
         recent_runs_limit: int | None = 25,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         kwargs: dict[str, Any] = {
             "policy_uuid": policy_uuid,
             "recent_runs_limit": recent_runs_limit,
@@ -188,7 +189,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         sort: str | None = None,
         summary_only: bool = False,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         kwargs: dict[str, Any] = {
             "policy_uuid": policy_uuid,
             "report_days": report_days,
@@ -220,7 +221,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         start_time: str | None = None,
         end_time: str | None = None,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         kwargs: dict[str, Any] = {
             "start_time": start_time,
             "end_time": end_time,
@@ -259,7 +260,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         page: int | None = None,
         limit: int | None = None,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         kwargs: dict[str, Any] = {
             "policy_uuid": policy_uuid,
             "exec_token": exec_token,

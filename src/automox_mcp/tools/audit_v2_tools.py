@@ -9,6 +9,7 @@ from fastmcp import FastMCP
 from ..client import AutomoxClient
 from ..schemas import AuditEventsOcsfParams
 from ..utils.tooling import (
+    ToolReturn,
     call_tool_workflow,
     maybe_format_markdown,
 )
@@ -62,7 +63,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         cursor: str | None = None,
         limit: int | None = None,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         kwargs: dict[str, Any] = {
             "date": date,
             "category_name": category_name,

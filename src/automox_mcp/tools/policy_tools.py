@@ -26,6 +26,7 @@ from ..schemas import (
     UploadPolicyFileParams,
 )
 from ..utils.tooling import (
+    ToolReturn,
     call_tool_workflow,
     check_idempotency,
     is_stdio_transport,
@@ -183,7 +184,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         include_inactive: bool | None = False,
         include_stats: bool | None = False,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         params = {
             "limit": limit,
             "page": page,
@@ -271,7 +272,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         status: str | None = None,
         limit: int | None = 25,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         params = {
             "status": status,
             "limit": limit,
@@ -309,7 +310,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         page: int | None = None,
         limit: int | None = None,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         result = await call_tool_workflow(
             client,
             workflows.preview_policy_device_filters,
@@ -340,7 +341,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     async def list_devices_for_policies(
         policies: list[str],
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         result = await call_tool_workflow(
             client,
             workflows.list_devices_for_policies,

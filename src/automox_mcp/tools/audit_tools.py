@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from fastmcp import FastMCP
 
 from .. import workflows
 from ..client import AutomoxClient
 from ..schemas import AuditTrailEventsParams
 from ..utils.tooling import (
+    ToolReturn,
     call_tool_workflow,
     maybe_format_markdown,
 )
@@ -38,7 +37,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         include_raw_events: bool | None = False,
         org_uuid: str | None = None,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         params = {
             "date": date,
             "actor_email": actor_email,

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from fastmcp import FastMCP
 
 from .. import workflows
@@ -11,8 +9,11 @@ from ..client import AutomoxClient
 from ..schemas import (
     GetNeedsAttentionReportParams,
     GetPrepatchReportParams,
+    NoncompliantReportResult,
+    PrepatchReportResult,
 )
 from ..utils.tooling import (
+    ToolReturn,
     call_tool_workflow,
     maybe_format_markdown,
 )
@@ -38,13 +39,14 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "idempotentHint": True,
             "openWorldHint": True,
         },
+        output_schema=PrepatchReportResult.model_json_schema(),
     )
     async def prepatch_report(
         group_id: int | None = None,
         limit: int | None = None,
         offset: int | None = None,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         params = {
             "group_id": group_id,
             "limit": limit,
@@ -75,13 +77,14 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "idempotentHint": True,
             "openWorldHint": True,
         },
+        output_schema=NoncompliantReportResult.model_json_schema(),
     )
     async def noncompliant_report(
         group_id: int | None = None,
         limit: int | None = None,
         offset: int | None = None,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         params = {
             "group_id": group_id,
             "limit": limit,

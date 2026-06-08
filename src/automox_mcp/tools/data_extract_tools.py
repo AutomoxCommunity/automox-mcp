@@ -13,6 +13,7 @@ from ..schemas import (
     ListDataExtractsParams,
 )
 from ..utils.tooling import (
+    ToolReturn,
     call_tool_workflow,
     check_idempotency,
     maybe_format_markdown,
@@ -50,7 +51,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     )
     async def list_data_extracts(
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         result = await call_tool_workflow(
             client,
             _list_data_extracts,
@@ -79,7 +80,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     async def get_data_extract(
         extract_id: int | str,
         output_format: str | None = "json",
-    ) -> dict[str, Any]:
+    ) -> ToolReturn:
         # Live extract ids are ints (list_data_extracts returns them as ints),
         # so a model commonly passes an int. Accept int|str and coerce to a
         # string for the URL path.

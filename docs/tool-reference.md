@@ -413,6 +413,8 @@ Thirteen list tools accept an optional `output_format` parameter:
 list_devices(output_format="markdown")
 ```
 
+In `"markdown"` mode the tool returns a FastMCP `ToolResult` that carries **both** the rendered table (as text content, for human-facing hosts) **and** the full structured `{data, metadata}` object (as `structuredContent`, for schema-aware hosts and MCP Apps). The structured object is never replaced by a markdown string, so a tool can advertise an `outputSchema` and still offer markdown.
+
 ### Capability Discovery
 
 The `discover_capabilities` meta-tool returns all available tools organized by domain. It is always available regardless of `AUTOMOX_MCP_MODULES` and is useful for discovering what the server can do without consulting documentation.

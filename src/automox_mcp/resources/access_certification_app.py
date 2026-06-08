@@ -6,23 +6,26 @@ status, so an operator can review access and **certify** (acknowledge) or
 **flag** each user inline rather than stitching several read calls together.
 Certification is an in-session review acknowledgment — it writes nothing.
 
-**Why no gated change action is wired here (and what it would take):** the issue
-allows *optional* gated changes, but the API surface does not currently support a
-safe one from this view:
+**Why this App is read-first — a deliberate scope choice, NOT because the API
+can't write.** The issue allows *optional* gated changes; acting on a finding
+splits three ways, blocked for three distinct reasons (do not conflate them):
 
-* There is **no role/permission-assignment write tool** — RBAC role is only set
-  at invite time (``account_rbac_role`` on ``invite_user_to_account``); changing
-  an existing user's role is net-new work, not a reuse.
-* ``remove_user_from_account`` needs a user **UUID**, but ``list_users`` projects
-  a numeric ``id`` (no UUID), so a "remove" button driven from this list would
-  not validate.
+* **API-key revocation** — *fully wireable today* and numeric-keyed
+  (``list_user_api_keys`` → ``update_user_api_key(is_enabled=False)`` /
+  ``delete_user_api_key``). Deferred to a fast-follow (issue #192) — this is the
+  obvious next lever, not an API limitation.
+* **Role change** — *no API tool.* RBAC role is set only at invite time
+  (``account_rbac_role`` on ``invite_user_to_account``); ``update_user`` is
+  profile-only. A true API gap.
+* **Membership revoke** — *exists and is Tier-1 gated, but unreachable from
+  here.* ``remove_user_from_account`` needs a user **UUID**, but ``list_users``
+  projects a numeric ``id`` (no UUID). Blocked on the UUID-listing gap (issue
+  #193).
 
-So this App is intentionally **read-first / review-only**. The existing Tier-1
+So this App ships **read-first / review-only** by choice. The existing Tier-1
 account write tools (``invite_user_to_account``, ``update_user``,
 ``remove_user_from_account``) remain available as direct, host-confirmed tool
-calls. Enabling a gated change *from this App* is tracked as a follow-up: it
-needs (a) a role-assignment write tool and/or (b) the user UUID projected into
-``list_users``. Non-Apps hosts use ``list_users`` directly (graceful degradation).
+calls. Non-Apps hosts use ``list_users`` directly (graceful degradation).
 """
 
 from __future__ import annotations

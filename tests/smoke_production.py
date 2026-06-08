@@ -386,27 +386,33 @@ async def run_http_tests() -> None:
             record("idempotency — cached response", False, str(exc))
 
         # -- 5. Markdown output ------------------------------------------------
+        # #177 contract: markdown mode returns a FastMCP ToolResult — the rendered
+        # table is the TEXT content (for human-facing hosts) and the full structured
+        # {data, metadata} object is preserved as structuredContent (for schema-aware
+        # hosts). Assert BOTH channels directly off the CallToolResult; do NOT parse
+        # content as JSON (it is now a markdown table, not JSON — the old contract
+        # put the table string under data, which this asserted before #177).
         log.info(f"\n{BOLD}5. Markdown output{RESET}")
         try:
             async with mcp_session() as session:
-                resp = await call_tool(
-                    session,
-                    "list_devices",
-                    {
-                        "limit": 3,
-                        "output_format": "markdown",
-                    },
+                result = await session.call_tool(
+                    "list_devices", {"limit": 3, "output_format": "markdown"}
                 )
-                fmt = resp.get("metadata", {}).get("format")
-                data_str = resp.get("data", "")
-                has_table = isinstance(data_str, str) and "|" in data_str and "---" in data_str
+                table_text = next(
+                    (b.text for b in result.content if isinstance(b, types.TextContent)), ""
+                )
+                has_table = "|" in table_text and "---" in table_text
+                sc = result.structuredContent or {}
+                has_structured = isinstance(sc.get("data"), (dict, list))
                 record(
-                    "markdown output — format=markdown with table",
-                    fmt == "markdown" and has_table,
-                    f"format={fmt}, has_table={has_table}",
+                    "markdown output — table in content + structured object preserved",
+                    not result.isError and has_table and has_structured,
+                    f"has_table={has_table}, structured_data={has_structured}",
                 )
         except Exception as exc:
-            record("markdown output — format=markdown with table", False, str(exc))
+            record(
+                "markdown output — table in content + structured object preserved", False, str(exc)
+            )
 
         # -- 6. discover_capabilities ------------------------------------------
         log.info(f"\n{BOLD}6. discover_capabilities{RESET}")

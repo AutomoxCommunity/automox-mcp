@@ -245,7 +245,7 @@ Pre-built guided templates for common admin workflows. These MCP prompts provide
 
 ## MCP Resources
 
-The server exposes 12 MCP resources that provide reference data and schemas:
+The server exposes 13 MCP resources that provide reference data and schemas:
 
 | Resource URI | Description |
 |---|---|
@@ -261,13 +261,14 @@ The server exposes 12 MCP resources that provide reference data and schemas:
 | `ui://automox/triage.html` | MCP App UI (`text/html;profile=mcp-app`) — read-only compliance triage surface rendered inline by Apps-capable hosts for `get_compliance_snapshot` |
 | `ui://automox/patch-approval.html` | MCP App UI (`text/html;profile=mcp-app`) — patch-approval **review** surface for `patch_approvals_summary`; the operator approves/rejects inline, which drives the existing `decide_patch_approval` write tool |
 | `ui://automox/policy-blast-radius.html` | MCP App UI (`text/html;profile=mcp-app`) — policy-change **blast-radius review** surface for `apply_policy_changes` (preview mode); shows each change's affected-device scope (optionally resolving the device set) before re-invoking the tool to apply |
+| `ui://automox/remediation-apply.html` | MCP App UI (`text/html;profile=mcp-app`) — remediation-apply **review** surface for `get_action_set_solutions`; presents each solution's vulnerabilities and target devices, then drives the **gated** `apply_remediation_actions` (patch-now) |
 
 ### MCP Apps
 
 Tools may attach an interactive MCP App (the `io.modelcontextprotocol/ui` extension): a `ui://` HTML resource that Apps-capable hosts render inline, feeding it the tool's structured output. Non-Apps hosts ignore the App link and receive the structured payload unchanged (graceful degradation). All App UIs are fully self-contained (inline JS/CSS, no external/CDN imports), so they run under the host's default deny-all CSP with no additional domains.
 
 - **Read-only** Apps surface data for review (e.g. the **compliance triage** surface on `get_compliance_snapshot`, `ui://automox/triage.html`).
-- **Write-flow** Apps are interactive review surfaces over an existing, already destructive-gated write tool: the UI calls that tool by name through the host `CallTool` bridge, and the host's confirmation dialog remains the gate. Examples: the **patch-approval review** on `patch_approvals_summary` (`ui://automox/patch-approval.html`) drives the Tier-1 `decide_patch_approval`; the **policy blast-radius review** on `apply_policy_changes` (`ui://automox/policy-blast-radius.html`) previews a change's affected-device scope, then re-invokes `apply_policy_changes` with `preview=false` to apply. No write-flow App introduces a new tool or a new gate.
+- **Write-flow** Apps are interactive review surfaces over an existing, already destructive-gated write tool: the UI calls that tool by name through the host `CallTool` bridge, and the host's confirmation dialog remains the gate. Examples: the **patch-approval review** on `patch_approvals_summary` (`ui://automox/patch-approval.html`) drives the Tier-1 `decide_patch_approval`; the **policy blast-radius review** on `apply_policy_changes` (`ui://automox/policy-blast-radius.html`) previews a change's affected-device scope, then re-invokes `apply_policy_changes` with `preview=false` to apply; the **remediation-apply review** on `get_action_set_solutions` (`ui://automox/remediation-apply.html`) presents each solution and its target devices, then drives the **Tier-2 env-gated** `apply_remediation_actions` (patch-now only — `patch-with-worklet` is intentionally not offered in the UI). No write-flow App introduces a new tool or a new gate; a gated tool's App is inert until the tool is enabled.
 
 ---
 

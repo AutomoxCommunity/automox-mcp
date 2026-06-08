@@ -15,12 +15,14 @@ def register_resources(server: FastMCP, *, client: AutomoxClient) -> None:
     from .platform_resources import register as register_platform_resources
     from .policy_resources import register_policy_resources
     from .servergroup_resources import register as register_servergroup_resources
+    from .triage_app import register as register_triage_app
     from .webhook_resources import register as register_webhook_resources
 
     register_policy_resources(server)
     register_servergroup_resources(server, client=client)
     register_webhook_resources(server)
     register_platform_resources(server)
+    register_triage_app(server)
 
 
 __all__ = ["register_resources"]

@@ -7,6 +7,8 @@ host's default deny-all CSP). It exposes a small global, ``window.AutomoxApp``:
 
 * ``onData(cb)``      — ``cb(envelope)`` fires with the entry tool's structured
   ``{data, metadata}`` output on first load and on every subsequent push.
+* ``onInput(cb)``     — ``cb(arguments)`` fires with the arguments the entry tool
+  was invoked with (used to re-issue a write, e.g. apply with ``preview=false``).
 * ``callTool(name, args)`` — returns a ``Promise`` resolving to the called
   tool's ``CallToolResult`` (used by review UIs to drive an existing, already
   destructive-gated write tool; the host mediates and may require confirmation).
@@ -27,7 +29,8 @@ MCP_APP_BRIDGE_JS = """
 (function () {
   "use strict";
   var PROTOCOL_VERSION = "2026-01-26";
-  var dataCbs = [], themeCbs = [], pending = {}, nextCallId = 100, initialized = false;
+  var dataCbs = [], inputCbs = [], themeCbs = [], pending = {}, nextCallId = 100;
+  var initialized = false;
 
   function post(msg) {
     try { (window.parent || window).postMessage(msg, "*"); } catch (e) {}
@@ -40,6 +43,10 @@ MCP_APP_BRIDGE_JS = """
   function emitData(env) {
     if (!env) return;
     for (var i = 0; i < dataCbs.length; i++) { try { dataCbs[i](env); } catch (e) {} }
+  }
+  function emitInput(args) {
+    if (!args) return;
+    for (var i = 0; i < inputCbs.length; i++) { try { inputCbs[i](args); } catch (e) {} }
   }
   function emitTheme(t) {
     if (t !== "light" && t !== "dark") return;
@@ -85,9 +92,11 @@ MCP_APP_BRIDGE_JS = """
       if (msg.params && msg.params.theme) emitTheme(msg.params.theme);
       return;
     }
-    if (msg.method === "ui/notifications/tool-result" ||
-        msg.method === "ui/notifications/tool-input" ||
-        msg.method === "ui/render") {
+    if (msg.method === "ui/notifications/tool-input") {
+      emitInput(msg.params && msg.params.arguments);
+      return;
+    }
+    if (msg.method === "ui/notifications/tool-result" || msg.method === "ui/render") {
       emitData(extractEnvelope(msg.params));
       return;
     }
@@ -99,10 +108,12 @@ MCP_APP_BRIDGE_JS = """
   // OpenAI Apps SDK fallback (window.openai).
   var usingOpenAI = !!window.openai;
   if (usingOpenAI) {
+    if (window.openai.toolInput) emitInput(window.openai.toolInput);
     if (window.openai.toolOutput) emitData(window.openai.toolOutput);
     if (window.openai.theme) emitTheme(window.openai.theme);
     window.addEventListener("openai:set_globals", function (e) {
       var g = e && e.detail && e.detail.globals;
+      if (g && "toolInput" in g) emitInput(window.openai.toolInput);
       if (g && "toolOutput" in g) emitData(window.openai.toolOutput);
       if (g && "theme" in g) emitTheme(window.openai.theme);
     });
@@ -110,6 +121,7 @@ MCP_APP_BRIDGE_JS = """
 
   window.AutomoxApp = {
     onData: function (cb) { if (typeof cb === "function") dataCbs.push(cb); },
+    onInput: function (cb) { if (typeof cb === "function") inputCbs.push(cb); },
     onTheme: function (cb) { if (typeof cb === "function") themeCbs.push(cb); },
     callTool: function (name, args) {
       if (usingOpenAI && typeof window.openai.callTool === "function") {

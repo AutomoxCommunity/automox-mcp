@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
 def register_resources(server: FastMCP, *, client: AutomoxClient) -> None:
     """Register all MCP resources with the server."""
+    from .patch_approval_app import register as register_patch_approval_app
     from .platform_resources import register as register_platform_resources
     from .policy_resources import register_policy_resources
     from .servergroup_resources import register as register_servergroup_resources
@@ -23,6 +24,7 @@ def register_resources(server: FastMCP, *, client: AutomoxClient) -> None:
     register_webhook_resources(server)
     register_platform_resources(server)
     register_triage_app(server)
+    register_patch_approval_app(server)
 
 
 __all__ = ["register_resources"]

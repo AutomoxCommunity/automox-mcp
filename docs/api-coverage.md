@@ -65,6 +65,10 @@ Note: *bulk alone is not a gate.* `batch_update_devices` is bulk but only applie
 | `splashtop_bulk_install_uninstall` | `AUTOMOX_MCP_ALLOW_SPLASHTOP_BULK_INSTALL_UNINSTALL` | **(A)** one call installs/uninstalls the Splashtop client across an entire server group. The flag name mirrors the tool: it gates *deploying/removing the client software* fleet-wide, not starting remote-control sessions (`splashtop_initiate_connection`, which is not env-gated). |
 | `delete_device` | `AUTOMOX_MCP_ALLOW_DELETE_DEVICE` | **(B)** `DELETE /servers/{id}` destroys the device record and its history — not reconstructable through the MCP, and there is no create-device counterpart (agents self-register), so a wrongly deleted record has no MCP-side undo. Per-call confirmation cannot restore it. |
 
+### MCP App write-flows
+
+Interactive MCP App UIs (the `io.modelcontextprotocol/ui` extension; see `docs/tool-reference.md`) that drive a write are **review surfaces over an existing write tool — not a new tool and not a new gate.** The UI calls the underlying tool by name through the host's `CallTool` bridge, so the write inherits that tool's tier verbatim: the host confirmation dialog (Tier 1) or env flag (Tier 2) fires exactly as it does for a direct call. The patch-approval review App (`ui://automox/patch-approval.html`) drives the Tier-1 `decide_patch_approval`; in read-only mode that write tool is not registered, so the App degrades to view-only. When adding a write-flow App, pick the entry/write tool by its existing tier here — do **not** add a parallel gate for the App.
+
 ### Omitted on destructive grounds
 
 None currently. `deleteDevice` (`DELETE /servers/{id}`) was the sole candidate and, after verified demand ([#123](https://github.com/AutomoxCommunity/automox-mcp/issues/123)), now ships **gated** behind `AUTOMOX_MCP_ALLOW_DELETE_DEVICE` (category B above) — not ask-first, consistent with the earlier statement that if a concrete need arose it would ship gated.

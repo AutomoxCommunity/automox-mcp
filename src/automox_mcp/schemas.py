@@ -1654,3 +1654,29 @@ class NoncompliantReportResult(_StructuredToolResult):
     """Structured output of the ``noncompliant_report`` tool."""
 
     data: NoncompliantReportData | None = None
+
+
+# --- Patch-approval summary output model (issue #179) ---
+# Entry-tool schema for the patch-approval review MCP App. Same permissiveness
+# rules as the models above.
+
+
+class PatchApprovalsSummaryData(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    total_approvals_considered: int | None = None
+    status_breakdown: dict[str, Any] | None = Field(
+        default=None, description="Approval count by status"
+    )
+    severity_breakdown: dict[str, Any] | None = Field(
+        default=None, description="Approval count by bucketed CVE severity"
+    )
+    approvals: list[dict[str, Any]] | None = Field(
+        default=None,
+        description="Approval records; manual_approval null=awaiting/true=approved/false=rejected",
+    )
+
+
+class PatchApprovalsSummaryResult(_StructuredToolResult):
+    """Structured output of the ``patch_approvals_summary`` tool."""
+
+    data: PatchApprovalsSummaryData | None = None

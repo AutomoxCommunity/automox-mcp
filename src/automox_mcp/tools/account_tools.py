@@ -211,7 +211,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         # (users + roles + 2FA). Review/certify only — no change action is wired
         # (no role-assignment write tool; list_users projects no user UUID).
         # Self-contained UI → empty CSP.
-        app=AppConfig(resourceUri=ACCESS_CERTIFICATION_APP_URI, csp=ResourceCSP()),
+        app=AppConfig(resource_uri=ACCESS_CERTIFICATION_APP_URI, csp=ResourceCSP()),
     )
     async def list_users(
         page: int | None = None,

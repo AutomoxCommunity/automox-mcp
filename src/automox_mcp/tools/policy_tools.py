@@ -277,7 +277,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         # review UI inline from this tool's structured output; the UI drives the
         # existing Tier-1 decide_patch_approval write tool via the host CallTool
         # bridge (host confirmation remains the gate). Self-contained UI → empty CSP.
-        app=AppConfig(resourceUri=PATCH_APPROVAL_APP_URI, csp=ResourceCSP()),
+        app=AppConfig(resource_uri=PATCH_APPROVAL_APP_URI, csp=ResourceCSP()),
     )
     async def patch_approvals_summary(
         status: str | None = None,
@@ -494,7 +494,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             # render the blast-radius review UI from this tool's structured output;
             # the UI re-invokes this same tool with preview=false to apply (Tier-1,
             # host-confirmed). Self-contained UI → empty CSP.
-            app=AppConfig(resourceUri=POLICY_BLAST_RADIUS_APP_URI, csp=ResourceCSP()),
+            app=AppConfig(resource_uri=POLICY_BLAST_RADIUS_APP_URI, csp=ResourceCSP()),
         )
         async def apply_policy_changes_tool(
             operations: list[dict[str, Any]],

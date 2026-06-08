@@ -503,6 +503,37 @@ async def test_list_zone_users_unwraps_envelope():
     assert result["data"]["zone_id"] == zid
 
 
+@pytest.mark.asyncio
+async def test_list_zone_users_projects_and_redacts_secret():
+    """The zone-users endpoint returns the same User DTO that carries
+    intercom_hmac; list_zone_users must project it out (it previously forwarded
+    the raw DTO, with no downstream redaction for intercom_hmac). Identity, RBAC
+    roles, and a uuid (if present) survive the allowlist projection."""
+    zid = "cccccccc-cccc-cccc-cccc-cccccccccccc"
+    raw_user = {
+        "id": 7,
+        "uuid": "11111111-2222-3333-4444-555555555555",
+        "firstname": "Ada",
+        "lastname": "Lovelace",
+        "email": "ada@example.com",
+        "rbac_roles": ["admin"],
+        "intercom_hmac": "SECRET-HMAC-DO-NOT-LEAK",
+        "prefs": {"theme": "dark"},
+    }
+    envelope = {"data": [raw_user], "metadata": {}}
+    client = StubClient(get_responses={f"/accounts/{_ACCT}/zones/{zid}/users": [envelope]})
+    result = await list_zone_users(cast(AutomoxClient, client), account_id=_ACCT, zone_id=zid)
+
+    user = result["data"]["users"][0]
+    assert "intercom_hmac" not in user
+    assert "SECRET-HMAC-DO-NOT-LEAK" not in str(result["data"])
+    assert user["email"] == "ada@example.com"
+    assert user["rbac_roles"] == ["admin"]
+    # uuid preserved if the endpoint emits one (the account-user UUID, issue #193).
+    assert user["uuid"] == "11111111-2222-3333-4444-555555555555"
+    assert "prefs" not in user  # noise dropped by the deny-by-default allowlist
+
+
 # ---------------------------------------------------------------------------
 # Identity / zone / key writes (issue #91 category A, write slice)
 # ---------------------------------------------------------------------------

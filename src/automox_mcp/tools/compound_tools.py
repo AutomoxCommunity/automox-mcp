@@ -5,9 +5,11 @@ from __future__ import annotations
 from typing import Any
 
 from fastmcp import FastMCP
+from fastmcp.apps import AppConfig, ResourceCSP
 
 from .. import workflows
 from ..client import AutomoxClient
+from ..resources.triage_app import TRIAGE_APP_URI
 from ..schemas import (
     ComplianceSnapshotParams,
     ComplianceSnapshotResult,
@@ -75,6 +77,13 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "openWorldHint": True,
         },
         output_schema=ComplianceSnapshotResult.model_json_schema(),
+        # Read-only MCP App (#178): Apps-capable hosts render the triage UI
+        # (ui://automox/triage.html) inline using this tool's structured output.
+        # The UI is self-contained (inline JS/CSS), so an empty CSP is declared
+        # (no extra domains needed — host default-deny applies); non-Apps hosts
+        # ignore the app link and get the structured snapshot. AppConfig fields
+        # use camelCase wire aliases, hence `resourceUri`.
+        app=AppConfig(resourceUri=TRIAGE_APP_URI, csp=ResourceCSP()),
     )
     async def get_compliance_snapshot(
         group_id: int | None = None,

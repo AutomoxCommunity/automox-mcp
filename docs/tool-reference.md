@@ -245,7 +245,7 @@ Pre-built guided templates for common admin workflows. These MCP prompts provide
 
 ## MCP Resources
 
-The server exposes 9 MCP resources that provide reference data and schemas:
+The server exposes 10 MCP resources that provide reference data and schemas:
 
 | Resource URI | Description |
 |---|---|
@@ -258,6 +258,11 @@ The server exposes 9 MCP resources that provide reference data and schemas:
 | `resource://patches/categories` | Severity levels, patch_rule options, package fields, and filter pattern syntax |
 | `resource://platform/supported-os` | Supported OS matrix (Windows, Mac, Linux) with versions, architectures, shell types, and Linux distros |
 | `resource://api/rate-limits` | MCP server rate limiter config, Automox API throttling guidance, and efficiency tips |
+| `ui://automox/triage.html` | MCP App UI (`text/html;profile=mcp-app`) — read-only compliance triage surface rendered inline by Apps-capable hosts for `get_compliance_snapshot` |
+
+### MCP Apps
+
+Tools may attach an interactive MCP App (the `io.modelcontextprotocol/ui` extension): a `ui://` HTML resource that Apps-capable hosts render inline, feeding it the tool's structured output. Non-Apps hosts ignore the App link and receive the structured payload unchanged (graceful degradation). The first App is the read-only **compliance triage** surface on `get_compliance_snapshot`; its UI is served from the `ui://automox/triage.html` resource above and is fully self-contained (inline JS/CSS, no external/CDN imports), so it runs under the host's default deny-all CSP with no additional domains.
 
 ---
 

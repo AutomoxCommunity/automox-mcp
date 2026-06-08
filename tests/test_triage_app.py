@@ -54,14 +54,32 @@ def test_triage_resource_serves_self_contained_html(server: FastMCP) -> None:
     resource = _resources(server)[TRIAGE_APP_URI]
     html = resource.fn()
     assert isinstance(html, str) and html.lstrip().startswith("<!doctype html")
-    # The triage surface and the hand-rolled ext-apps bridge are present.
+    # The triage surface and the shared ext-apps bridge are present.
     assert "Compliance Triage" in html
+    assert "window.AutomoxApp" in html
     assert "ui/initialize" in html
     assert "ui/notifications/tool-result" in html
     assert "structuredContent" in html
     # Self-contained: no external script/style imports (would need CSP domains).
     assert "<script src" not in html
     assert "https://" not in html  # no CDN imports or external fetches
+
+
+def test_triage_surfaces_names_not_bare_ids(server: FastMCP) -> None:
+    """Name-surfacing treatment (consistency with the blast-radius App): the
+    device rows resolve a device's ``server_group_id`` to a group *name* via the
+    read tool ``list_server_groups``, and read the live row shape (server_name /
+    display_name, platform), rather than rendering blanks/ids."""
+    html = _resources(server)[TRIAGE_APP_URI].fn()
+    # Resolves group ids -> names on demand via the read tool, then re-renders.
+    assert "list_server_groups" in html
+    assert "ensureGroupNames" in html and "groupLabel" in html
+    # Reads the real non-compliant row shape (server_group_id / server_name) and
+    # the stale row's platform field — not the invented keys that rendered blank.
+    assert "server_group_id" in html
+    assert "server_name" in html
+    assert "platform" in html
+    assert "deviceRows" in html
 
 
 def test_compliance_snapshot_links_the_app(server: FastMCP) -> None:

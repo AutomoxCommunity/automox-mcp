@@ -9,20 +9,22 @@ installed, so we use the low-level path:
   ``tools/compound_tools.py``) so Apps-capable hosts render this UI inline.
 
 The HTML is fully self-contained: inline CSS + vanilla JS, **no external
-imports**. It implements the ``io.modelcontextprotocol/ui`` (ext-apps) host
-bridge by hand — the view posts ``ui/initialize``, then
-``ui/notifications/initialized``, and the host streams the tool's
-``structuredContent`` back via ``ui/notifications/tool-result``. Implementing
-the bridge inline (rather than importing the ``@modelcontextprotocol/ext-apps``
-SDK from a CDN) keeps the page inside the host's default deny-all CSP — no
+imports**. It embeds the shared ``window.AutomoxApp`` bridge (``_app_bridge``)
+— the same hand-rolled ``io.modelcontextprotocol/ui`` (ext-apps) contract used
+by the write-flow Apps, so all four UIs stay consistent. Embedding the bridge
+inline (rather than importing the ``@modelcontextprotocol/ext-apps`` SDK from a
+CDN) keeps the page inside the host's default deny-all CSP — no
 ``connect``/``resource`` domains are required — which is the right posture for a
 security product and works in locked-down/offline hosts. A ``window.openai``
 fallback covers the OpenAI Apps SDK, and a standalone branch degrades without
 errors when no host bridge is present.
 
-**Read-only:** there are no ``@app.tool()`` backend write tools here. Non-Apps
-hosts simply receive the structured snapshot from ``get_compliance_snapshot``
-unchanged (graceful degradation); this UI is purely additive.
+**Read-only:** there are no destructive backend tools here. The only tool the
+UI drives through the bridge is the **read** tool ``list_server_groups``, used
+to resolve a device's ``server_group_id`` to a human-readable group name (same
+name-surfacing treatment as the policy blast-radius App). Non-Apps hosts simply
+receive the structured snapshot from ``get_compliance_snapshot`` unchanged
+(graceful degradation); this UI is purely additive.
 """
 
 from __future__ import annotations
@@ -31,6 +33,8 @@ from typing import TYPE_CHECKING
 
 from fastmcp.apps import UI_MIME_TYPE
 
+from ._app_bridge import MCP_APP_BRIDGE_JS
+
 if TYPE_CHECKING:
     from fastmcp import FastMCP
 
@@ -38,7 +42,7 @@ if TYPE_CHECKING:
 #: to wire the ``AppConfig`` so the two stay in sync.
 TRIAGE_APP_URI = "ui://automox/triage.html"
 
-_TRIAGE_HTML = """<!doctype html>
+_TRIAGE_TEMPLATE = """<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
@@ -129,13 +133,15 @@ _TRIAGE_HTML = """<!doctype html>
     <div class="body"></div>
   </section>
   <div class="status" id="status"></div>
+<script>__MCP_APP_BRIDGE__</script>
 <script>
 (function () {
   "use strict";
-
-  var PROTOCOL_VERSION = "2026-01-26";
-  var CLIENT = { name: "Automox Compliance Triage", version: "1.0.0" };
-  var dataReceived = false;
+  var App = window.AutomoxApp;
+  var gotData = false;
+  var lastEnv = null;
+  var groupNames = {};          // server_group id -> name (resolved via list_server_groups)
+  var groupNamesLoaded = false;
 
   var els = {
     sub: document.getElementById("sub"),
@@ -160,11 +166,6 @@ _TRIAGE_HTML = """<!doctype html>
     }
     return null;
   }
-  function setTheme(theme) {
-    if (theme === "light" || theme === "dark") {
-      document.documentElement.setAttribute("data-theme", theme);
-    }
-  }
   function rateClass(rate) {
     if (rate == null) return "";
     if (rate >= 95) return "good";
@@ -179,16 +180,52 @@ _TRIAGE_HTML = """<!doctype html>
       '</div><div class="l">' + esc(label) + "</div></div>";
   }
 
+  // Resolve server-group ids -> names once via the read tool, then re-render so
+  // the Group column shows names, not bare ids (same treatment as the policy
+  // blast-radius App). Harmless no-op if listing is unavailable or no bridge.
+  function groupLabel(id) {
+    var nm = groupNames[String(id)];
+    return nm ? esc(nm) + " (" + esc(id) + ")" : "group " + esc(id);
+  }
+  function ensureGroupNames() {
+    if (groupNamesLoaded || !App || typeof App.callTool !== "function") return;
+    groupNamesLoaded = true;
+    App.callTool("list_server_groups", {}).then(function (res) {
+      var d = (res && res.structuredContent && res.structuredContent.data) || {};
+      var list = d.groups || d.server_groups;
+      if (!Array.isArray(list)) {
+        for (var k in d) { if (Array.isArray(d[k])) { list = d[k]; break; } }
+      }
+      (list || []).forEach(function (g) {
+        if (g && g.id != null && g.name != null) groupNames[String(g.id)] = g.name;
+      });
+      if (lastEnv) render(lastEnv);
+    }).catch(function () {});
+  }
+
+  // A device's display name and group, surfaced against the live snapshot shape:
+  // non-compliant rows carry server_name / server_group_id; stale rows carry
+  // display_name (and no group). Falls back gracefully across both shapes.
+  function deviceName(d) {
+    return field(d, ["name", "custom_name", "server_name", "hostname", "display_name"]) ||
+      ("device " + (field(d, ["server_id", "device_id", "id"]) || "?"));
+  }
+  function groupCell(d) {
+    var gname = field(d, ["group_name", "group", "server_group"]);
+    if (gname != null && typeof gname !== "object") return esc(gname);
+    var gid = field(d, ["server_group_id", "group_id", "groupId"]);
+    return gid != null ? groupLabel(gid) : "—";
+  }
+
   function deviceRows(devices) {
     return devices.map(function (d) {
-      var name = field(d, ["name", "hostname", "display_name", "id"]);
-      var os = field(d, ["os_family", "os", "os_version"]);
-      var group = field(d, ["group", "group_name", "groupId", "server_group"]);
+      d = d || {};
+      var os = field(d, ["os_family", "platform", "os", "os_version"]);
       var flags = [];
-      if (d && d.needsReboot) flags.push('<span class="pill warn">reboot</span>');
-      if (d && d.connected === false) flags.push('<span class="pill bad">offline</span>');
-      return "<tr><td>" + esc(name) + "</td><td>" + esc(os || "—") + "</td><td>" +
-        esc(group == null ? "—" : group) + "</td><td>" +
+      if (d.needs_reboot || d.needsReboot) flags.push('<span class="pill warn">reboot</span>');
+      if (d.connected === false) flags.push('<span class="pill bad">offline</span>');
+      return "<tr><td>" + esc(deviceName(d)) + "</td><td>" + esc(os || "—") +
+        "</td><td>" + groupCell(d) + "</td><td>" +
         (flags.join(" ") || "—") + "</td></tr>";
     }).join("");
   }
@@ -233,7 +270,8 @@ _TRIAGE_HTML = """<!doctype html>
 
   function render(envelope) {
     if (!envelope || typeof envelope !== "object") return;
-    dataReceived = true;
+    gotData = true;
+    lastEnv = envelope;
     var data = envelope.data || envelope;        // tolerate {data,metadata} or bare data
     var meta = envelope.metadata || {};
     var ov = data.compliance_overview || {};
@@ -247,6 +285,12 @@ _TRIAGE_HTML = """<!doctype html>
 
     var sections = meta.section_summaries || {};
     var nc = data.noncompliant_report || {};
+    var ncDevices = Array.isArray(nc.devices) ? nc.devices : [];
+    // If any non-compliant device targets a server group, resolve names (async;
+    // re-renders when the read returns).
+    if (ncDevices.some(function (d) {
+      return d && (d.server_group_id != null || d.group_id != null || d.groupId != null);
+    })) ensureGroupNames();
     renderTable(els.nc, els.ncCount, nc.devices,
       sections["noncompliant_report.devices"], "No non-compliant devices.");
     var dh = data.device_health || {};
@@ -258,75 +302,10 @@ _TRIAGE_HTML = """<!doctype html>
       meta.errors && meta.errors.length ? "Some sections failed: " + meta.errors.join("; ") : "";
   }
 
-  function extractEnvelope(payload) {
-    if (!payload || typeof payload !== "object") return null;
-    if (payload.structuredContent) return payload.structuredContent;
-    if (payload.result && payload.result.structuredContent) {
-      return payload.result.structuredContent;
-    }
-    if (payload.data || payload.metadata) return payload;
-    return null;
-  }
-
-  // ---- ext-apps (io.modelcontextprotocol/ui) postMessage bridge, hand-rolled ----
-  function post(msg) {
-    try { (window.parent || window).postMessage(msg, "*"); } catch (e) {}
-  }
-  var initialized = false;
-  function sendInitialized() {
-    if (initialized) return;
-    initialized = true;
-    post({ jsonrpc: "2.0", method: "ui/notifications/initialized", params: {} });
-  }
-
-  window.addEventListener("message", function (ev) {
-    var msg = ev.data;
-    if (!msg || typeof msg !== "object") return;
-    if (msg.id === 1 && msg.result) {                 // response to our ui/initialize
-      var ctx = msg.result.hostContext || msg.result;
-      if (ctx && ctx.theme) setTheme(ctx.theme);
-      sendInitialized();
-      return;
-    }
-    if (msg.method === "ui/notifications/host-context-changed") {
-      var c = msg.params || {};
-      if (c.theme) setTheme(c.theme);
-      return;
-    }
-    if (msg.method === "ui/notifications/tool-result" ||
-        msg.method === "ui/notifications/tool-input" ||
-        msg.method === "ui/render") {
-      var env = extractEnvelope(msg.params);
-      if (env) render(env);
-      return;
-    }
-    var direct = extractEnvelope(msg);              // defensive: some hosts post directly
-    if (direct) render(direct);
-  });
-
-  // ---- OpenAI Apps SDK fallback (window.openai) ----
-  function bootOpenAI() {
-    if (window.openai.toolOutput) render(window.openai.toolOutput);
-    if (window.openai.theme) setTheme(window.openai.theme);
-    window.addEventListener("openai:set_globals", function (e) {
-      var g = e && e.detail && e.detail.globals;
-      if (g && "toolOutput" in g) render(window.openai.toolOutput);
-      if (g && "theme" in g) setTheme(window.openai.theme);
-    });
-  }
-
-  // ---- boot ----
-  if (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) {
-    setTheme("light");
-  }
-  if (window.openai) bootOpenAI();
-  post({
-    jsonrpc: "2.0", id: 1, method: "ui/initialize",
-    params: { capabilities: {}, clientInfo: CLIENT, protocolVersion: PROTOCOL_VERSION }
-  });
-  setTimeout(sendInitialized, 800);                 // ack even if the host skips the init reply
+  // The shared bridge applies the host theme to documentElement automatically.
+  App.onData(render);
   setTimeout(function () {
-    if (!dataReceived) {
+    if (!gotData) {
       els.sub.textContent =
         "Open this view from an Automox compliance snapshot to see live triage data.";
     }
@@ -336,6 +315,8 @@ _TRIAGE_HTML = """<!doctype html>
 </body>
 </html>
 """
+
+_TRIAGE_HTML = _TRIAGE_TEMPLATE.replace("__MCP_APP_BRIDGE__", MCP_APP_BRIDGE_JS)
 
 
 def register(server: FastMCP) -> None:

@@ -59,6 +59,9 @@ def test_resource_registered_and_self_contained() -> None:
     assert "patch-now" in html
     # patch-with-worklet is deliberately NOT offered in the UI.
     assert "patch-with-worklet" not in html
+    # patch-now is gated on availability: only solutions whose remediation is a
+    # direct patch get the button; worklet-based solutions get a note instead.
+    assert "patchNowAvailable" in html
     assert "<script src" not in html and "https://" not in html
 
 

@@ -5,9 +5,12 @@ from __future__ import annotations
 from typing import Any
 
 from fastmcp import FastMCP
+from fastmcp.apps import AppConfig, ResourceCSP
 
 from ..client import AutomoxClient
+from ..resources.remediation_apply_app import REMEDIATION_APPLY_APP_URI
 from ..schemas import (
+    ActionSetSolutionsResult,
     DeleteActionSetParams,
     DeleteActionSetsBulkParams,
     GetActionSetIssuesParams,
@@ -152,6 +155,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "idempotentHint": True,
             "openWorldHint": True,
         },
+        output_schema=ActionSetSolutionsResult.model_json_schema(),
+        # Write-flow MCP App (#181): Apps-capable hosts render the remediation-apply
+        # review UI from this tool's structured output (solutions + affected devices).
+        # The UI drives the gated apply_remediation_actions (patch-now) via the host
+        # CallTool bridge; the env gate remains the control. Self-contained UI → empty CSP.
+        app=AppConfig(resourceUri=REMEDIATION_APPLY_APP_URI, csp=ResourceCSP()),
     )
     async def get_action_set_solutions(
         action_set_id: int,

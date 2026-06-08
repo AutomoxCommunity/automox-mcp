@@ -1703,3 +1703,24 @@ class PolicyChangeResult(_StructuredToolResult):
     """Structured output of the ``apply_policy_changes`` tool."""
 
     data: PolicyChangeData | None = None
+
+
+# --- Action-set solutions output model (issue #181) ---
+# Entry-tool schema for the remediation-apply review MCP App. Solutions are
+# forwarded verbatim from the API, so the list items stay dict[str, Any].
+
+
+class ActionSetSolutionsData(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    action_set_id: int | None = None
+    total_solutions: int | None = None
+    solutions: list[dict[str, Any]] | None = Field(
+        default=None,
+        description="Remediation solutions (verbatim): each has vulnerabilities and target devices",
+    )
+
+
+class ActionSetSolutionsResult(_StructuredToolResult):
+    """Structured output of the ``get_action_set_solutions`` tool."""
+
+    data: ActionSetSolutionsData | None = None

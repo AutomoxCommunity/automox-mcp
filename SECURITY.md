@@ -41,6 +41,7 @@ The following attack surfaces have been identified and mitigated:
 - HTTP client debug logging excludes request parameters (V-005)
 - Presigned download URLs from data extract API redacted before reaching LLM; only a boolean `has_download_url` flag is returned (V-169)
 - Account UUID format-validated at client construction to prevent path injection via malformed environment variables (V-171)
+- Zone-member user listings (`list_zone_users`) project the User DTO through a secret-stripping allowlist, so the `intercom_hmac` chat-auth secret it carries is never forwarded to the model — matching the redaction every other user listing already applies (V-182)
 
 ### Prompt Injection via API Data
 
@@ -188,6 +189,7 @@ For sensitive deployments, we recommend using an MCP gateway with inline guardra
 | V-179 | Rate limiter eviction covers `_failures` dict | `transport_security.py` |
 | V-180 | Code block sanitizer strips all fenced blocks regardless of language label | `utils/sanitize.py` |
 | V-181 | MCP Tool Annotations on all 127 tools (readOnlyHint, destructiveHint, idempotentHint, openWorldHint) | `tools/*.py` |
+| V-182 | `list_zone_users` projects zone-member User DTOs through a secret-stripping allowlist; `intercom_hmac` never forwarded | `workflows/account.py` |
 
 ## Scope and Limitations
 

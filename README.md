@@ -215,7 +215,8 @@ The Automox MCP server is designed for enterprise deployment with defense-in-dep
 - **Authentication rate limiting** — blocks IPs after repeated auth failures to mitigate brute-force attacks
 - **Remote bind protection** — non-loopback HTTP/SSE binding requires explicit `--allow-remote-bind` opt-in
 - **MCP Tool Annotations** on all 133 tools — `readOnlyHint`, `destructiveHint`, `idempotentHint`, and `openWorldHint` per the MCP Protocol specification, enabling client-side confirmation dialogs and safety guardrails
-- **60 security hardening items** (V-001 through V-181, S-001 through S-006) documented in CHANGELOG and SECURITY.md
+- **Interactive MCP Apps** (`io.modelcontextprotocol/ui`) — inline review/approval surfaces for consequential flows: compliance triage, patch approval, policy blast-radius, remediation apply, and RBAC access certification. Apps-capable hosts render them inline; other hosts degrade gracefully to the structured tool output. Write-flow Apps drive the **existing gated tools** through the host's confirmation — no new tools, no new gates — and ship under the host's deny-all CSP (self-contained, no external/CDN loads)
+- **61 security hardening items** (V-001 through V-182, S-001 through S-006) documented in CHANGELOG and SECURITY.md
 
 **Capability model.** The server wraps **100% of the published Automox Console API and Webhooks API**, with a single deliberate exception — **secret-exposing endpoints are never wrapped** (API-key decrypt, password-setting). Every destructive operation is either *ask-first* (host confirmation) or *gated* behind a default-off env flag. Concretely, three categorical rules:
 

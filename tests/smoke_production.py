@@ -9,7 +9,15 @@ advanced device search, and vulnerability sync).  Tests 50–55 cover policy
 windows (maintenance/exclusion windows).  Tests 56–91 cover the 1.2.0 #91
 wave (identity/users/zones, API-key metadata, device-search enrichment,
 policy device-targeting, action-set detail, Splashtop read-only status) plus
-the #111 single-device update_device (re-applied as a no-op write).
+the #111 single-device update_device (re-applied as a no-op write). Test 92
+verifies the MCP App ``ui://`` resources (#178–#182) boot and list with the
+MCP-App MIME over a live server, and ``list_zone_users`` asserts its
+secret-stripping projection holds against the live payload (no ``intercom_hmac``
+/ ``access_key`` leak, #194). The output_schema-bearing tools (compound, report,
+``patch_approvals_summary``, ``get_action_set_solutions``, ``list_users``) are
+live schema-conformance checks for free: the server validates each return
+against its advertised ``output_schema`` and a mismatch surfaces as a tool error
+(recorded FAIL).
 
 Dependent reads chain IDs from their list call and skip-OK when the org has
 no such record, so a sparse tenant does not fail the run.
@@ -1202,10 +1210,23 @@ async def run_readonly_tools() -> None:
         else:
             record("get_zone", True, "skipped — no zones in org (OK)")
 
-        # 68. list_zone_users
+        # 68. list_zone_users — assert the secret-stripping projection holds LIVE.
+        # The zone-member User DTO carries `intercom_hmac` (a chat-auth secret) and
+        # the zone DTO carries `access_key`; the wrapper must project both out (#194).
+        # A raw forward would return 200 with the secret present, so "got a response"
+        # is insufficient — assert the secret is absent from the serialized payload.
         if zone_id:
             resp = await _safe_call(session, "list_zone_users", {"zone_id": zone_id})
-            record("list_zone_users", resp is not None, _count_or_err(resp))
+            if resp is None:
+                record("list_zone_users", False, "call failed")
+            else:
+                blob = json.dumps(resp)
+                leaked = "intercom_hmac" in blob or "access_key" in blob
+                record(
+                    "list_zone_users",
+                    not leaked,
+                    "SECRET LEAKED in payload!" if leaked else f"{_count_or_err(resp)}, no secret",
+                )
         else:
             record("list_zone_users", True, "skipped — no zone_id (OK)")
 
@@ -1602,6 +1623,36 @@ async def run_readonly_tools() -> None:
                 True,
                 "skipped — no device custom_name to echo (avoids live mutation) (OK)",
             )
+
+        # 92. MCP App resources — verify the ui:// App surfaces boot and list with
+        # the MCP-App MIME on a live server (#178–#182). The App plumbing is not
+        # exercised by any tool call, so this resources/list check is its only live
+        # coverage: it confirms the dependency-free ui:// + AppConfig path actually
+        # registers in production, not just in unit introspection.
+        _UI_MIME = "text/html;profile=mcp-app"
+        _EXPECTED_APP_RESOURCES = {
+            "ui://automox/triage.html",
+            "ui://automox/patch-approval.html",
+            "ui://automox/policy-blast-radius.html",
+            "ui://automox/remediation-apply.html",
+            "ui://automox/access-certification.html",
+        }
+        try:
+            res_result = await session.list_resources()
+            by_uri = {str(r.uri): getattr(r, "mimeType", None) for r in res_result.resources}
+            missing = sorted(_EXPECTED_APP_RESOURCES - set(by_uri))
+            bad_mime = sorted(
+                u for u in _EXPECTED_APP_RESOURCES & set(by_uri) if by_uri[u] != _UI_MIME
+            )
+            ok = not missing and not bad_mime
+            detail = (
+                f"{len(_EXPECTED_APP_RESOURCES)} App resources list with MCP-App MIME"
+                if ok
+                else f"missing={missing} bad_mime={bad_mime}"
+            )
+            record("mcp_app_resources", ok, detail)
+        except Exception as exc:
+            record("mcp_app_resources", False, str(exc))
 
 
 def _extract_id(item: dict[str, Any], *keys: str) -> int | None:

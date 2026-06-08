@@ -75,6 +75,11 @@ _HTML_TEMPLATE = """<!doctype html>
   }
   .devbtn { margin-top: 8px; }
   .devices { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  details.scope > summary { cursor: pointer; }
+  details.scope > summary::marker { color: var(--muted); }
+  .devlist { margin: 6px 0 0 4px; padding-left: 10px; border-left: 2px solid var(--border); }
+  .devrow { font-size: 12px; color: var(--text); padding: 1px 0; }
+  .devrow .dim { color: var(--muted); }
   .bar {
     position: sticky; bottom: 0; display: flex; gap: 8px; align-items: center;
     padding: 10px 0; background: var(--bg); border-top: 1px solid var(--border);
@@ -108,10 +113,47 @@ _HTML_TEMPLATE = """<!doctype html>
   };
   var gotData = false;
   var inputArgs = null;   // the {operations, preview} the entry tool was called with
+  var lastEnv = null;
+  var groupNames = {};         // server_group id -> name (resolved via list_server_groups)
+  var groupNamesLoaded = false;
 
   function esc(v) {
     return String(v == null ? "" : v)
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
+  // Resolve server-group ids -> names once via the read tool, then re-render so
+  // the scope shows names, not bare ids. Harmless no-op if listing is unavailable.
+  function groupLabel(id) {
+    var nm = groupNames[String(id)];
+    return nm ? esc(nm) + " (" + esc(id) + ")" : "group " + esc(id);
+  }
+  function ensureGroupNames() {
+    if (groupNamesLoaded) return;
+    groupNamesLoaded = true;
+    App.callTool("list_server_groups", {}).then(function (res) {
+      var d = (res && res.structuredContent && res.structuredContent.data) || {};
+      var list = d.server_groups || d.groups;
+      if (!Array.isArray(list)) {
+        for (var k in d) { if (Array.isArray(d[k])) { list = d[k]; break; } }
+      }
+      (list || []).forEach(function (g) {
+        if (g && g.id != null && g.name != null) groupNames[String(g.id)] = g.name;
+      });
+      if (lastEnv) render(lastEnv);
+    }).catch(function () {});
+  }
+
+  // Render a resolved device set as a list of names (custom_name/name) + OS.
+  function deviceRows(devs) {
+    if (!devs.length) return '<div class="devrow dim">No devices.</div>';
+    return devs.map(function (d) {
+      d = d || {};
+      var nm = d.custom_name || d.name || d.hostname || ("device " + (d.id != null ? d.id : "?"));
+      var os = [d.os_family, d.os_version].filter(Boolean).join(" ");
+      return '<div class="devrow">' + esc(nm) +
+        (os ? ' <span class="dim">— ' + esc(os) + "</span>" : "") + "</div>";
+    }).join("");
   }
 
   function targeting(body) {
@@ -133,7 +175,8 @@ _HTML_TEMPLATE = """<!doctype html>
     card.className = "op";
     var scopeBits = [];
     if (t.groups) {
-      scopeBits.push("<b>" + t.groups.length + "</b> server group(s): " + esc(t.groups.join(", ")));
+      scopeBits.push("<b>" + t.groups.length + "</b> server group(s): " +
+        t.groups.map(groupLabel).join(", "));
     }
     if (t.filters) scopeBits.push("<b>" + t.filters.length + "</b> device filter(s)");
     if (!scopeBits.length) scopeBits.push("targeting unchanged / not specified");
@@ -158,8 +201,11 @@ _HTML_TEMPLATE = """<!doctype html>
           device_filters: t.filters || undefined, server_groups: t.groups
         }).then(function (res) {
           var d = (res && res.structuredContent && res.structuredContent.data) || {};
-          var n = d.total_devices != null ? d.total_devices : (d.devices || []).length;
-          devBox.innerHTML = "<b>" + esc(n) + "</b> device(s) would be targeted.";
+          var devs = Array.isArray(d.devices) ? d.devices : [];
+          var n = d.total_devices != null ? d.total_devices : devs.length;
+          devBox.innerHTML = '<details class="scope" open><summary><b>' + esc(n) +
+            "</b> device(s) would be targeted</summary>" +
+            '<div class="devlist">' + deviceRows(devs) + "</div></details>";
         }).catch(function (e) {
           devBox.textContent = "Could not resolve devices: " + ((e && e.message) || "error");
           btn.disabled = false;
@@ -173,9 +219,16 @@ _HTML_TEMPLATE = """<!doctype html>
   function render(env) {
     if (!env || typeof env !== "object") return;
     gotData = true;
+    lastEnv = env;
     var data = env.data || env;
     var ops = Array.isArray(data.operations) ? data.operations : [];
     var isPreview = data.preview !== false;
+    // Resolve server-group names if any operation targets groups (async; re-renders).
+    var anyGroups = ops.some(function (op) {
+      var t = targeting((op.request && op.request.body) || {});
+      return t.groups && t.groups.length;
+    });
+    if (anyGroups) ensureGroupNames();
     els.sub.textContent = ops.length + " proposed change(s)" +
       (isPreview ? " · preview" : " · already applied");
     els.ops.innerHTML = "";

@@ -53,6 +53,9 @@ def test_resource_registered_and_self_contained() -> None:
     # Re-invokes the write to apply, and resolves devices on demand.
     assert "apply_policy_changes" in html
     assert "preview_policy_device_filters" in html
+    # Resolves server-group names (not just ids) and lists resolved device names.
+    assert "list_server_groups" in html
+    assert "deviceRows" in html
     assert "<script src" not in html and "https://" not in html
 
 

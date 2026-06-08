@@ -1433,3 +1433,176 @@ class DeviceFullProfileParams(OrgIdRequiredMixin, ForbidExtraModel):
             "Pagination docs."
         ),
     )
+
+
+# ---------------------------------------------------------------------------
+# Structured output models for the compound tools (issue #176)
+# ---------------------------------------------------------------------------
+#
+# These describe the ``{"data": ..., "metadata": ...}`` envelope each compound
+# tool emits and are advertised via ``output_schema=Model.model_json_schema()``
+# on the ``@server.tool`` registration.
+#
+# CRITICAL — these models are deliberately PERMISSIVE, and that is load-bearing:
+# FastMCP validates a tool's returned ``structured_content`` against the
+# declared schema AT RUNTIME (``jsonschema.validate`` in the MCP SDK low-level
+# handler); a mismatch is returned to the client as ``isError=True``. The
+# emitted envelope is also not static — ``utils.tooling.as_tool_response``
+# mutates it (token-budget list truncation, ``correlation_id`` injection,
+# ``section_summaries``/``notes``/``errors``/``counts`` metadata), and
+# ``PaginationMetadata`` (``extra="allow"``) always adds its own keys. So:
+#
+#   * every field is OPTIONAL (no field lands in the schema's ``required`` list,
+#     so subset/degraded returns validate),
+#   * variable sub-objects are ``dict[str, Any]`` (no per-key type gate),
+#   * NEVER set ``extra="forbid"`` on any model below — it would emit
+#     ``additionalProperties: false`` and turn the advertised schema into a hard
+#     gate that rejects the real, mutated payload.
+#
+# The advertised schema therefore DOCUMENTS the shape for schema-aware hosts
+# without ever gating a legitimate response. ``tests/test_compound_output_schema.py``
+# runs real workflow outputs through the schema to guarantee this.
+
+
+class _StructuredToolResult(BaseModel):
+    """Base envelope for a compound tool's structured output (issue #176)."""
+
+    model_config = ConfigDict(extra="allow")
+    metadata: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Pagination, errors, per-section summaries, token-budget warnings, "
+            "and correlation metadata. Shape varies per call."
+        ),
+    )
+
+
+class ComplianceOverview(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    total_devices: int | None = Field(default=None, description="Managed devices considered")
+    compliant_devices: int | None = Field(default=None, description="Devices in a compliant state")
+    noncompliant_devices: int | None = Field(default=None, description="Non-compliant devices")
+    compliance_rate_percent: float | None = Field(
+        default=None, description="Compliant share of the fleet, 0-100"
+    )
+
+
+class NoncompliantReportSection(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    summary: dict[str, Any] | None = Field(default=None, description="Aggregate counts")
+    devices: list[dict[str, Any]] | None = Field(
+        default=None, description="Non-compliant device records (capped at detail_limit)"
+    )
+
+
+class DeviceHealthSection(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    status_breakdown: dict[str, Any] | None = Field(
+        default=None, description="Device count by policy/check-in status"
+    )
+    check_in_recency: dict[str, Any] | None = Field(
+        default=None, description="Device count by check-in recency bucket"
+    )
+    stale_devices: list[dict[str, Any]] | None = Field(
+        default=None, description="Devices that have not checked in recently (capped)"
+    )
+
+
+class PolicySummarySection(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    total_policies: int | None = Field(default=None, description="Active policies considered")
+    by_type: dict[str, int] | None = Field(default=None, description="Policy count by type")
+    by_status: dict[str, int] | None = Field(default=None, description="Policy count by status")
+
+
+class ComplianceSnapshotData(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    compliance_overview: ComplianceOverview | None = None
+    noncompliant_report: NoncompliantReportSection | None = None
+    device_health: DeviceHealthSection | None = None
+    policy_summary: PolicySummarySection | None = None
+
+
+class ComplianceSnapshotResult(_StructuredToolResult):
+    """Structured output of ``get_compliance_snapshot``."""
+
+    data: ComplianceSnapshotData | None = None
+
+
+class PrepatchReportSection(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    total_devices_needing_patches: int | None = Field(
+        default=None, description="Devices with one or more pending patches"
+    )
+    summary: dict[str, Any] | None = Field(default=None, description="Aggregate counts")
+    devices: list[dict[str, Any]] | None = Field(
+        default=None, description="Per-device prepatch records (capped at detail_limit)"
+    )
+
+
+class PatchApprovalsSection(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    pending_count: int | None = Field(
+        default=None, description="Approvals awaiting a manual decision (manual_approval is null)"
+    )
+    approvals: list[dict[str, Any]] | None = Field(
+        default=None, description="Approval records (capped at detail_limit)"
+    )
+
+
+class ReadinessSummary(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    devices_needing_patches: int | None = None
+    pending_approvals: int | None = None
+    active_patch_policies: int | None = None
+
+
+class PatchTuesdayReadinessData(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    prepatch_report: PrepatchReportSection | None = None
+    patch_approvals: PatchApprovalsSection | None = None
+    patch_policy_schedules: list[dict[str, Any]] | None = Field(
+        default=None, description="Patch-policy schedule entries (capped at detail_limit)"
+    )
+    readiness_summary: ReadinessSummary | None = None
+
+
+class PatchTuesdayReadinessResult(_StructuredToolResult):
+    """Structured output of ``get_patch_tuesday_readiness``."""
+
+    data: PatchTuesdayReadinessData | None = None
+
+
+class InventorySection(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    total_categories: int | None = None
+    total_items: int | None = None
+    categories: dict[str, Any] | None = Field(
+        default=None, description="Summarized inventory categories (counts + scalar key-values)"
+    )
+    note: str | None = None
+
+
+class PackagesSection(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    total: int | None = Field(default=None, description="Total packages on the device")
+    returned: int | None = Field(default=None, description="Packages included in this response")
+    truncated: bool | None = None
+    packages: list[dict[str, Any]] | None = None
+    note: str | None = None
+
+
+class DeviceFullProfileData(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    device: dict[str, Any] | None = Field(default=None, description="Core device record")
+    policy_assignments: dict[str, Any] | None = None
+    pending_commands: list[dict[str, Any]] | None = None
+    device_facts: dict[str, Any] | None = None
+    inventory: InventorySection | None = None
+    packages: PackagesSection | None = None
+
+
+class DeviceFullProfileResult(_StructuredToolResult):
+    """Structured output of ``get_device_full_profile``."""
+
+    data: DeviceFullProfileData | None = None

@@ -10,8 +10,11 @@ from .. import workflows
 from ..client import AutomoxClient
 from ..schemas import (
     ComplianceSnapshotParams,
+    ComplianceSnapshotResult,
     DeviceFullProfileParams,
+    DeviceFullProfileResult,
     PatchTuesdayReadinessParams,
+    PatchTuesdayReadinessResult,
 )
 from ..utils.tooling import call_tool_workflow
 
@@ -41,6 +44,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "idempotentHint": True,
             "openWorldHint": True,
         },
+        output_schema=PatchTuesdayReadinessResult.model_json_schema(),
     )
     async def get_patch_tuesday_readiness(
         group_id: int | None = None,
@@ -70,6 +74,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "idempotentHint": True,
             "openWorldHint": True,
         },
+        output_schema=ComplianceSnapshotResult.model_json_schema(),
     )
     async def get_compliance_snapshot(
         group_id: int | None = None,
@@ -101,6 +106,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "idempotentHint": True,
             "openWorldHint": True,
         },
+        output_schema=DeviceFullProfileResult.model_json_schema(),
     )
     async def get_device_full_profile(
         device_id: int,

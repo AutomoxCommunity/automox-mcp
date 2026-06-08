@@ -1724,3 +1724,22 @@ class ActionSetSolutionsResult(_StructuredToolResult):
     """Structured output of the ``get_action_set_solutions`` tool."""
 
     data: ActionSetSolutionsData | None = None
+
+
+# --- Users-list output model (issue #182) ---
+# Entry-tool schema for the access-certification (RBAC) review MCP App.
+
+
+class UsersListData(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    total_users: int | None = None
+    users: list[dict[str, Any]] | None = Field(
+        default=None,
+        description="Account users (lean projection): id, name, email, RBAC roles, 2FA type",
+    )
+
+
+class UsersListResult(_StructuredToolResult):
+    """Structured output of the ``list_users`` tool."""
+
+    data: UsersListData | None = None

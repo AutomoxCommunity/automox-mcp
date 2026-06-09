@@ -75,9 +75,12 @@ class TestPlatformResources:
         data = func()
         assert "patch_rules" in data
         options = data["patch_rules"]["options"]
-        assert "all" in options
-        assert "filter" in options
-        assert "severity" in options
+        # The API patch_rule enum is exactly {all, filter, manual, advanced}.
+        # 'severity'/'custom' are NOT patch_rule values (issue #206) — severity
+        # is a filter_type paired with patch_rule='filter'.
+        assert set(options) == {"all", "filter", "manual", "advanced"}
+        assert "severity" not in options
+        assert "filter_type" in data["patch_rules"]["note"]
 
     def test_supported_os_resource_registered(self) -> None:
         assert "resource://platform/supported-os" in self.server.resources

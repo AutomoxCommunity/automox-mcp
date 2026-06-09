@@ -1436,6 +1436,69 @@ async def run_readonly_tools() -> None:
             else:
                 record("delete_saved_search", False, "skipped — create failed")
 
+        # 78c. Patch-policy WRITE round-trip (create patch-all → delete).
+        # apply_policy_changes had NO live create coverage — and a patch_rule="all"
+        # policy was being sent without configuration.filter_type, which the API
+        # 400'd ("filter_type field is required" — #206). That is a live-contract
+        # failure invisible to every stub and to the read-only path. This is a
+        # self-cleaning write: it creates a uniquely-named, INERT policy
+        # (server_groups=[] → unassigned so it can act on nothing; auto_patch off)
+        # and always deletes it (best-effort) in the finally, leaving no residue.
+        # Asserts CORRECTNESS, not just 200: (a) the create actually succeeds (the
+        # API no longer rejects a non-filter patch policy), and (b) the STORED
+        # configuration carries filter_type="all" (the contract the fix targets).
+        pol_name = f"mcp-smoke-delete-me-{uuid.uuid4().hex[:8]}"
+        patch_all_op = {
+            "action": "create",
+            "policy": {
+                "name": pol_name,
+                "policy_type_name": "patch",
+                "configuration": {
+                    "patch_rule": "all",
+                    "auto_patch": False,
+                    "auto_reboot": False,
+                    "notify_user": False,
+                },
+                # Use the `schedule` helper block (not the raw bitmask): this also
+                # exercises the fix that the MCP param model now accepts it (it was
+                # previously dropped at the boundary, failing the create). _coerce
+                # expands it to schedule_days/time and auto-fills weeks/months.
+                "schedule": {"days": ["monday"], "time": "03:00"},
+                "server_groups": [],
+                "notes": "mcp smoke throwaway — safe to delete",
+            },
+        }
+        created_pol = await _safe_call(
+            session,
+            "apply_policy_changes",
+            {"operations": [patch_all_op], "preview": False},
+        )
+        pol_ops = (created_pol or {}).get("data", {}).get("operations", []) if created_pol else []
+        pol_entry = pol_ops[0] if pol_ops else {}
+        new_pol_id = pol_entry.get("policy_id")
+        stored_ft = pol_entry.get("policy", {}).get("configuration", {}).get("filter_type")
+        try:
+            record(
+                "apply_policy_changes (create patch-all, #206)",
+                bool(new_pol_id) and pol_entry.get("status") == "created",
+                f"id={new_pol_id} status={pol_entry.get('status')}",
+            )
+            record(
+                "apply_policy_changes filter_type=all (#206)",
+                stored_ft == "all",
+                f"stored filter_type={stored_ft!r}",
+            )
+        finally:
+            if new_pol_id:
+                deleted_pol = await _safe_call(session, "delete_policy", {"policy_id": new_pol_id})
+                record(
+                    "delete_policy (smoke cleanup)",
+                    bool(deleted_pol and deleted_pol.get("data", {}).get("deleted")),
+                    f"id={new_pol_id}",
+                )
+            else:
+                record("delete_policy (smoke cleanup)", True, "skipped — create failed (OK)")
+
         # ---- Policy device-targeting ----
         log.info(f"\n{BOLD}Phase 4: Policy device-targeting{RESET}")
 

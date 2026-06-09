@@ -84,7 +84,14 @@ def register_policy_resources(server: FastMCP) -> None:
                 },
             },
             "critical_patches_only": {
-                "description": "Apply only critical severity patches",
+                "description": "Apply only patches of a given severity (e.g., critical)",
+                "note": (
+                    "'Patch by Severity' is patch_rule='filter' + filter_type='severity' with a "
+                    "severity_filter list — there is NO patch_rule='severity'. NB: "
+                    "apply_policy_changes does not yet auto-construct the severity_filter field; "
+                    "until that is wired, create severity policies via clone_policy or the "
+                    "console. The shape below is the target API structure."
+                ),
                 "template": {
                     "action": "create",
                     "policy": {
@@ -92,8 +99,9 @@ def register_policy_resources(server: FastMCP) -> None:
                         "organization_id": 0,  # Replace with your org ID
                         "policy_type_name": "patch",
                         "configuration": {
-                            "patch_rule": "severity",
-                            "severity": "critical",
+                            "patch_rule": "filter",
+                            "filter_type": "severity",
+                            "severity_filter": ["critical"],
                             "auto_patch": True,
                             "auto_reboot": True,
                         },
@@ -315,12 +323,20 @@ def register_policy_resources(server: FastMCP) -> None:
                     },
                     "configuration_structure": {
                         "patch_rule": (
-                            "str - REQUIRED - Filter type: 'filter', 'all', 'severity', or 'custom'"
+                            "str - REQUIRED - One of: 'all', 'filter', 'manual', 'advanced'"
+                        ),
+                        "filter_type": (
+                            "str - REQUIRED - 'all' for patch_rule all/manual/advanced; for "
+                            "'filter' use 'include' (Patch Only), 'exclude' (Patch All Except), "
+                            "or 'severity' (Patch by Severity). Auto-set when omitted"
                         ),
                         "auto_patch": "bool - REQUIRED - Automatically apply patches",
                         "auto_reboot": "bool - REQUIRED - Automatically reboot after patching",
                         "filters": ("list[str] - Package name patterns (when patch_rule='filter')"),
-                        "severity": "str - Patch severity level (when patch_rule='severity')",
+                        "severity_filter": (
+                            "list[str] - Severity levels (when filter_type='severity'), "
+                            "e.g. ['critical']"
+                        ),
                         "os_family": "str - Target OS family",
                         "notify_user": "bool - Notify users before actions",
                         "notify_reboot_user": "bool - Notify users before reboot",
@@ -345,12 +361,18 @@ def register_policy_resources(server: FastMCP) -> None:
                             "server_groups": [366711],
                         },
                         "critical_patches": {
+                            "_note": (
+                                "Target API shape for 'Patch by Severity'. apply_policy_changes "
+                                "does not yet construct severity_filter — create severity "
+                                "policies via clone_policy or the console for now."
+                            ),
                             "name": "Critical Patches - Weekly",
                             "organization_id": 123456,
                             "policy_type_name": "patch",
                             "configuration": {
-                                "patch_rule": "severity",
-                                "severity": "critical",
+                                "patch_rule": "filter",
+                                "filter_type": "severity",
+                                "severity_filter": ["critical"],
                                 "auto_patch": True,
                                 "auto_reboot": True,
                             },
@@ -391,7 +413,10 @@ def register_policy_resources(server: FastMCP) -> None:
                                 "If patch_rule is not specified but filters are present, "
                                 "patch_rule will be auto-set to 'filter'"
                             ),
-                            "filter_type will be auto-set to 'include' if not specified",
+                            (
+                                "filter_type is auto-set when omitted: 'include' for "
+                                "patch_rule='filter', 'all' for patch_rule all/manual/advanced"
+                            ),
                         ],
                         "example": {
                             "using_filter_name": {

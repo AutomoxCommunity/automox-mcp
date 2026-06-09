@@ -85,6 +85,40 @@ class TestPolicyDefinition:
         with pytest.raises(ValidationError):
             PolicyDefinition(schedule_days=255)
 
+    def test_preserves_schedule_helper_block(self):
+        # The `schedule` helper block must survive validation — it is expanded
+        # into schedule_days/schedule_time downstream. Previously extra="ignore"
+        # silently dropped it at the MCP boundary, so a documented create shape
+        # failed with "missing schedule_days/schedule_time".
+        p = PolicyDefinition(schedule={"days": ["monday"], "time": "02:00"})
+        assert p.schedule == {"days": ["monday"], "time": "02:00"}
+
+
+class TestPolicyChangeRequestParamsSchedule:
+    def test_schedule_block_survives_param_model_roundtrip(self):
+        # End-to-end of the MCP boundary: a `schedule` helper inside an operation
+        # must survive PolicyChangeRequestParams validation + model_dump (where it
+        # was being dropped), so the workflow can expand it.
+        params = PolicyChangeRequestParams(
+            org_id=555,
+            operations=[
+                {
+                    "action": "create",
+                    "policy": {
+                        "name": "P",
+                        "policy_type_name": "patch",
+                        "configuration": {"patch_rule": "all"},
+                        "schedule": {"days": ["monday"], "time": "02:00"},
+                    },
+                }
+            ],
+        )
+        dumped = params.model_dump()
+        assert dumped["operations"][0]["policy"]["schedule"] == {
+            "days": ["monday"],
+            "time": "02:00",
+        }
+
 
 # ---------------------------------------------------------------------------
 # InviteUserParams — model_validator for zone assignments

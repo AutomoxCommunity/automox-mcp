@@ -6,6 +6,7 @@ import pytest
 from conftest import StubClient
 
 from automox_mcp.client import AutomoxClient
+from automox_mcp.utils.sanitize import sanitize_dict
 from automox_mcp.workflows.worklets import (
     get_worklet_detail,
     search_worklet_catalog,
@@ -147,6 +148,29 @@ async def test_detail_returns_full_info() -> None:
     assert result["data"]["user_interaction_required"] is False
     assert result["data"]["categories"] == ["Security"]
     assert result["data"]["device_type"] == ["SERVER", "WORKSTATION"]
+
+
+@pytest.mark.asyncio
+async def test_detail_code_survives_response_sanitization() -> None:
+    """End-to-end (issue #206): a worklet whose code contains corruption-
+    triggering syntax — a `[bool](...)` cast and angle-bracket content — survives
+    ``sanitize_dict`` (the exact pass ``as_tool_response`` applies to every tool
+    response). This proves the ``CODE_BEARING_FIELDS`` exemption fires on the real
+    worklet-detail shape, where the code is a value of the ``data`` key. The
+    workflow-output assertions above do NOT exercise sanitization, so without this
+    test nothing catches a regression that re-mangles code on read-back.
+    """
+    eval_code = "$x = [bool](Get-NetFirewallRule -DisplayName $n)\nif (-not $x) { exit 1 }"
+    rem_code = "Set-Content config.xml '<root><enabled>true</enabled></root>'"
+    detail = {**_WORKLET_DETAIL, "evaluation_code": eval_code, "remediation_code": rem_code}
+    client = StubClient(get_responses={"/wis/search/wklt-001": [detail]})
+    result = await get_worklet_detail(cast(AutomoxClient, client), org_id=42, item_id="wklt-001")
+
+    sanitized = sanitize_dict(result)
+    # The cast and the angle-bracket XML must round-trip uncorrupted; a non-code
+    # field is still sanitized as a control.
+    assert sanitized["data"]["evaluation_code"] == eval_code
+    assert sanitized["data"]["remediation_code"] == rem_code
 
 
 @pytest.mark.asyncio

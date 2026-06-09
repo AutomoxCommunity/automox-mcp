@@ -11,6 +11,7 @@ from typing import Any
 from fastmcp.exceptions import ToolError
 
 from ..client import AutomoxAPIError, AutomoxClient
+from ..utils.pagination import parallel_paginate
 from ..utils.response import extract_list as _extract_list
 from ..utils.response import require_org_id
 from ..utils.upload import get_upload_timeout_seconds, validate_upload_path
@@ -188,9 +189,12 @@ def normalize_policy_operations_input(raw_operations: Sequence[Any]) -> list[dic
                 # Claude used "software_name" instead of "filters"
                 config["filters"] = [f"*{config.pop('software_name')}*"]
 
-            if "filter_type" in config:
-                # Remove filter_type - it's not a valid field
-                config.pop("filter_type")
+            # NB: filter_type is intentionally NOT stripped here. The live API
+            # requires configuration.filter_type on patch-policy create for
+            # every patch_rule (not just 'filter') — stripping it caused a 400
+            # ("filter_type field is required") for patch_rule='all' (issue
+            # #206). A caller-supplied value is preserved and normalized by the
+            # payload builder; the builder defaults it when absent.
 
             policy["configuration"] = config
 
@@ -556,6 +560,16 @@ def _coerce_policy_payload_defaults(payload: dict[str, Any]) -> list[str]:
             available_filters.extend(_ensure_list(config_dict.pop("filter_names", None)))
             normalized_filters = _normalize_filters(available_filters)
             if not normalized_filters:
+                # FIXME(severity-filter): "Patch by Severity" is patch_rule='filter'
+                # + filter_type='severity' + a severity_filter list (NOT name
+                # patterns). This builder can't yet construct it — it requires a
+                # name `filters` pattern and never populates severity_filter. Until
+                # that's wired, severity policies must be made via clone_policy or
+                # the console (the resource templates say so). To support it here:
+                # treat a non-empty severity_filter as satisfying this check when
+                # filter_type=='severity', and normalize/forward severity_filter.
+                # Needs live verification against a tenant that has severity
+                # policies (this one has none) before shipping.
                 raise ValueError(
                     "Patch policies using patch_rule='filter' require at least one "
                     "filter pattern. Provide configuration.filters (e.g., "
@@ -569,11 +583,27 @@ def _coerce_policy_payload_defaults(payload: dict[str, Any]) -> list[str]:
                 else "include"
             )
         else:
+            # Non-filter rules (all/manual/advanced) don't use name/severity
+            # selectors. Drop any filter-only keys so a rule switch (e.g. a
+            # merge-update changing 'filter' -> 'all') can't carry a stale
+            # filters list or filter_type through.
             config_dict.pop("filter_name", None)
             config_dict.pop("filter_names", None)
+            config_dict.pop("filters", None)
+            # The live API still requires configuration.filter_type on every
+            # patch policy — omitting it 400s ("filter_type field is required",
+            # issue #206). For non-filter rules the only meaningful value is
+            # 'all' (include/exclude/severity are filter-rule selectors and are
+            # meaningless without `filters`), so it is set unconditionally —
+            # this also normalizes away any stale value from a merge-update.
+            config_dict["filter_type"] = "all"
 
         _normalize_device_filters(config_dict)
     else:
+        # filter_type is patch-only; strip a stray one so non-patch configs
+        # (custom/worklet/required_software) don't forward a meaningless key.
+        # (Normalization no longer strips it for every type — see issue #206.)
+        config_dict.pop("filter_type", None)
         _normalize_device_filters(config_dict)
 
     # device_filters_enabled is load-bearing: the live API silently ignores an
@@ -647,6 +677,55 @@ def _deep_merge_dicts(
         else:
             merged[key] = deepcopy(override_value)
     return merged
+
+
+# POST /policies returns 201 with an empty body (no id), so the created policy's
+# id is resolved by listing and matching its name. /policies is ordered by name
+# (not recency), so all pages are scanned and the newest (max-id) match wins.
+_CREATED_POLICY_LOOKUP_PAGE_SIZE = 250
+_CREATED_POLICY_LOOKUP_MAX_PAGES = 40
+
+
+async def _resolve_created_policy_id(
+    client: AutomoxClient, org_id: int, name: str | None
+) -> int | None:
+    """Resolve a just-created policy's id by name within the org.
+
+    Best-effort: ``POST /policies`` returns 201 with an empty body, so the new
+    id is not in the response. We list the org's policies and match the
+    caller-supplied name, returning the highest matching id (the newest, since
+    the list is name-ordered, not recency-ordered). Returns ``None`` when the
+    name is missing, no policy matches, or the lookup fails — preserving the
+    prior "policy_id is None" behavior rather than failing the create.
+    """
+    if not name:
+        return None
+
+    async def _fetch(page: int) -> Sequence[Any]:
+        resp = await client.get(
+            "/policies",
+            params={"o": org_id, "page": page, "limit": _CREATED_POLICY_LOOKUP_PAGE_SIZE},
+        )
+        return _extract_list(resp)
+
+    try:
+        policies = await parallel_paginate(
+            _fetch,
+            page_size=_CREATED_POLICY_LOOKUP_PAGE_SIZE,
+            max_pages=_CREATED_POLICY_LOOKUP_MAX_PAGES,
+        )
+    except (AutomoxAPIError, ValueError, TypeError, KeyError) as exc:
+        logger.debug("Failed to resolve created policy id for name=%r: %s", name, exc)
+        return None
+
+    matching = [
+        int(policy["id"])
+        for policy in policies
+        if isinstance(policy, Mapping)
+        and policy.get("name") == name
+        and isinstance(policy.get("id"), int)
+    ]
+    return max(matching) if matching else None
 
 
 def _extract_policy_id_from_response(response: Any) -> int | None:
@@ -841,6 +920,13 @@ async def apply_policy_changes(
                 entry["status"] = "created"
                 entry["response"] = response_data
                 policy_id = _extract_policy_id_from_response(response_data)
+                if policy_id is None:
+                    # POST /policies returns 201 with an empty body (verified
+                    # against the live API + spec), so the new id is not in the
+                    # response — resolve it by name within the org.
+                    policy_id = await _resolve_created_policy_id(
+                        client, resolved_org_id, payload.get("name")
+                    )
                 if policy_id is not None:
                     entry["policy_id"] = policy_id
                     try:

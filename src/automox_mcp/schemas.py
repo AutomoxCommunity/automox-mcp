@@ -129,6 +129,15 @@ class PolicyDefinition(BaseModel):
         None,
         description="Policy configuration block exactly as expected by Automox.",
     )
+    schedule: dict[str, Any] | None = Field(
+        None,
+        description=(
+            "Convenience schedule helper, expanded server-side into the "
+            "schedule_days/schedule_time bitmask fields, e.g. "
+            "{'days': ['monday', 'wednesday'], 'time': '02:00'}. Provide this OR the "
+            "schedule_days/schedule_time fields directly."
+        ),
+    )
     schedule_days: int | None = Field(
         None,
         ge=0,

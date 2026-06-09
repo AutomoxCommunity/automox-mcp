@@ -162,13 +162,20 @@ def register(server: FastMCP) -> None:
                 "options": {
                     "all": "Patch all available software — no filtering",
                     "filter": (
-                        "Patch specific software matching name patterns in configuration.filters"
+                        "Patch by name pattern or severity. Pair with configuration.filter_type: "
+                        "'include' (Patch Only the matching software), 'exclude' (Patch All "
+                        "Except), or 'severity' (Patch by Severity)"
                     ),
-                    "severity": (
-                        "Patch only packages matching the severity in configuration.severity"
-                    ),
-                    "custom": "Custom patch selection logic",
+                    "manual": "Manually approve each patch",
+                    "advanced": "Advanced patch policy",
                 },
+                "note": (
+                    "configuration.filter_type is required by the API on every patch policy. "
+                    "For patch_rule='filter' it is 'include'/'exclude'/'severity'; for "
+                    "all/manual/advanced it is 'all'. 'severity' is a filter_type, NOT a "
+                    "patch_rule — 'Patch by Severity' = patch_rule='filter' + "
+                    "filter_type='severity' + a severity_filter list."
+                ),
             },
             "package_fields": {
                 "description": (

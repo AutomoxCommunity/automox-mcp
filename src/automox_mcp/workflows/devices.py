@@ -14,6 +14,7 @@ from ..client import AutomoxAPIError, AutomoxClient
 from ..utils.pagination import parallel_paginate
 from ..utils.response import normalize_status as _normalize_status
 from ..utils.response import require_org_id
+from ..utils.sanitize import CODE_BEARING_FIELDS
 from .device_inventory import get_device_inventory
 
 logger = logging.getLogger(__name__)
@@ -191,14 +192,10 @@ _POLICY_STATUS_LIMIT = 12
 _POLICY_ASSIGNMENTS_LIMIT = 10
 _SANITIZED_SEQUENCE_LIMIT = 5
 _SANITIZED_STRING_LIMIT = 400
-_SCRIPT_FIELDS = {
-    "evaluation_code",
-    "remediation_code",
-    "installation_code",
-    "script",
-    "powershell_script",
-    "powershellScript",
-}
+# Canonical "fields that carry code" set lives in utils.sanitize (which also
+# exempts them from response sanitization). Imported here for payload-size
+# trimming so the two definitions can't drift apart.
+_SCRIPT_FIELDS = CODE_BEARING_FIELDS
 _DETAIL_KEY_MAP = {
     "MODEL": "model",
     "OS": "os_name",

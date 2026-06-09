@@ -230,6 +230,42 @@ _PRESERVE_PREFIX_FIELDS: frozenset[str] = frozenset(
     }
 )
 
+# Code-bearing fields (worklet/policy scripts and installer commands). These
+# carry shell/PowerShell/TypeScript source whose syntax the structural mutators
+# corrupt: markdown-link stripping rewrites `[bool](...)` casts to `bool`, HTML
+# stripping eats `<...>` (here-strings, heredocs, `[xml]` literals), code-fence
+# removal deletes fenced examples in notes, and prefix-stripping deletes code
+# lines that start like an instruction (`Write-`, `Do {`, `# NOTE:`). On these
+# fields we apply ONLY the syntax-neutral defenses (Unicode normalization +
+# invisible/zero-width-char stripping). Safe to relax because sanitization here
+# is display-only — outbound request bodies are never sanitized (see
+# `as_tool_response`), so the stored code is unaffected; the goal is just to
+# avoid showing the model broken code. This is also the canonical "fields that
+# carry code" set, imported by ``workflows.devices`` for payload-size trimming.
+#
+# Limitation: the exemption is keyed on the dict KEY — ``sanitize_dict`` passes
+# ``field_name`` only for Mapping values, not bare list items, and drops it past
+# the max recursion depth. Code carried as a bare list element, or nested below
+# ``_MAX_SANITIZE_DEPTH``, is NOT exempt. Every current read path surfaces code
+# as a dict value at shallow depth (e.g. ``data.policy.configuration.
+# evaluation_code``), so this is a constraint for future response shapes, not a
+# live gap.
+CODE_BEARING_FIELDS: frozenset[str] = frozenset(
+    {
+        "evaluation_code",
+        "remediation_code",
+        "installation_code",
+        "script",
+        "powershell_script",
+        "powershellScript",
+    }
+)
+
+# Case-insensitive lookup for the exemption check in ``sanitize_for_llm``
+# (``CODE_BEARING_FIELDS`` keeps original casing — e.g. ``powershellScript`` —
+# because ``workflows.devices`` matches raw API keys exactly).
+_CODE_FIELDS_LOWER: frozenset[str] = frozenset(f.lower() for f in CODE_BEARING_FIELDS)
+
 # ---------------------------------------------------------------------------
 # Core sanitization functions
 # ---------------------------------------------------------------------------
@@ -238,7 +274,12 @@ _PRESERVE_PREFIX_FIELDS: frozenset[str] = frozenset(
 def sanitize_for_llm(text: str, *, field_name: str | None = None) -> str:
     """Sanitize a single string value.
 
-    Steps applied universally (all string fields):
+    Code-bearing fields (``field_name`` in ``CODE_BEARING_FIELDS``) are exempt
+    from steps 1-5 below and get only the syntax-neutral defenses (NFKC +
+    invisible-char stripping) — the structural mutators corrupt shell/PowerShell
+    syntax (issue #206).
+
+    Steps applied to other string fields:
       1. Strip markdown image syntax
       2. Strip markdown link syntax
       3. Remove fenced code blocks with shell/script commands
@@ -249,6 +290,17 @@ def sanitize_for_llm(text: str, *, field_name: str | None = None) -> str:
     """
     if not text:
         return text
+
+    # Code-bearing fields: exempt from the structural mutators and
+    # prefix-stripping, which corrupt legitimate shell/PowerShell/TS syntax
+    # (issue #206). Apply only the syntax-neutral defenses — Unicode NFKC
+    # normalization (defeats homoglyph lookalikes) and invisible/zero-width
+    # char stripping — and preserve all whitespace (indentation is meaningful
+    # in code). Display-only: outbound bodies are never sanitized, so stored
+    # code is unaffected regardless.
+    if field_name is not None and field_name.lower() in _CODE_FIELDS_LOWER:
+        normalized = unicodedata.normalize("NFKC", text)
+        return _INVISIBLE_CHARS_RE.sub("", normalized)
 
     # Fast-path: short ASCII strings with no markdown/HTML/zero-width triggers
     # can only ever match the instruction-prefix regex. A cheap leading-char
@@ -355,6 +407,7 @@ def sanitize_dict(data: Any, *, _depth: int = 0) -> Any:
 # ---------------------------------------------------------------------------
 
 __all__ = [
+    "CODE_BEARING_FIELDS",
     "is_sanitization_enabled",
     "sanitize_dict",
     "sanitize_for_llm",

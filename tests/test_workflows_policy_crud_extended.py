@@ -180,8 +180,13 @@ def test_normalize_software_name_converted_to_filters() -> None:
     assert "software_name" not in config
 
 
-def test_normalize_filter_type_stripped_from_configuration() -> None:
-    """'filter_type' is removed from configuration during normalization."""
+def test_normalize_preserves_filter_type_in_configuration() -> None:
+    """filter_type is preserved through normalization.
+
+    The live API requires configuration.filter_type on patch-policy create for
+    every patch_rule; stripping it caused a 400 ("filter_type field is
+    required") — issue #206. A caller-supplied value must survive normalization.
+    """
     ops = [
         {
             "action": "create",
@@ -191,14 +196,14 @@ def test_normalize_filter_type_stripped_from_configuration() -> None:
                 "configuration": {
                     "patch_rule": "filter",
                     "filters": ["*Chrome*"],
-                    "filter_type": "include",
+                    "filter_type": "exclude",
                 },
             },
         }
     ]
     result = normalize_policy_operations_input(ops)
     config = result[0]["policy"]["configuration"]
-    assert "filter_type" not in config
+    assert config["filter_type"] == "exclude"
 
 
 def test_normalize_device_filters_dict_format_removed() -> None:
@@ -443,6 +448,76 @@ def test_coerce_defaults_patch_filter_rule_auto_detected() -> None:
     assert any("Auto-set patch_rule" in w for w in warnings)
 
 
+def test_coerce_defaults_filter_type_all_for_patch_all() -> None:
+    """patch_rule='all' gets filter_type='all' (issue #206 — the API requires
+    filter_type on every patch policy; omitting it 400s)."""
+    payload: dict[str, Any] = {
+        "policy_type_name": "patch",
+        "name": "P",
+        "configuration": {"patch_rule": "all"},
+    }
+    _coerce_policy_payload_defaults(payload)
+    assert payload["configuration"]["filter_type"] == "all"
+
+
+def test_coerce_defaults_filter_type_all_for_manual_and_advanced() -> None:
+    """The 'all' default applies to every non-filter patch_rule."""
+    for rule in ("manual", "advanced"):
+        payload: dict[str, Any] = {
+            "policy_type_name": "patch",
+            "name": "P",
+            "configuration": {"patch_rule": rule},
+        }
+        _coerce_policy_payload_defaults(payload)
+        assert payload["configuration"]["filter_type"] == "all", rule
+
+
+def test_coerce_defaults_forces_filter_type_all_on_non_filter_rule() -> None:
+    """filter_type is forced to 'all' for non-filter rules, and stale filter-only
+    keys are dropped.
+
+    include/exclude/severity are filter-rule selectors that are meaningless
+    without `filters`, so a non-filter rule always normalizes to 'all'. This
+    also closes the merge-update hole where switching an existing 'filter'
+    policy to 'all' would otherwise carry the old filter_type + filters through.
+    """
+    payload: dict[str, Any] = {
+        "policy_type_name": "patch",
+        "name": "P",
+        "configuration": {
+            "patch_rule": "all",
+            "filter_type": "exclude",
+            "filters": ["*Chrome*"],
+        },
+    }
+    _coerce_policy_payload_defaults(payload)
+    assert payload["configuration"]["filter_type"] == "all"
+    assert "filters" not in payload["configuration"]
+
+
+def test_coerce_defaults_strips_filter_type_on_non_patch_policy() -> None:
+    """filter_type is patch-only — a stray one on a non-patch config is dropped
+    (it was previously stripped for every type during normalization)."""
+    payload: dict[str, Any] = {
+        "policy_type_name": "custom",
+        "name": "P",
+        "configuration": {"filter_type": "include", "evaluation_code": "echo hi"},
+    }
+    _coerce_policy_payload_defaults(payload)
+    assert "filter_type" not in payload["configuration"]
+
+
+def test_coerce_defaults_filter_rule_keeps_include_default() -> None:
+    """The filter branch is unchanged: filter_type still defaults to 'include'."""
+    payload: dict[str, Any] = {
+        "policy_type_name": "patch",
+        "name": "P",
+        "configuration": {"patch_rule": "filter", "filters": ["*Chrome*"]},
+    }
+    _coerce_policy_payload_defaults(payload)
+    assert payload["configuration"]["filter_type"] == "include"
+
+
 def test_coerce_defaults_schedule_frequency_warning() -> None:
     """Unknown 'frequency' key inside schedule block produces a warning."""
     payload: dict[str, Any] = {
@@ -536,10 +611,67 @@ async def test_apply_policy_changes_real_create_fetches_policy_after_create() ->
 
 
 @pytest.mark.asyncio
-async def test_apply_policy_changes_create_no_policy_id_in_response() -> None:
-    """When POST response contains no policy ID, policy_id is set to None."""
+async def test_apply_policy_changes_create_resolves_policy_id_by_name() -> None:
+    """POST /policies returns 201 with an empty body (no id), so the new policy's
+    id is resolved by listing and matching its name within the org (gap surfaced
+    by the #206 smoke round-trip). The newest (max-id) name match wins, and the
+    created policy is then fetched back."""
     client = StubClient(
-        post_responses={"/policies": [{}]},  # empty response — no id
+        post_responses={"/policies": [{}]},  # 201, empty body — no id returned
+        get_responses={
+            # Registered before the "/policies" list so StubClient's startswith
+            # routing resolves the specific fetch path first.
+            "/policies/850": [
+                {
+                    "id": 850,
+                    "name": "New Policy",
+                    "configuration": {"patch_rule": "all", "filter_type": "all"},
+                }
+            ],
+            # Name-resolution list (org-scoped, ordered by name); two ids share
+            # the name to prove max-id wins.
+            "/policies": [
+                [
+                    {"id": 200, "name": "New Policy"},
+                    {"id": 850, "name": "New Policy"},
+                    {"id": 999, "name": "Unrelated"},
+                ]
+            ],
+        },
+        org_id=555,
+    )
+
+    result = await apply_policy_changes(
+        cast(AutomoxClient, client),
+        org_id=555,
+        operations=[
+            {
+                "action": "create",
+                "policy": {
+                    "name": "New Policy",
+                    "policy_type_name": "patch",
+                    "configuration": {"patch_rule": "all"},
+                    "schedule": {"days": ["monday"], "time": "02:00"},
+                    "server_groups": [],
+                },
+            }
+        ],
+        preview=False,
+    )
+
+    op = result["data"]["operations"][0]
+    assert op["status"] == "created"
+    assert op["policy_id"] == 850
+    assert op["policy"]["configuration"]["filter_type"] == "all"
+
+
+@pytest.mark.asyncio
+async def test_apply_policy_changes_create_policy_id_none_when_name_not_found() -> None:
+    """When the create response has no id AND no listed policy matches the name,
+    policy_id stays None (graceful — the create still succeeded)."""
+    client = StubClient(
+        post_responses={"/policies": [{}]},
+        get_responses={"/policies": [[{"id": 1, "name": "Some Other Policy"}]]},
         org_id=555,
     )
 

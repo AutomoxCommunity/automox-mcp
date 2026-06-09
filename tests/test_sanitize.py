@@ -412,3 +412,66 @@ class TestStripHTML:
 
     def test_data_uri_src_suppressed(self):
         assert _strip_html('<a href="data:text/html,evil">x</a>tail') == "tail"
+
+
+# ---------------------------------------------------------------------------
+# Code-bearing field exemption (issue #206)
+# ---------------------------------------------------------------------------
+
+
+class TestCodeBearingFieldExemption:
+    """Code fields (evaluation_code/remediation_code/installation_code/script/
+    powershell_script/powershellScript) are exempt from the structural mutators
+    and prefix-stripping so legitimate shell/PowerShell syntax isn't corrupted —
+    only the syntax-neutral defenses (NFKC + invisible-char) still apply."""
+
+    def test_powershell_bool_cast_preserved(self):
+        code = "$x = [bool](Get-NetFirewallRule -DisplayName $n)"
+        assert sanitize_for_llm(code, field_name="evaluation_code") == code
+
+    def test_type_cast_family_preserved(self):
+        for code in ("$v = [int]($a + $b)", '$arr = [string[]]("a","b")'):
+            assert sanitize_for_llm(code, field_name="remediation_code") == code
+
+    def test_heredoc_and_angle_brackets_preserved(self):
+        code = "cat <<EOF\nhello\n<value>\nEOF"
+        assert sanitize_for_llm(code, field_name="installation_code") == code
+
+    def test_xml_here_string_preserved(self):
+        code = "[xml]$doc = '<root><child/></root>'"
+        assert sanitize_for_llm(code, field_name="evaluation_code") == code
+
+    def test_fenced_block_in_code_field_preserved(self):
+        code = "```powershell\nWrite-Output 1\n```"
+        assert sanitize_for_llm(code, field_name="script") == code
+
+    def test_camelcase_field_name_matched(self):
+        code = "$x = [bool](Test-Path C:\\foo)"
+        assert sanitize_for_llm(code, field_name="powershellScript") == code
+
+    def test_instruction_prefix_not_stripped_in_code(self):
+        code = "Write-Host hi\nDo {\n  echo x\n}"
+        assert sanitize_for_llm(code, field_name="evaluation_code") == code
+
+    def test_zero_width_char_still_stripped_in_code(self):
+        # Syntax-neutral defense retained: zero-width chars are removed.
+        assert sanitize_for_llm("$x =​ 1", field_name="evaluation_code") == "$x = 1"
+
+    def test_nfkc_normalization_still_applied_in_code(self):
+        # Homoglyph defense retained: full-width letters normalize to ASCII.
+        assert sanitize_for_llm("ａｂ", field_name="evaluation_code") == "ab"
+
+    def test_non_code_field_with_same_content_still_sanitized(self):
+        # A non-code field carrying link-shaped text is still de-linked.
+        assert sanitize_for_llm("[bool](x)", field_name="description") == "bool"
+
+    def test_sanitize_dict_exempts_code_field_only(self):
+        payload = {
+            "evaluation_code": "$x = [bool](Get-Service Spooler)",
+            "notes": "See [docs](http://x) for details",
+        }
+        out = sanitize_dict(payload)
+        assert out["evaluation_code"] == "$x = [bool](Get-Service Spooler)"
+        # The prose field is still sanitized (link stripped to its text).
+        assert "[docs](http://x)" not in out["notes"]
+        assert "docs" in out["notes"]

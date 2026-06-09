@@ -143,6 +143,13 @@ def record(name: str, passed: bool, detail: str = "") -> None:
     _results.append((name, passed, detail))
 
 
+def _throwaway_name() -> str:
+    """Unique name for a self-cleaning write round-trip. The shared
+    'mcp-smoke-delete-me-' prefix flags the object as smoke residue if cleanup
+    ever fails, so every throwaway must go through here."""
+    return f"mcp-smoke-delete-me-{uuid.uuid4().hex[:8]}"
+
+
 def summary() -> int:
     total = len(_results)
     passed = sum(1 for _, p, _ in _results if p)
@@ -1381,7 +1388,7 @@ async def run_readonly_tools() -> None:
         # self-cleaning write: a uniquely-named throwaway search is always
         # deleted (best-effort) even if an assertion fails, so it leaves no
         # residue in the tenant.
-        ss_name = f"mcp-smoke-delete-me-{uuid.uuid4().hex[:8]}"
+        ss_name = _throwaway_name()
         ss_query = {
             "filters": [
                 {
@@ -1447,7 +1454,7 @@ async def run_readonly_tools() -> None:
         # Asserts CORRECTNESS, not just 200: (a) the create actually succeeds (the
         # API no longer rejects a non-filter patch policy), and (b) the STORED
         # configuration carries filter_type="all" (the contract the fix targets).
-        pol_name = f"mcp-smoke-delete-me-{uuid.uuid4().hex[:8]}"
+        pol_name = _throwaway_name()
         patch_all_op = {
             "action": "create",
             "policy": {
@@ -1509,7 +1516,7 @@ async def run_readonly_tools() -> None:
         # Inert + self-cleaning, same as 78c. NB: the builder sets no
         # is_patch_tuesday/patch_tuesday_offset; a 400 here would reveal the
         # live API requires them for filter-type configs.
-        sev_name = f"mcp-smoke-delete-me-{uuid.uuid4().hex[:8]}"
+        sev_name = _throwaway_name()
         all_severities = ["no_known_cves", "none", "unknown", "low", "medium", "high", "critical"]
         severity_op = {
             "action": "create",

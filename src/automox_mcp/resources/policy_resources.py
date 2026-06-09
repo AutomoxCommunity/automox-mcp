@@ -324,9 +324,10 @@ def register_policy_resources(server: FastMCP) -> None:
                             "str - REQUIRED - One of: 'all', 'filter', 'manual', 'advanced'"
                         ),
                         "filter_type": (
-                            "str - REQUIRED - 'all' for patch_rule all/manual/advanced; for "
-                            "'filter' use 'include' (Patch Only), 'exclude' (Patch All Except), "
-                            "or 'severity' (Patch by Severity). Auto-set when omitted"
+                            "str - Required by the Automox API; the MCP auto-sets it if you omit "
+                            "it. Value is 'all' for patch_rule all/manual/advanced; for 'filter' "
+                            "it is 'include' (Patch Only), 'exclude' (Patch All Except), or "
+                            "'severity' (Patch by Severity)"
                         ),
                         "auto_patch": "bool - REQUIRED - Automatically apply patches",
                         "auto_reboot": "bool - REQUIRED - Automatically reboot after patching",

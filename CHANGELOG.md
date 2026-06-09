@@ -7,10 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added
-
-- **`docs/release-notes.md` — a curated, customer-facing source layer.** A customer-safe translation of the changelog (forward-framed, no internal refs, no tenant specifics, sensitive security/compliance items omitted) that Claude sessions consume to generate release emails and "what's new" summaries. It is not customer-published documentation and does not replace the product docs. Carries its own authoring rules, entry template, and a per-release contributor protocol; wired into the `CLAUDE.md` release flow so it stays current.
-
 ## [2.2.0] - 2026-06-08
 
 **The MCP Apps release.** Ships five interactive `ui://` **MCP App** surfaces (the `io.modelcontextprotocol/ui` extension) on a new structured-output (`outputSchema`) foundation: a read-only compliance-triage pilot, plus patch-approval, policy blast-radius, remediation-apply, and RBAC access-certification review flows. Write-flow Apps drive the **existing gated tools** through the host's `CallTool` confirmation — no new tools and no new gates — and degrade gracefully to structured output on non-Apps hosts; every App UI is self-contained (inline JS/CSS, no external/CDN loads) under the host's deny-all CSP. The model-facing tool set is unchanged (133 tools / 85 read / 48 write); MCP resources grow 9 → 14. Also in this release: `outputSchema` on the compound and report tools (FastMCP validates returns at runtime, so the models are deliberately permissive), a demand-driven schema policy (`CLAUDE.md`), `maybe_format_markdown` now returns a `ToolResult` so markdown output and an object schema can coexist, and a `list_zone_users` secret-redaction hardening (V-182).

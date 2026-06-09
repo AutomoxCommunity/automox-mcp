@@ -193,8 +193,10 @@ def normalize_policy_operations_input(raw_operations: Sequence[Any]) -> list[dic
             # requires configuration.filter_type on patch-policy create for
             # every patch_rule (not just 'filter') — stripping it caused a 400
             # ("filter_type field is required") for patch_rule='all' (issue
-            # #206). A caller-supplied value is preserved and normalized by the
-            # payload builder; the builder defaults it when absent.
+            # #206). A caller-supplied value flows through to the payload builder
+            # (_coerce_policy_payload_defaults), which sets the final value per
+            # patch_rule: forced to 'all' for non-filter rules; for 'filter',
+            # honored/defaulted ('include' when omitted) or 'severity'.
 
             policy["configuration"] = config
 

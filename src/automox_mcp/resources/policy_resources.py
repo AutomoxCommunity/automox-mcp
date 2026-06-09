@@ -87,10 +87,8 @@ def register_policy_resources(server: FastMCP) -> None:
                 "description": "Apply only patches of a given severity (e.g., critical)",
                 "note": (
                     "'Patch by Severity' is patch_rule='filter' + filter_type='severity' with a "
-                    "severity_filter list — there is NO patch_rule='severity'. NB: "
-                    "apply_policy_changes does not yet auto-construct the severity_filter field; "
-                    "until that is wired, create severity policies via clone_policy or the "
-                    "console. The shape below is the target API structure."
+                    "severity_filter list — there is NO patch_rule='severity'. Allowed severities: "
+                    "no_known_cves, none, unknown, low, medium, high, critical."
                 ),
                 "template": {
                     "action": "create",
@@ -361,11 +359,6 @@ def register_policy_resources(server: FastMCP) -> None:
                             "server_groups": [366711],
                         },
                         "critical_patches": {
-                            "_note": (
-                                "Target API shape for 'Patch by Severity'. apply_policy_changes "
-                                "does not yet construct severity_filter — create severity "
-                                "policies via clone_policy or the console for now."
-                            ),
                             "name": "Critical Patches - Weekly",
                             "organization_id": 123456,
                             "policy_type_name": "patch",

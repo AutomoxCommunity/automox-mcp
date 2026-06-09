@@ -268,6 +268,39 @@ def _normalize_filters(filters: Sequence[Any], *, exact: bool = False) -> list[s
     return normalized
 
 
+# severity_filter values accepted by the Automox API for a Patch-by-Severity
+# policy. Sourced from the spec's PatchFilterPolicyConfiguration.severity_filter
+# enum ("Automox Console API.json", lines 107160-107168), NOT invented — the
+# legacy "important"/"moderate" names are not in the enum. Verified accepted by a
+# live create-probe before release (the verification tenant has no severity policy
+# to read from).
+_ALLOWED_SEVERITIES: frozenset[str] = frozenset(
+    {"no_known_cves", "none", "unknown", "low", "medium", "high", "critical"}
+)
+
+
+def _normalize_severity_filter(value: Any) -> list[str]:
+    """Normalize a severity_filter list: lowercase, strip, dedupe, validate.
+
+    Used for Patch-by-Severity policies (patch_rule='filter' + filter_type='severity').
+    Rejects a value outside the documented enum with the allowed set so the caller
+    can self-correct rather than getting an opaque API 400.
+    """
+    normalized: list[str] = []
+    for item in _ensure_list(value):
+        text = str(item).strip().lower()
+        if not text:
+            continue
+        if text not in _ALLOWED_SEVERITIES:
+            allowed = ", ".join(sorted(_ALLOWED_SEVERITIES))
+            raise ValueError(
+                f"Unsupported severity '{item}' in severity_filter. Expected one of: {allowed}."
+            )
+        if text not in normalized:
+            normalized.append(text)
+    return normalized
+
+
 def _normalize_schedule_time(value: Any) -> str | None:
     if value is None:
         return None
@@ -554,34 +587,49 @@ def _coerce_policy_payload_defaults(payload: dict[str, Any]) -> list[str]:
         config_dict["patch_rule"] = patch_rule
 
         if patch_rule == "filter":
-            available_filters = _ensure_list(config_dict.get("filters"))
-            # Support convenience keys filter_name / filter_names
-            available_filters.extend(_ensure_list(config_dict.pop("filter_name", None)))
-            available_filters.extend(_ensure_list(config_dict.pop("filter_names", None)))
-            normalized_filters = _normalize_filters(available_filters)
-            if not normalized_filters:
-                # FIXME(severity-filter): "Patch by Severity" is patch_rule='filter'
-                # + filter_type='severity' + a severity_filter list (NOT name
-                # patterns). This builder can't yet construct it — it requires a
-                # name `filters` pattern and never populates severity_filter. Until
-                # that's wired, severity policies must be made via clone_policy or
-                # the console (the resource templates say so). To support it here:
-                # treat a non-empty severity_filter as satisfying this check when
-                # filter_type=='severity', and normalize/forward severity_filter.
-                # Needs live verification against a tenant that has severity
-                # policies (this one has none) before shipping.
-                raise ValueError(
-                    "Patch policies using patch_rule='filter' require at least one "
-                    "filter pattern. Provide configuration.filters (e.g., "
-                    "['*Google Chrome*']) or filter_name/filter_names."
-                )
-            config_dict["filters"] = normalized_filters
             filter_type_value = config_dict.get("filter_type")
-            config_dict["filter_type"] = (
+            filter_type = (
                 filter_type_value.strip().lower()
                 if isinstance(filter_type_value, str) and filter_type_value.strip()
-                else "include"
+                else None
             )
+
+            if filter_type == "severity":
+                # Patch by Severity: the selector is a severity_filter list, not
+                # name patterns. (filter_type='severity' pairs with
+                # patch_rule='filter' — there is no patch_rule='severity'.)
+                normalized_severity = _normalize_severity_filter(config_dict.get("severity_filter"))
+                if not normalized_severity:
+                    raise ValueError(
+                        "Patch policies using filter_type='severity' require a non-empty "
+                        "severity_filter (e.g., ['critical']). Allowed: "
+                        + ", ".join(sorted(_ALLOWED_SEVERITIES))
+                        + "."
+                    )
+                config_dict["severity_filter"] = normalized_severity
+                config_dict["filter_type"] = "severity"
+                # Name filters don't apply to a severity policy — drop any strays
+                # so a rule/type switch can't carry them through.
+                config_dict.pop("filters", None)
+                config_dict.pop("filter_name", None)
+                config_dict.pop("filter_names", None)
+            else:
+                available_filters = _ensure_list(config_dict.get("filters"))
+                # Support convenience keys filter_name / filter_names
+                available_filters.extend(_ensure_list(config_dict.pop("filter_name", None)))
+                available_filters.extend(_ensure_list(config_dict.pop("filter_names", None)))
+                normalized_filters = _normalize_filters(available_filters)
+                if not normalized_filters:
+                    raise ValueError(
+                        "Patch policies using patch_rule='filter' require at least one "
+                        "filter pattern. Provide configuration.filters (e.g., "
+                        "['*Google Chrome*']) or filter_name/filter_names. For a "
+                        "severity policy, set filter_type='severity' + severity_filter."
+                    )
+                config_dict["filters"] = normalized_filters
+                config_dict["filter_type"] = filter_type if filter_type else "include"
+                # An include/exclude policy doesn't carry a severity_filter.
+                config_dict.pop("severity_filter", None)
         else:
             # Non-filter rules (all/manual/advanced) don't use name/severity
             # selectors. Drop any filter-only keys so a rule switch (e.g. a

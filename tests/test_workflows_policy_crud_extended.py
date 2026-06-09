@@ -16,6 +16,7 @@ from automox_mcp.workflows.policy_crud import (
     _normalize_policy_type,
     _normalize_schedule_days_input,
     _normalize_schedule_time,
+    _normalize_severity_filter,
     apply_policy_changes,
     execute_policy,
     normalize_policy_operations_input,
@@ -516,6 +517,103 @@ def test_coerce_defaults_filter_rule_keeps_include_default() -> None:
     }
     _coerce_policy_payload_defaults(payload)
     assert payload["configuration"]["filter_type"] == "include"
+
+
+# ---------------------------------------------------------------------------
+# Patch by Severity (patch_rule='filter' + filter_type='severity')
+# ---------------------------------------------------------------------------
+
+
+def test_normalize_severity_filter_lowercases_dedupes() -> None:
+    assert _normalize_severity_filter(["CRITICAL", "High", "critical"]) == ["critical", "high"]
+
+
+def test_normalize_severity_filter_drops_blanks() -> None:
+    assert _normalize_severity_filter(["", "  ", "low"]) == ["low"]
+
+
+def test_normalize_severity_filter_accepts_full_enum() -> None:
+    full = ["no_known_cves", "none", "unknown", "low", "medium", "high", "critical"]
+    assert _normalize_severity_filter(full) == full
+
+
+def test_normalize_severity_filter_rejects_unknown_value() -> None:
+    # 'important'/'moderate' are NOT in the API enum — must be rejected, not aliased.
+    with pytest.raises(ValueError, match="Unsupported severity 'important'"):
+        _normalize_severity_filter(["important"])
+
+
+def test_coerce_defaults_builds_severity_policy() -> None:
+    """filter_type='severity' uses severity_filter as the selector and does NOT
+    require name filters (the severity_filter feature)."""
+    payload: dict[str, Any] = {
+        "policy_type_name": "patch",
+        "name": "P",
+        "configuration": {
+            "patch_rule": "filter",
+            "filter_type": "severity",
+            "severity_filter": ["Critical", "high"],
+        },
+    }
+    _coerce_policy_payload_defaults(payload)
+    config = payload["configuration"]
+    assert config["filter_type"] == "severity"
+    assert config["severity_filter"] == ["critical", "high"]
+    assert "filters" not in config
+
+
+def test_coerce_defaults_severity_requires_nonempty_severity_filter() -> None:
+    payload: dict[str, Any] = {
+        "policy_type_name": "patch",
+        "name": "P",
+        "configuration": {"patch_rule": "filter", "filter_type": "severity"},
+    }
+    with pytest.raises(ValueError, match="require a non-empty severity_filter"):
+        _coerce_policy_payload_defaults(payload)
+
+
+def test_coerce_defaults_severity_drops_stray_name_filters() -> None:
+    """A type switch to 'severity' must not carry name filters through."""
+    payload: dict[str, Any] = {
+        "policy_type_name": "patch",
+        "name": "P",
+        "configuration": {
+            "patch_rule": "filter",
+            "filter_type": "severity",
+            "severity_filter": ["critical"],
+            "filters": ["*Chrome*"],
+        },
+    }
+    _coerce_policy_payload_defaults(payload)
+    assert "filters" not in payload["configuration"]
+
+
+def test_coerce_defaults_include_drops_stray_severity_filter() -> None:
+    """Conversely, an include/exclude policy must not carry a severity_filter."""
+    payload: dict[str, Any] = {
+        "policy_type_name": "patch",
+        "name": "P",
+        "configuration": {
+            "patch_rule": "filter",
+            "filters": ["*Chrome*"],
+            "severity_filter": ["critical"],
+        },
+    }
+    _coerce_policy_payload_defaults(payload)
+    config = payload["configuration"]
+    assert config["filter_type"] == "include"
+    assert "severity_filter" not in config
+
+
+def test_coerce_defaults_name_filter_still_required_for_non_severity() -> None:
+    """The name-filter requirement is unchanged for include/exclude rules."""
+    payload: dict[str, Any] = {
+        "policy_type_name": "patch",
+        "name": "P",
+        "configuration": {"patch_rule": "filter", "filter_type": "include"},
+    }
+    with pytest.raises(ValueError, match="require at least one"):
+        _coerce_policy_payload_defaults(payload)
 
 
 def test_coerce_defaults_schedule_frequency_warning() -> None:

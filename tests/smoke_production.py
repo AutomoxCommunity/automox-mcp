@@ -1499,6 +1499,75 @@ async def run_readonly_tools() -> None:
             else:
                 record("delete_policy (smoke cleanup)", True, "skipped — create failed (OK)")
 
+        # 78d. Patch-by-Severity WRITE round-trip (create → delete).
+        # Verifies apply_policy_changes can construct a severity policy
+        # (patch_rule='filter' + filter_type='severity' + severity_filter) — the
+        # contract has no live example (the tenant has zero severity policies), so
+        # this is the only check that the API accepts it. Sends the FULL spec enum
+        # in severity_filter to validate the whole vocabulary in one create, then
+        # asserts the API persisted filter_type='severity' and the severity_filter.
+        # Inert + self-cleaning, same as 78c. NB: the builder sets no
+        # is_patch_tuesday/patch_tuesday_offset; a 400 here would reveal the
+        # live API requires them for filter-type configs.
+        sev_name = f"mcp-smoke-delete-me-{uuid.uuid4().hex[:8]}"
+        all_severities = ["no_known_cves", "none", "unknown", "low", "medium", "high", "critical"]
+        severity_op = {
+            "action": "create",
+            "policy": {
+                "name": sev_name,
+                "policy_type_name": "patch",
+                "configuration": {
+                    "patch_rule": "filter",
+                    "filter_type": "severity",
+                    "severity_filter": all_severities,
+                    "auto_patch": False,
+                    "auto_reboot": False,
+                    "notify_user": False,
+                },
+                "schedule": {"days": ["monday"], "time": "03:00"},
+                "server_groups": [],
+                "notes": "mcp smoke throwaway — safe to delete",
+            },
+        }
+        created_sev = await _safe_call(
+            session, "apply_policy_changes", {"operations": [severity_op], "preview": False}
+        )
+        sev_ops = (created_sev or {}).get("data", {}).get("operations", []) if created_sev else []
+        sev_entry = sev_ops[0] if sev_ops else {}
+        new_sev_id = sev_entry.get("policy_id")
+        sev_config = sev_entry.get("policy", {}).get("configuration", {})
+        try:
+            record(
+                "apply_policy_changes (create patch-by-severity)",
+                bool(new_sev_id) and sev_entry.get("status") == "created",
+                f"id={new_sev_id} status={sev_entry.get('status')}",
+            )
+            # The API must persist filter_type='severity' and a non-empty
+            # severity_filter (subset of what we sent) — a wrong-but-200 store
+            # would mean the policy is a no-op.
+            stored_sev = sev_config.get("severity_filter")
+            record(
+                "apply_policy_changes severity_filter persisted",
+                sev_config.get("filter_type") == "severity"
+                and isinstance(stored_sev, list)
+                and len(stored_sev) > 0,
+                f"filter_type={sev_config.get('filter_type')!r} severity_filter={stored_sev!r}",
+            )
+        finally:
+            if new_sev_id:
+                deleted_sev = await _safe_call(session, "delete_policy", {"policy_id": new_sev_id})
+                record(
+                    "delete_policy (severity smoke cleanup)",
+                    bool(deleted_sev and deleted_sev.get("data", {}).get("deleted")),
+                    f"id={new_sev_id}",
+                )
+            else:
+                record(
+                    "delete_policy (severity smoke cleanup)",
+                    True,
+                    "skipped — create failed (OK)",
+                )
+
         # ---- Policy device-targeting ----
         log.info(f"\n{BOLD}Phase 4: Policy device-targeting{RESET}")
 

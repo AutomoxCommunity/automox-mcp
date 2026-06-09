@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.1] - 2026-06-09
+
 ### Added
 
 - **Create "Patch by Severity" policies via `apply_policy_changes`.** A patch policy with `configuration.patch_rule='filter'` + `filter_type='severity'` + a `severity_filter` list (e.g. `['critical']`) is now constructed correctly — previously the builder required a name-pattern `filters` and rejected any severity-only policy. `severity_filter` values are normalized (lowercased, de-duplicated) and validated against the API enum (`no_known_cves`, `none`, `unknown`, `low`, `medium`, `high`, `critical`); an unknown value is rejected with the allowed set rather than an opaque API error. Verified end-to-end against a live tenant (create→read-back→delete; the API persisted all seven severity values). Replaces the prior limitation that pointed severity policies to `clone_policy`/the console.

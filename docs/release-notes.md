@@ -1,5 +1,9 @@
 # Release notes
 
+### v2.2.1 — Create patch-by-severity policies (2026-06-09) [Feature]
+
+**Target patches by severity, straight from your assistant.** You can now create a "Patch by Severity" policy directly — for example, "patch only critical and high-severity updates" — choosing any combination of the platform's severity levels. Previously this policy type had to be built in the console or cloned from an existing policy; it is now a first-class create through the assistant, alongside patch-all and patch-by-name policies.
+
 ### v2.2.0 — Interactive in-host review surfaces (2026-06-08) [Feature]
 
 **Review and act on fleet posture visually, right inside your AI assistant.** This release adds five interactive surfaces that render directly in supported hosts: a compliance-triage dashboard, a patch-approval queue, a policy-change blast-radius preview, a remediation-apply review, and an RBAC access-certification review. Instead of reading a wall of text, operators see compliance state, affected devices, and pending decisions laid out visually — and for action-oriented flows they can act in-session, with every change still routed through the assistant's standard confirmation before anything is written. These are the server's first MCP App surfaces, bringing its MCP resources from 9 to 14.

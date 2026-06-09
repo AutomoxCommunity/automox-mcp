@@ -71,3 +71,17 @@ Unit tests here stub the upstream via `StubClient`: you feed a canned response a
 - **The publish run pauses for manual approval** — the `release` GitHub environment requires a reviewer (`ax-jkikta`). A tag push that "hangs" is waiting on that approval click, not broken; nothing publishes until it's approved. After publish, the `verify-publish` job installs the new version from PyPI and boots it.
 - Versions must match across **four** files — the `manifests` CI job enforces all of them: `pyproject.toml`, `server.json` (incl. `packages[].version`), `mcpb/manifest.json`, and `mcpb/pyproject.toml` (**both** its `version` *and* the `automox-mcp>=` dependency floor). Missing the last file is an easy mistake — the job rewrites these from the tag at publish, but they must already be in sync on `main`.
 - Capability/destructive-gating policy lives in `docs/api-coverage.md`; read it before adding any write/delete tool to pick the right safety tier.
+
+## `docs/release-notes.md` — customer-facing feature highlights
+
+`docs/release-notes.md` is a curated list of notable **features and capabilities**. Its **primary purpose is to inform customers** of what's new; **secondarily** it serves as source material for go-to-market (GTM) content. It is intentionally **not** a comprehensive record of changes — that is the role of `CHANGELOG.md`, which remains the authoritative, complete log of every change (features, fixes, security, and internal work). Highlights link to `CHANGELOG.md` for full detail rather than reproducing it.
+
+When adding a highlight:
+
+- **Scope is features and capabilities.** Bug fixes, dependency updates, security patches, and internal/CI work are recorded in `CHANGELOG.md`, not here. A release earns a highlight only when it introduces or meaningfully expands a customer-visible capability.
+- **Audience is customers first (GTM second).** Write benefit-first and in the present tense — what an operator can now do and why it matters.
+- **No internal references** (issue/PR numbers, file or symbol names, internal tooling) and **no tenant- or customer-specific data** (live device counts, query results, org names/IDs). Cite performance figures only as a qualified ballpark ("in testing").
+- **Security details and the full change history live in `CHANGELOG.md` and security advisories**, not here.
+- **Entry shape:** a bold headline + 1–3 sentences of value, an optional `Caveat:` (host requirement, support scope) and an optional `Upgrade:` (operator action for a breaking change), tagged `[Feature]` or `[Improvement]`.
+
+On each release, after the `CHANGELOG.md` entry: if the release introduces a notable feature or capability, add a highlight at the top of `docs/release-notes.md`; otherwise it stays in `CHANGELOG.md` only.

@@ -48,7 +48,7 @@ def register_policy_resources(server: FastMCP) -> None:
                     "action": "create",
                     "policy": {
                         "name": "Auto-Patch Google Chrome",
-                        "organization_id": 106820,
+                        "organization_id": 123456,
                         "policy_type_name": "patch",
                         "configuration": {
                             "patch_rule": "filter",
@@ -58,7 +58,7 @@ def register_policy_resources(server: FastMCP) -> None:
                             "notify_user": True,
                         },
                         "schedule": {"days": ["weekdays"], "time": "02:00"},
-                        "server_groups": [366711],
+                        "server_groups": [12345],
                         "notes": "Automatically patches Google Chrome on weekdays at 2 AM",
                     },
                 },
@@ -132,7 +132,7 @@ def register_policy_resources(server: FastMCP) -> None:
                     "action": "create",
                     "policy": {
                         "name": "Auto-Patch Firefox",
-                        "organization_id": 106820,
+                        "organization_id": 123456,
                         "policy_type_name": "patch",
                         "configuration": {
                             "filter_name": "Firefox",
@@ -141,7 +141,7 @@ def register_policy_resources(server: FastMCP) -> None:
                             "notify_user": True,
                         },
                         "schedule": {"days": ["weekdays"], "time": "02:00"},
-                        "server_groups": [366711],
+                        "server_groups": [12345],
                         "notes": "Automatically patches Firefox on weekdays at 2 AM",
                     },
                 },
@@ -342,7 +342,7 @@ def register_policy_resources(server: FastMCP) -> None:
                                 "days": ["weekdays"],
                                 "time": "02:00",
                             },
-                            "server_groups": [366711],
+                            "server_groups": [12345],
                         },
                         "critical_patches": {
                             "name": "Critical Patches - Weekly",

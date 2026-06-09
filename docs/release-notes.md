@@ -21,7 +21,7 @@ Caveat: Advanced Device Search is most reliable with an org-scoped API key; the 
 ### v2.0.0 — Capability and safety model; full published-API coverage (2026-06-01) [Feature]
 
 **Complete, principled coverage of the Automox platform — with safety built in.** This release establishes a clear capability model: the server wraps 100% of the published Console and Webhooks APIs, with the single deliberate exception of secret-exposing endpoints, which it never calls — 133 tools in total (85 read / 48 write). It adds single-device update, action-set management, installer upload to Required Software policies, and webhook-delivery troubleshooting. High-blast-radius destructive actions (fleet-scale operations, device deletion) follow a consistent, opt-in model: they are off by default and require explicit enablement, so an assistant can never trigger them by accident.
-Upgrade: Operators who enabled remediation execution via the older `AUTOMOX_MCP_ALLOW_REMEDIATION` flag must switch to `AUTOMOX_MCP_ALLOW_APPLY_REMEDIATION_ACTIONS`; fleet-wide Splashtop install/uninstall now requires its own opt-in flag. If a flag is unset the capability stays safely withheld.
+Upgrade: Operators who enabled remediation execution via the older `AUTOMOX_MCP_ALLOW_REMEDIATION` flag must switch to `AUTOMOX_MCP_ALLOW_APPLY_REMEDIATION_ACTIONS`; fleet-wide Splashtop install/uninstall now requires its own opt-in flag (`AUTOMOX_MCP_ALLOW_SPLASHTOP_BULK_INSTALL_UNINSTALL`). If a flag is unset the capability stays safely withheld.
 
 ### v1.2.0 — Major capability expansion (2026-05-30) [Feature]
 

@@ -1,5 +1,9 @@
 # Release notes
 
+### v2.2.2 — Trustworthy capability discovery (2026-06-10) [Improvement]
+
+**Your assistant now knows exactly which tools it can use in your session.** The capability-discovery tool reports live availability instead of a static catalog: tools withheld by an opt-in safety flag, read-only mode, or module filtering are marked unavailable, and each safety-gated tool names the exact setting that enables it — so the assistant routes around tools it can't call and can tell you precisely how to enable a capability you want. Discovery responses also carry self-checking totals, letting clients verify they've seen the complete inventory rather than silently missing a domain.
+
 ### v2.2.1 — Create patch-by-severity policies (2026-06-09) [Feature]
 
 **Target patches by severity, straight from your assistant.** You can now create a "Patch by Severity" policy directly — for example, "patch only critical and high-severity updates" — choosing any combination of the platform's severity levels. Previously this policy type had to be built in the console or cloned from an existing policy; it is now a first-class create through the assistant, alongside patch-all and patch-by-name policies.

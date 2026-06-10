@@ -2,6 +2,19 @@
 
 Complete reference for all 133 tools, 6 workflow prompts, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
 
+## At a Glance
+
+| Capability | Scope |
+|---|---|
+| **Tools** | **133** — 85 read, 48 write — across **18 domains** |
+| **API coverage** | **100%** of the published Automox Console API and Webhooks API ([coverage map](api-coverage.md)), with one deliberate exception: secret-exposing endpoints are never wrapped |
+| **Interactive MCP Apps** | **5** inline UI surfaces — compliance triage, patch-approval review, policy blast-radius review, remediation apply, RBAC access certification |
+| **MCP resources** | **14** — 9 reference datasets and schemas, plus the 5 App UIs |
+| **Workflow prompts** | **6** guided multi-step admin workflows |
+| **Safety** | MCP tool annotations on every tool; idempotency `request_id` on all 48 write tools; destructive operations tiered behind **4 opt-in env gates** |
+| **Output ergonomics** | Markdown-table mode on 64 read tools; canonical pagination block; compound tools with token-budget caps and follow-up hints |
+| **Enterprise** | OAuth 2.1/JWT or static-key endpoint auth, correlation IDs, DNS-rebinding protection, security response headers, token-budget estimation |
+
 > **Tip:** You don't need to memorize this. Call `discover_capabilities` from your AI assistant to get a live summary of available tools organized by domain.
 
 ## Table of Contents
@@ -26,6 +39,8 @@ Complete reference for all 133 tools, 6 workflow prompts, MCP resources, paramet
 - [Capability Discovery (1 tool)](#capability-discovery-1-tool)
 - [Workflow Prompts (6 prompts)](#workflow-prompts-6-prompts)
 - [MCP Resources](#mcp-resources)
+- [Tool Safety Annotations](#tool-safety-annotations)
+- [Pagination](#pagination)
 - [Tool Parameters](#tool-parameters)
 - [Enterprise Features](#enterprise-features)
 
@@ -277,7 +292,7 @@ Tools may attach an interactive MCP App (the `io.modelcontextprotocol/ui` extens
 
 Every tool includes [MCP Tool Annotations](https://modelcontextprotocol.io/specification/2025-11-25/server/tools#annotations) that declare its behavior to MCP clients. Clients can use these hints for confirmation dialogs, UI indicators, and safety guardrails.
 
-| Hint | Description | Read-only tools (58) | Write tools (22) |
+| Hint | Description | Read-only tools (85) | Write tools (48) |
 |---|---|---|---|
 | `readOnlyHint` | Tool does not modify any state | `true` | `false` |
 | `destructiveHint` | Tool may perform destructive operations | `false` | `true` |
@@ -371,8 +386,8 @@ Most tools accept optional parameters for filtering and pagination:
 
 ### Special Parameters
 
-- **Write tools** (all 22): accept an optional `request_id` parameter (UUID string) for idempotency. Supplying the same `request_id` on a repeat call returns the cached response without re-executing the operation (TTL: 300 seconds). Write tools are also identifiable by their `annotations` metadata (`readOnlyHint: false`, `destructiveHint: true`).
-- **List tools** (13 tools): accept an optional `output_format` parameter. Use `"json"` (default) for the standard structured response or `"markdown"` for a compact table suited to quick scanning.
+- **Write tools** (all 48): accept an optional `request_id` parameter (UUID string) for idempotency. Supplying the same `request_id` on a repeat call returns the cached response without re-executing the operation (TTL: 300 seconds). Write tools are also identifiable by their `annotations` metadata (`readOnlyHint: false`, `destructiveHint: true`).
+- **List tools** (64 tools): accept an optional `output_format` parameter. Use `"json"` (default) for the standard structured response or `"markdown"` for a compact table suited to quick scanning.
 
 ### Execution Tools
 
@@ -403,7 +418,7 @@ AUTOMOX_MCP_TOKEN_BUDGET=4000   # default; set higher to allow larger responses
 
 ### Idempotency Keys
 
-All 21 idempotent write tools accept an optional `request_id` parameter (any UUID string). Submitting the same `request_id` within 300 seconds returns the cached response without re-executing the underlying API call. The cache holds up to 1000 entries and is stored in-memory (cleared on server restart).
+All 48 write tools accept an optional `request_id` parameter (any UUID string). Submitting the same `request_id` within 300 seconds returns the cached response without re-executing the underlying API call. The cache holds up to 1000 entries and is stored in-memory (cleared on server restart).
 
 ```
 # Example: safe to retry -- second call returns the cached result
@@ -412,7 +427,7 @@ execute_device_command(device_id=123, command_type="reboot", request_id="550e840
 
 ### Markdown Table Output
 
-Thirteen list tools accept an optional `output_format` parameter:
+Sixty-four list tools accept an optional `output_format` parameter:
 - `"json"` (default) -- standard structured JSON response
 - `"markdown"` -- compact Markdown table suitable for quick scanning in chat interfaces
 

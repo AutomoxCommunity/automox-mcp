@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`docs/tool-reference.md` — stale counts corrected in un-CI-guarded sections, plus a new "At a Glance" capability summary.** The Tool Safety Annotations table still carried the pre-2.0.0 split ("58 read / 22 write" → **85 / 48**), the Special Parameters and Idempotency Keys sections claimed `request_id` on "all 22" / "21 idempotent" write tools (→ all **48** write tools, verified by registered-server introspection), and the markdown `output_format` parameter was documented on "13 list tools" (→ **64** read tools). Added the missing Tool Safety Annotations / Pagination entries to the table of contents and an At-a-Glance table up top (tools, API coverage, Apps, resources, prompts, safety, enterprise features). The headline counts these sections drifted from were already CI-guarded; these prose spots were not.
+
 ## [2.2.1] - 2026-06-09
 
 ### Added

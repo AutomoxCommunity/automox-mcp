@@ -12,6 +12,7 @@ A tool's name and count appear in several hand-maintained places. When you chang
 | `src/automox_mcp/tools/meta_tools.py` `_DOMAIN_CATALOG` | the `(name, description)` entry (the model-facing discovery directory) | ✅ `test_doc_tool_counts.py` |
 | `docs/tool-reference.md` | the bullet **and** its `## Domain (N tools)` section count **and** the top "all N tools" header | ✅ `test_doc_tool_counts.py` |
 | `README.md` + `mcpb/manifest.json` | total / read / write counts | ✅ `test_doc_tool_counts.py` |
+| `mcpb/manifest.json` `tools[]` (+ `prompts[]` on prompt changes) | **regenerate, don't hand-edit**: `uv run python scripts/generate_mcpb_catalog.py` (feeds Claude Desktop's "Tools"/"Prompts" details sections) | ✅ `test_doc_tool_counts.py` |
 | `docs/api-coverage.md` | coverage map / omission rationale / build-backlog rows | ❌ **manual — easy to forget** |
 | `tests/smoke_production.py` | live read-side coverage for new read tools (not destructive writes) | ❌ **manual, not in CI** |
 | `CHANGELOG.md` | the entry under the active version | ❌ manual |

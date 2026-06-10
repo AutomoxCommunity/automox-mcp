@@ -4,7 +4,7 @@
   "display_name": "Automox",
   "version": "2.2.2",
   "description": "Talk to your Automox console in natural language. Manage devices, patches, and policies.",
-  "long_description": "The official Automox MCP server, packaged as a Claude Desktop Extension. Connects Claude to your Automox environment so you can manage devices, check compliance posture, run policies, prepare for Patch Tuesday, browse the worklet catalog, drive Splashtop remote-control sessions, and more — all by asking. Exposes 133 MCP tools across 18 domains (devices, policies, patches, groups, webhooks, worklets, vulnerability sync, audit, reports, Splashtop remote control, and more), 14 MCP resources (including interactive MCP App UIs for compliance triage, patch-approval review, policy blast-radius review, remediation-apply review, and RBAC access certification), and 6 workflow prompts (audit_policy, investigate_device, onboard_group, patch_tuesday, security_posture, triage_failure). Read-only mode and modular tool loading are supported via optional configuration.",
+  "long_description": "The official Automox MCP server, packaged as a Claude Desktop Extension. Connects Claude to your Automox environment so you can manage devices, check compliance posture, run policies, prepare for Patch Tuesday, browse the worklet catalog, drive Splashtop remote-control sessions, and more \u2014 all by asking. Exposes 133 MCP tools across 18 domains (devices, policies, patches, groups, webhooks, worklets, vulnerability sync, audit, reports, Splashtop remote control, and more), 14 MCP resources (including interactive MCP App UIs for compliance triage, patch-approval review, policy blast-radius review, remediation-apply review, and RBAC access certification), and 6 workflow prompts (audit_policy, investigate_device, onboard_group, patch_tuesday, security_posture, triage_failure). Read-only mode and modular tool loading are supported via optional configuration.",
   "author": {
     "name": "Automox",
     "url": "https://www.automox.com"
@@ -54,20 +54,20 @@
     "api_key": {
       "type": "string",
       "title": "Automox API Key",
-      "description": "Your Automox API key. Create one in Automox Console → Settings → Secrets & Keys → Add API Key.",
+      "description": "Your Automox API key. Create one in Automox Console \u2192 Settings \u2192 Secrets & Keys \u2192 Add API Key.",
       "sensitive": true,
       "required": true
     },
     "account_uuid": {
       "type": "string",
       "title": "Account UUID",
-      "description": "Found in Automox Console → Settings → Secrets & Keys (shown on the page).",
+      "description": "Found in Automox Console \u2192 Settings \u2192 Secrets & Keys (shown on the page).",
       "required": true
     },
     "org_id": {
       "type": "string",
       "title": "Organization ID",
-      "description": "Numeric organization ID from the Automox Console URL when viewing your organization. Required by most tools — recommended unless you only need org-agnostic operations.",
+      "description": "Numeric organization ID from the Automox Console URL when viewing your organization. Required by most tools \u2014 recommended unless you only need org-agnostic operations.",
       "required": false
     },
     "read_only": {
@@ -78,11 +78,593 @@
       "required": false
     }
   },
-  "tools_generated": true,
-  "prompts_generated": true,
+  "tools": [
+    {
+      "name": "advanced_device_search",
+      "description": "Execute advanced search with structured query"
+    },
+    {
+      "name": "apply_policy_changes",
+      "description": "Create or update policies"
+    },
+    {
+      "name": "apply_remediation_actions",
+      "description": "Execute remediations now (requires AUTOMOX_MCP_ALLOW_APPLY_REMEDIATION_ACTIONS)"
+    },
+    {
+      "name": "assign_policies_to_saved_search",
+      "description": "Bulk-assign policies to a saved-search result set"
+    },
+    {
+      "name": "audit_events_ocsf",
+      "description": "OCSF-formatted audit events with category filtering"
+    },
+    {
+      "name": "audit_trail_user_activity",
+      "description": "Audit trail events by user and date"
+    },
+    {
+      "name": "batch_update_devices",
+      "description": "Bulk attribute actions (e.g. tags) on many devices"
+    },
+    {
+      "name": "check_group_exclusion_status",
+      "description": "Check if groups are in an exclusion window"
+    },
+    {
+      "name": "check_window_active",
+      "description": "Check if a window is currently active"
+    },
+    {
+      "name": "clone_policy",
+      "description": "Clone a policy (in-org, or multi-zone for patch policies)"
+    },
+    {
+      "name": "create_data_extract",
+      "description": "Request a new data extract"
+    },
+    {
+      "name": "create_global_api_key",
+      "description": "Create a global API key (secret not returned)"
+    },
+    {
+      "name": "create_policy_window",
+      "description": "Create a maintenance/exclusion window"
+    },
+    {
+      "name": "create_saved_search",
+      "description": "Create a new saved device search"
+    },
+    {
+      "name": "create_server_group",
+      "description": "Create a new server group"
+    },
+    {
+      "name": "create_user_api_key",
+      "description": "Create a user API key (secret not returned)"
+    },
+    {
+      "name": "create_webhook",
+      "description": "Create a new webhook subscription"
+    },
+    {
+      "name": "create_zone",
+      "description": "Create a new zone (access_key redacted)"
+    },
+    {
+      "name": "decide_patch_approval",
+      "description": "Approve or reject a patch approval"
+    },
+    {
+      "name": "delete_action_set",
+      "description": "Delete one remediation action set"
+    },
+    {
+      "name": "delete_action_sets_bulk",
+      "description": "Delete multiple action sets by ID"
+    },
+    {
+      "name": "delete_device",
+      "description": "Delete a device record (requires AUTOMOX_MCP_ALLOW_DELETE_DEVICE)"
+    },
+    {
+      "name": "delete_global_api_key",
+      "description": "Delete a global API key"
+    },
+    {
+      "name": "delete_policy",
+      "description": "Delete a policy permanently"
+    },
+    {
+      "name": "delete_policy_window",
+      "description": "Delete a maintenance window"
+    },
+    {
+      "name": "delete_saved_search",
+      "description": "Permanently delete a saved device search"
+    },
+    {
+      "name": "delete_server_group",
+      "description": "Delete a server group"
+    },
+    {
+      "name": "delete_user_api_key",
+      "description": "Delete a user API key"
+    },
+    {
+      "name": "delete_webhook",
+      "description": "Delete a webhook"
+    },
+    {
+      "name": "device_detail",
+      "description": "Detailed info and recent activity for a device"
+    },
+    {
+      "name": "device_health_metrics",
+      "description": "Aggregate fleet-wide health statistics"
+    },
+    {
+      "name": "device_search_typeahead",
+      "description": "Typeahead suggestions for search fields"
+    },
+    {
+      "name": "devices_needing_attention",
+      "description": "Devices flagged for immediate action"
+    },
+    {
+      "name": "discover_capabilities",
+      "description": "Canonical inventory of the server's tools by domain, with live per-session availability"
+    },
+    {
+      "name": "execute_device_command",
+      "description": "Issue scan/patch/reboot command"
+    },
+    {
+      "name": "execute_policy_now",
+      "description": "Execute a policy immediately"
+    },
+    {
+      "name": "get_account",
+      "description": "Account detail (id, name, type, timestamps)"
+    },
+    {
+      "name": "get_account_user",
+      "description": "Account-scoped user record (status, role, 2FA)"
+    },
+    {
+      "name": "get_action_set_detail",
+      "description": "Action set details"
+    },
+    {
+      "name": "get_action_set_issues",
+      "description": "Vulnerability issues for an action set"
+    },
+    {
+      "name": "get_action_set_solutions",
+      "description": "Solutions for an action set"
+    },
+    {
+      "name": "get_cached_search_results",
+      "description": "Retrieve cached results for a prior search execution"
+    },
+    {
+      "name": "get_compliance_snapshot",
+      "description": "Combined compliance posture view"
+    },
+    {
+      "name": "get_data_extract",
+      "description": "Get extract details and download info"
+    },
+    {
+      "name": "get_device_assignments",
+      "description": "Device-to-policy/group assignments"
+    },
+    {
+      "name": "get_device_by_uuid",
+      "description": "Get device by UUID (raw payload with compliance legend)"
+    },
+    {
+      "name": "get_device_full_profile",
+      "description": "Complete profile: detail + inventory + packages"
+    },
+    {
+      "name": "get_device_inventory",
+      "description": "Detailed device inventory data"
+    },
+    {
+      "name": "get_device_inventory_categories",
+      "description": "Available inventory categories"
+    },
+    {
+      "name": "get_device_metadata_fields",
+      "description": "Available fields for device queries"
+    },
+    {
+      "name": "get_device_scheduled_windows",
+      "description": "Upcoming maintenance periods for a device"
+    },
+    {
+      "name": "get_group_scheduled_windows",
+      "description": "Upcoming maintenance periods for a group"
+    },
+    {
+      "name": "get_patch_tuesday_readiness",
+      "description": "Patch Tuesday readiness view"
+    },
+    {
+      "name": "get_policy_window",
+      "description": "Details for a specific window"
+    },
+    {
+      "name": "get_saved_search",
+      "description": "Retrieve a single saved search by ID"
+    },
+    {
+      "name": "get_saved_search_results",
+      "description": "Execute a saved search and return device results"
+    },
+    {
+      "name": "get_search_scopes",
+      "description": "Available device-search scope options"
+    },
+    {
+      "name": "get_searchable_fields",
+      "description": "Searchable fields grouped by scope with type metadata"
+    },
+    {
+      "name": "get_server_group",
+      "description": "Details for a specific server group"
+    },
+    {
+      "name": "get_upload_formats",
+      "description": "Supported CSV upload formats"
+    },
+    {
+      "name": "get_user",
+      "description": "Get a single user by numeric ID"
+    },
+    {
+      "name": "get_user_api_key",
+      "description": "One user API key by ID (metadata only)"
+    },
+    {
+      "name": "get_webhook",
+      "description": "Details for a specific webhook"
+    },
+    {
+      "name": "get_worklet_detail",
+      "description": "Detailed worklet info with code"
+    },
+    {
+      "name": "get_zone",
+      "description": "Single zone by UUID (access_key redacted)"
+    },
+    {
+      "name": "invite_user_to_account",
+      "description": "Invite a user with zone assignments"
+    },
+    {
+      "name": "list_account_rbac_roles",
+      "description": "Available RBAC roles in the account"
+    },
+    {
+      "name": "list_data_extracts",
+      "description": "List available data extracts"
+    },
+    {
+      "name": "list_device_packages",
+      "description": "Software packages on a specific device"
+    },
+    {
+      "name": "list_devices",
+      "description": "List devices with per-device detail"
+    },
+    {
+      "name": "list_devices_for_policies",
+      "description": "Devices targeted by given policy UUIDs (blast radius)"
+    },
+    {
+      "name": "list_events",
+      "description": "Organization events with optional filters"
+    },
+    {
+      "name": "list_global_api_keys",
+      "description": "Global (account-scoped) API keys (metadata only)"
+    },
+    {
+      "name": "list_org_api_keys",
+      "description": "List organization API keys (names only)"
+    },
+    {
+      "name": "list_organizations",
+      "description": "List orgs with tier, device count/limit, parent, trial"
+    },
+    {
+      "name": "list_remediation_action_sets",
+      "description": "List vulnerability action sets"
+    },
+    {
+      "name": "list_saved_searches",
+      "description": "List saved device searches"
+    },
+    {
+      "name": "list_searches_for_device",
+      "description": "Saved searches whose results contain a device"
+    },
+    {
+      "name": "list_server_groups",
+      "description": "List server groups with device counts"
+    },
+    {
+      "name": "list_user_api_keys",
+      "description": "A user's API keys (metadata only)"
+    },
+    {
+      "name": "list_users",
+      "description": "List users with name, email, and RBAC roles"
+    },
+    {
+      "name": "list_webhook_deliveries",
+      "description": "Recent delivery attempts for a webhook"
+    },
+    {
+      "name": "list_webhook_event_types",
+      "description": "Available webhook event types"
+    },
+    {
+      "name": "list_webhooks",
+      "description": "All webhook subscriptions"
+    },
+    {
+      "name": "list_zone_users",
+      "description": "Users assigned to a given zone"
+    },
+    {
+      "name": "list_zones",
+      "description": "Zones (organizations) in the account"
+    },
+    {
+      "name": "list_zones_for_user",
+      "description": "Zones a given user belongs to"
+    },
+    {
+      "name": "noncompliant_report",
+      "description": "Non-compliant devices report"
+    },
+    {
+      "name": "patch_approvals_summary",
+      "description": "Pending patch approvals and severity"
+    },
+    {
+      "name": "policy_catalog",
+      "description": "List policies with type and status summaries"
+    },
+    {
+      "name": "policy_compliance_stats",
+      "description": "Per-policy compliance statistics"
+    },
+    {
+      "name": "policy_detail",
+      "description": "Configuration and recent history for a policy"
+    },
+    {
+      "name": "policy_execution_counts",
+      "description": "Fleet-wide run counts per policy over a window"
+    },
+    {
+      "name": "policy_execution_timeline",
+      "description": "Recent executions for a policy"
+    },
+    {
+      "name": "policy_health_overview",
+      "description": "Summarize recent policy activity"
+    },
+    {
+      "name": "policy_history_detail",
+      "description": "Policy history details by UUID"
+    },
+    {
+      "name": "policy_run_count",
+      "description": "Aggregate policy execution counts"
+    },
+    {
+      "name": "policy_run_detail_v2",
+      "description": "Per-device results for a run (UUID-based)"
+    },
+    {
+      "name": "policy_run_results",
+      "description": "Per-device results for a policy execution"
+    },
+    {
+      "name": "policy_runs_by_policy",
+      "description": "Runs grouped by policy for comparison"
+    },
+    {
+      "name": "policy_runs_for_policy",
+      "description": "Execution runs for a specific policy"
+    },
+    {
+      "name": "policy_runs_v2",
+      "description": "List policy runs with time-range and status filters"
+    },
+    {
+      "name": "prepatch_report",
+      "description": "Pre-patch readiness report"
+    },
+    {
+      "name": "preview_policy_device_filters",
+      "description": "Dry-run: which devices a policy's filters target"
+    },
+    {
+      "name": "refresh_saved_search_cache",
+      "description": "Force a re-cache of a saved search's results"
+    },
+    {
+      "name": "remove_user_from_account",
+      "description": "Remove a user by UUID"
+    },
+    {
+      "name": "rotate_webhook_secret",
+      "description": "Rotate signing secret"
+    },
+    {
+      "name": "run_saved_search",
+      "description": "Execute a saved search by UUID with paging + field projection"
+    },
+    {
+      "name": "search_devices",
+      "description": "Search by hostname, IP, tag, severity, or patch status"
+    },
+    {
+      "name": "search_org_packages",
+      "description": "Search packages across the organization"
+    },
+    {
+      "name": "search_policy_windows",
+      "description": "Search maintenance/exclusion windows"
+    },
+    {
+      "name": "search_worklet_catalog",
+      "description": "Search community worklet catalog"
+    },
+    {
+      "name": "splashtop_bulk_install_uninstall",
+      "description": "Bulk install/uninstall across a server group (requires AUTOMOX_MCP_ALLOW_SPLASHTOP_BULK_INSTALL_UNINSTALL)"
+    },
+    {
+      "name": "splashtop_device_status",
+      "description": "Splashtop installation and registration status"
+    },
+    {
+      "name": "splashtop_force_disconnect",
+      "description": "Force-disconnect all active sessions on a device"
+    },
+    {
+      "name": "splashtop_get_attended_access",
+      "description": "Current attended-access setting for a device"
+    },
+    {
+      "name": "splashtop_initiate_connection",
+      "description": "Generate a splashtop-sos:// deeplink for an operator"
+    },
+    {
+      "name": "splashtop_install",
+      "description": "Install the Splashtop RMM client on a device"
+    },
+    {
+      "name": "splashtop_session_status",
+      "description": "Active Splashtop sessions and capacity for a device"
+    },
+    {
+      "name": "splashtop_set_attended_access",
+      "description": "Set the end-user-consent requirement for a device"
+    },
+    {
+      "name": "splashtop_set_bulk_attended_access",
+      "description": "Bulk-set end-user consent across many devices"
+    },
+    {
+      "name": "splashtop_uninstall",
+      "description": "Uninstall Splashtop and delete the device registration"
+    },
+    {
+      "name": "test_webhook",
+      "description": "Send a test delivery"
+    },
+    {
+      "name": "update_device",
+      "description": "Update one device: name, group, exception, tags, IPs"
+    },
+    {
+      "name": "update_global_api_key",
+      "description": "Enable/disable a global API key"
+    },
+    {
+      "name": "update_policy_window",
+      "description": "Update a maintenance window"
+    },
+    {
+      "name": "update_saved_search",
+      "description": "Update an existing saved device search"
+    },
+    {
+      "name": "update_server_group",
+      "description": "Update an existing server group"
+    },
+    {
+      "name": "update_user",
+      "description": "Update user profile fields (no password)"
+    },
+    {
+      "name": "update_user_api_key",
+      "description": "Enable/disable a user API key"
+    },
+    {
+      "name": "update_webhook",
+      "description": "Update an existing webhook"
+    },
+    {
+      "name": "upload_action_set",
+      "description": "Upload CSV remediation data"
+    },
+    {
+      "name": "upload_policy_file",
+      "description": "Upload a local installer to a Required Software policy (requires AUTOMOX_MCP_ALLOW_UPLOAD_POLICY_FILE + allowlist, stdio only)"
+    }
+  ],
+  "tools_generated": false,
+  "prompts": [
+    {
+      "name": "audit_policy_execution",
+      "description": "Guided workflow to audit a policy's execution history and identify issues.",
+      "text": "Guided workflow to audit a policy's execution history and identify issues.",
+      "arguments": [
+        "policy_id"
+      ]
+    },
+    {
+      "name": "investigate_noncompliant_device",
+      "description": "Guided workflow to investigate why a device is non-compliant and remediate it.",
+      "text": "Guided workflow to investigate why a device is non-compliant and remediate it.",
+      "arguments": [
+        "device_id"
+      ]
+    },
+    {
+      "name": "onboard_device_group",
+      "description": "Guided workflow to create and configure a new device group with policies.",
+      "text": "Guided workflow to create and configure a new device group with policies.",
+      "arguments": [
+        "group_name"
+      ]
+    },
+    {
+      "name": "prepare_patch_tuesday",
+      "description": "Guided workflow to assess readiness and prepare for Microsoft Patch Tuesday.",
+      "text": "Guided workflow to assess readiness and prepare for Microsoft Patch Tuesday."
+    },
+    {
+      "name": "review_security_posture",
+      "description": "Guided workflow to review and assess the organization's fleet security posture.",
+      "text": "Guided workflow to review and assess the organization's fleet security posture."
+    },
+    {
+      "name": "triage_failed_policy_run",
+      "description": "Guided workflow to triage and remediate a failed policy execution.",
+      "text": "Guided workflow to triage and remediate a failed policy execution.",
+      "arguments": [
+        "policy_id"
+      ]
+    }
+  ],
+  "prompts_generated": false,
   "compatibility": {
     "claude_desktop": ">=0.10.0",
-    "platforms": ["darwin", "linux", "win32"],
+    "platforms": [
+      "darwin",
+      "linux",
+      "win32"
+    ],
     "runtimes": {
       "python": ">=3.11"
     }

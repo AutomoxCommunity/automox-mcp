@@ -5,6 +5,12 @@ All notable changes to the Automox MCP Server will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **The Desktop Extension now lists its tools and prompts in Claude Desktop's details view.** `mcpb/manifest.json` gains the spec's `tools[]` (all 133, name + description) and `prompts[]` (all 6 workflow prompts, with arguments) arrays, and the `tools_generated`/`prompts_generated` flags flip to `false` — previously the manifest declared runtime generation with no listing, so Desktop showed no "Tools" section. The arrays are **generated, not hand-written** (`scripts/generate_mcpb_catalog.py`): names come from the registered server (all gates on) and descriptions from the `discover_capabilities` domain catalog, so the listing matches the model-facing discovery surface, including each gated tool's enabling env var. CI-guarded by `tests/test_doc_tool_counts.py` (manifest arrays vs. registered tools/prompts), so a tool change without a regeneration now fails CI. The listing is the advertised surface; per-session availability (gates, read-only mode) remains the job of `discover_capabilities`.
+
 ## [2.2.2] - 2026-06-10
 
 ### Added

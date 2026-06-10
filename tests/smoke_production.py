@@ -445,6 +445,32 @@ async def run_http_tests() -> None:
                     has_expected and len(domains) >= 5,
                     f"domains={domains}",
                 )
+
+                # Self-check totals must reconcile against the session's
+                # advertised tool surface (#217) — wrong-but-200 is possible
+                # here, so assert the property, not just the shape.
+                resp_flat = await call_tool(
+                    session, "discover_capabilities", {"list_all_tools": True}
+                )
+                data = resp_flat.get("data", {})
+                all_tools = data.get("all_tools", [])
+                unique_count = data.get("unique_tool_count", -1)
+                registered_count = data.get("registered_tool_count", -1)
+                session_tools = {t.name for t in (await session.list_tools()).tools}
+                flat_ok = len(all_tools) == unique_count == len(set(all_tools))
+                # Session surface = registered set; discovery's registered
+                # count must match it, and every advertised tool must be
+                # marked available (the session sets no extra gates here,
+                # so unavailable_tools must equal discovery-minus-session).
+                surface_ok = registered_count == len(session_tools)
+                unavailable = set(data.get("unavailable_tools", []))
+                diff_ok = unavailable == (set(all_tools) - session_tools)
+                record(
+                    "discover_capabilities — totals reconcile with session surface",
+                    flat_ok and surface_ok and diff_ok,
+                    f"unique={unique_count}, registered={registered_count}, "
+                    f"session={len(session_tools)}, unavailable={len(unavailable)}",
+                )
         except Exception as exc:
             record("discover_capabilities", False, str(exc))
 

@@ -243,7 +243,7 @@ Tenants without an active Remote Control subscription (Core bundled with Automat
 
 ## Capability Discovery (1 tool)
 
-- **`discover_capabilities`** - Return all available tools organized by domain (devices, device_search, policies, policy_history, patches, groups, events, reports, audit, webhooks, worklets, data_extracts, vuln_sync, account, compound, policy_windows). This meta-tool is always loaded regardless of `AUTOMOX_MCP_MODULES` configuration and provides a quick reference for what the server can do.
+- **`discover_capabilities`** - Canonical inventory of the server's tools, organized by domain (devices, device_search, policies, policy_history, patches, groups, events, reports, audit, webhooks, worklets, data_extracts, vuln_sync, account, compound, policy_windows, splashtop). Always loaded regardless of `AUTOMOX_MCP_MODULES`. Output is annotated with live per-session availability introspected from the registry at call time: each tool entry carries `available` (false when hidden by an opt-in env gate, read-only mode, or module filtering), gated tools always name their `gated_by` env var, cross-listed entries are flagged `cross_listed`, and `compound` is marked `alias_domain`. The no-arg call returns self-check totals (`unique_tool_count`, `registered_tool_count`, per-domain counts, any `unavailable_tools`); pass `list_all_tools=true` for a flat deduplicated tool list. The directory excludes `discover_capabilities` itself.
 
 ## Workflow Prompts (6 prompts)
 
@@ -299,7 +299,7 @@ Every tool includes [MCP Tool Annotations](https://modelcontextprotocol.io/speci
 | `idempotentHint` | Repeated calls with the same args produce the same result | `true` | varies |
 | `openWorldHint` | Tool interacts with external systems | `true` | `true` |
 
-**Idempotency for write tools:** Update and delete operations are marked `idempotentHint: true` (same end state on retry). Create, execute, and rotate operations are marked `idempotentHint: false` (each call produces a new side effect). The `discover_capabilities` meta-tool is the only tool with `openWorldHint: false` since it returns a static catalog without calling the Automox API.
+**Idempotency for write tools:** Update and delete operations are marked `idempotentHint: true` (same end state on retry). Create, execute, and rotate operations are marked `idempotentHint: false` (each call produces a new side effect). The `discover_capabilities` meta-tool is the only tool with `openWorldHint: false` since it answers from the in-process tool catalog (annotated with live availability) without calling the Automox API.
 
 Per the Anthropic MCP Directory Policy, every tool has at least one of `readOnlyHint: true` or `destructiveHint: true`.
 
@@ -439,7 +439,7 @@ In `"markdown"` mode the tool returns a FastMCP `ToolResult` that carries **both
 
 ### Capability Discovery
 
-The `discover_capabilities` meta-tool returns all available tools organized by domain. It is always available regardless of `AUTOMOX_MCP_MODULES` and is useful for discovering what the server can do without consulting documentation.
+The `discover_capabilities` meta-tool returns the server's tools organized by domain, annotated with live per-session availability — env gates, read-only mode, and module filtering are reflected at call time, so unavailable tools carry `available: false` and gated tools name their `gated_by` env var. The no-arg call includes self-check totals (`unique_tool_count`, `registered_tool_count`) and cross-listing/alias metadata so a client can reconcile its enumeration; `list_all_tools=true` returns a flat deduplicated list. It is always loaded regardless of `AUTOMOX_MCP_MODULES` and is the canonical inventory of what the server can do.
 
 ### Endpoint Authentication
 

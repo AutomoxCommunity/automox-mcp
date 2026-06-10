@@ -7,6 +7,7 @@ from typing import Any
 from fastmcp import FastMCP
 
 from ..client import AutomoxClient
+from ..utils.tooling import get_tool_prefix
 
 _DOMAIN_CATALOG: dict[str, list[tuple[str, str]]] = {
     "devices": [
@@ -192,6 +193,54 @@ _DOMAIN_CATALOG: dict[str, list[tuple[str, str]]] = {
     ],
 }
 
+# Tools that register only behind an opt-in env gate. Discovery always lists
+# them so operators learn the capability exists, but marks availability and
+# names the gate so a client can filter to actually-callable tools (#217).
+# Guarded against drift by tests/test_meta_tools.py (gated set == full-gates
+# registration minus default registration).
+_GATED_TOOLS: dict[str, str] = {
+    "delete_device": "AUTOMOX_MCP_ALLOW_DELETE_DEVICE",
+    "upload_policy_file": "AUTOMOX_MCP_ALLOW_UPLOAD_POLICY_FILE",
+    "splashtop_bulk_install_uninstall": "AUTOMOX_MCP_ALLOW_SPLASHTOP_BULK_INSTALL_UNINSTALL",
+    "apply_remediation_actions": "AUTOMOX_MCP_ALLOW_APPLY_REMEDIATION_ACTIONS",
+}
+
+# Domains whose every entry is cross-listed from a home domain elsewhere.
+_ALIAS_DOMAINS = frozenset({"compound"})
+
+
+def _unique_tool_names() -> set[str]:
+    return {name for tools in _DOMAIN_CATALOG.values() for name, _ in tools}
+
+
+def _cross_listed_tools() -> set[str]:
+    """Tool names that appear in more than one domain of the catalog."""
+    seen: set[str] = set()
+    crossed: set[str] = set()
+    for tools in _DOMAIN_CATALOG.values():
+        for name, _ in tools:
+            if name in seen:
+                crossed.add(name)
+            seen.add(name)
+    return crossed
+
+
+def _registered_tool_names(server: FastMCP) -> set[str] | None:
+    """Tool names currently registered on *server*, with any configured prefix
+    stripped so they compare against catalog names.
+
+    Returns ``None`` when the server doesn't expose FastMCP internals
+    (lightweight test stubs) — callers then omit availability annotations.
+    """
+    lp = getattr(server, "local_provider", None)
+    if lp is None:
+        return None
+    names = {comp.name for key, comp in lp._components.items() if key.startswith("tool:")}
+    prefix = get_tool_prefix()
+    if prefix:
+        names = {name.removeprefix(f"{prefix}_") for name in names}
+    return names
+
 
 def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient) -> None:
     """Register capability discovery tools."""
@@ -199,12 +248,18 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     @server.tool(
         name="discover_capabilities",
         description=(
-            "Discover available Automox MCP tools for a specific domain. "
-            "Returns tool names and descriptions. "
+            "Canonical inventory of Automox MCP tools, organized by domain — "
+            "prefer this over cached manifests. With a domain: that domain's "
+            "tools with name, description, and per-session availability "
+            "(unavailable tools carry available=false; opt-in gated tools name "
+            "their gated_by env var). With no domain: the domain index plus "
+            "self-check totals (unique_tool_count, registered_tool_count, "
+            "per-domain counts) and alias/cross-listing metadata; pass "
+            "list_all_tools=true for a flat deduplicated tool list. "
             "Valid domains: devices, device_search, policies, policy_history, "
             "patches, groups, events, reports, audit, webhooks, worklets, "
             "data_extracts, vuln_sync, account, compound, policy_windows, splashtop. "
-            "Call with no domain to list all available domains."
+            "This directory excludes discover_capabilities itself."
         ),
         annotations={
             "readOnlyHint": True,
@@ -215,15 +270,40 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     )
     async def discover_capabilities(
         domain: str | None = None,
+        list_all_tools: bool = False,
     ) -> dict[str, Any]:
+        # Introspected at call time (after all modules register and any tool
+        # prefix is applied), so availability reflects the live registry —
+        # env gates, read-only mode, and AUTOMOX_MCP_MODULES filtering.
+        registered = _registered_tool_names(server)
+        crossed = _cross_listed_tools()
+
         if domain is None:
-            return {
-                "data": {
-                    "available_domains": sorted(_DOMAIN_CATALOG.keys()),
-                    "hint": "Pass a domain name to see its tools.",
+            unique = _unique_tool_names()
+            data: dict[str, Any] = {
+                "available_domains": sorted(_DOMAIN_CATALOG.keys()),
+                "domain_tool_counts": {
+                    name: len(tools) for name, tools in sorted(_DOMAIN_CATALOG.items())
                 },
-                "metadata": {},
+                "unique_tool_count": len(unique),
+                "alias_domains": sorted(_ALIAS_DOMAINS),
+                "cross_listed_tools": sorted(crossed),
+                "note": (
+                    "Per-domain tool_count values are not summable: each "
+                    "cross_listed_tools entry appears in two domains. This "
+                    "directory excludes discover_capabilities itself, so "
+                    "registered_tool_count may exceed unique_tool_count by one."
+                ),
+                "hint": "Pass a domain name to see its tools.",
             }
+            if registered is not None:
+                data["registered_tool_count"] = len(registered)
+                unavailable = sorted(unique - registered)
+                if unavailable:
+                    data["unavailable_tools"] = unavailable
+            if list_all_tools:
+                data["all_tools"] = sorted(unique)
+            return {"data": data, "metadata": {}}
 
         domain_lower = domain.strip().lower()
         if domain_lower not in _DOMAIN_CATALOG:
@@ -238,18 +318,25 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "metadata": {},
             }
 
-        tools = [
-            {"name": name, "description": desc} for name, desc in _DOMAIN_CATALOG[domain_lower]
-        ]
+        tools = []
+        for name, desc in _DOMAIN_CATALOG[domain_lower]:
+            entry: dict[str, Any] = {"name": name, "description": desc}
+            if registered is not None:
+                entry["available"] = name in registered
+            if name in _GATED_TOOLS:
+                entry["gated_by"] = _GATED_TOOLS[name]
+            if name in crossed:
+                entry["cross_listed"] = True
+            tools.append(entry)
 
-        return {
-            "data": {
-                "domain": domain_lower,
-                "tool_count": len(tools),
-                "tools": tools,
-            },
-            "metadata": {},
+        data = {
+            "domain": domain_lower,
+            "tool_count": len(tools),
+            "tools": tools,
         }
+        if domain_lower in _ALIAS_DOMAINS:
+            data["alias_domain"] = True
+        return {"data": data, "metadata": {}}
 
 
 __all__ = ["register"]

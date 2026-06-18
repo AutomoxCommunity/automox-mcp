@@ -28,8 +28,15 @@ async def list_events(
         params["page"] = page
     if limit is not None:
         params["limit"] = limit
-    if count_only is not None:
-        params["count_only"] = str(count_only).lower()
+    if count_only:
+        # Count mode is camelCase `countOnly` with the INTEGER 1. The upstream
+        # validator is a Laravel boolean rule: it accepts 1/0 (and "1"/"0") but
+        # *rejects* the strings "true"/"false" (400 "must be true or false").
+        # snake_case `count_only` is an unknown param the API silently ignores,
+        # which is why the original `count_only=true` returned a full page.
+        # The response shape changes to {"size": <total>, "results": []} —
+        # honors all the same filters (event_name, date range, etc.).
+        params["countOnly"] = 1
     if policy_id is not None:
         params["policyId"] = policy_id
     if server_id is not None:
@@ -45,17 +52,19 @@ async def list_events(
 
     events = await client.get("/events", params=params)
 
-    # Handle paginated dict responses (e.g. {"data": [...], "total": N})
+    # A normal /events query returns a bare JSON list of event objects.
+    # Count mode (countOnly=1) returns {"size": <total>, "results": []} — the
+    # total under `size`, no event bodies.
     api_total: int | None = None
     if isinstance(events, Mapping):
-        raw = events.get("data")
+        raw = events.get("results")
         if isinstance(raw, list):
             events_list: list[Any] = raw
         else:
             events_list = []
-        api_total_value = events.get("total") or events.get("totalCount")
-        if isinstance(api_total_value, int):
-            api_total = api_total_value
+        size = events.get("size")
+        if isinstance(size, int):
+            api_total = size
     elif isinstance(events, list):
         events_list = events
     else:

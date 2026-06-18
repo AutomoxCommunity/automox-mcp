@@ -103,45 +103,54 @@ async def test_list_events_filters_passed_through():
 
 @pytest.mark.asyncio
 async def test_list_events_count_only():
-    """count_only parameter is passed to query params."""
+    """count_only sends camelCase `countOnly=1` and parses {size, results:[]}.
+
+    Fixture is the real count-mode payload captured from the live API
+    (tests/probe_events_count.py): the integer total under `size`, an empty
+    `results` list, no event bodies. Asserts BOTH the outgoing request param
+    (snake_case `count_only=true` was silently ignored upstream — the v1 bug)
+    and the parsed result.
+    """
+    count_payload = {"size": 1382, "results": []}
+    client = StubClient(get_responses={"/events": [count_payload]})
+    result = await list_events(
+        cast(AutomoxClient, client),
+        org_id=42,
+        count_only=True,
+        event_name="system.patch.applied",
+    )
+
+    # Request: camelCase integer countOnly=1, never snake_case count_only.
+    _, path, params = client.calls[-1]
+    assert path == "/events"
+    assert params["countOnly"] == 1
+    assert "count_only" not in params
+
+    # Response: total from `size`, no event bodies.
+    assert result["data"]["total_events"] == 1382
+    assert result["data"]["events"] == []
+
+
+@pytest.mark.asyncio
+async def test_list_events_count_only_false_omits_param():
+    """count_only=False must not send countOnly (that's just a normal page)."""
     client = StubClient(get_responses={"/events": [[]]})
-    result = await list_events(cast(AutomoxClient, client), org_id=42, count_only=True)
+    await list_events(cast(AutomoxClient, client), org_id=42, count_only=False)
+    _, _, params = client.calls[-1]
+    assert "countOnly" not in params
+
+
+@pytest.mark.asyncio
+async def test_list_events_unexpected_dict_shape():
+    """Defensive: a dict lacking size/results falls back to an empty list.
+
+    The live API only ever returns a bare list (normal) or {size, results}
+    (count mode); any other Mapping is unexpected and yields no events with a
+    length-based total of 0.
+    """
+    client = StubClient(get_responses={"/events": [{"unexpected": "value"}]})
+    result = await list_events(cast(AutomoxClient, client), org_id=1)
     assert result["data"]["total_events"] == 0
-
-
-@pytest.mark.asyncio
-async def test_list_events_paginated_dict_response():
-    """API returns a paginated dict with 'data' and 'total' keys."""
-    paginated = {
-        "data": [
-            {
-                "id": 10,
-                "name": "scan.start",
-                "server_id": 1,
-                "server_name": "host",
-                "policy_id": None,
-                "policy_name": None,
-                "policy_type_name": None,
-                "user_id": None,
-                "data": None,
-                "create_time": "2026-03-01T00:00:00Z",
-            }
-        ],
-        "total": 42,
-    }
-    client = StubClient(get_responses={"/events": [paginated]})
-    result = await list_events(cast(AutomoxClient, client), org_id=1)
-    assert result["data"]["total_events"] == 42
-    assert len(result["data"]["events"]) == 1
-
-
-@pytest.mark.asyncio
-async def test_list_events_paginated_dict_no_data_key():
-    """Paginated dict without a 'data' list key returns empty events."""
-    paginated = {"totalCount": 5, "other": "value"}
-    client = StubClient(get_responses={"/events": [paginated]})
-    result = await list_events(cast(AutomoxClient, client), org_id=1)
-    assert result["data"]["total_events"] == 5
     assert result["data"]["events"] == []
 
 

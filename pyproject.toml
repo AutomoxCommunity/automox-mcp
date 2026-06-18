@@ -85,7 +85,7 @@ exclude_dirs = ["tests", ".venv"]
 [tool.uv]
 constraint-dependencies = [
   "authlib>=1.6.11",      # CVE-2025-68158, GHSA-jj8c-mmj3-mmgv: CSRF in cache-backed state storage
-  "cryptography>=46.0.6", # CVE-2026-26007, CVE-2026-34073
+  "cryptography>=48.0.1", # CVE-2026-26007, CVE-2026-34073; >=48.0.1: GHSA-537c-gmf6-5ccf (statically-linked OpenSSL in PyPI wheels, 2026-06-09 advisory)
   "fastmcp>=3.4.2",       # >=3.2.0: CVE-2025-69196, CVE-2025-64340, CVE-2026-27124, GHSA-rcfx-77hg-w2wv; >=3.4.2: OAuth-proxy/cache/header-forwarding hardening (3.2.4/3.3.0)
   "idna>=3.15",           # CVE-2026-45409 (DoS via crafted IDN encoding; supersedes CVE-2024-3651 fix)
   "jaraco-context>=6.1.0",# CVE-2026-23949
@@ -95,7 +95,7 @@ constraint-dependencies = [
   "pytest>=9.0.3",            # CVE-2025-71176: /tmp/pytest-of-* privilege escalation
   "python-multipart>=0.0.27", # CVE-2026-24486, CVE-2026-40347, CVE-2026-42561
   "requests>=2.33.0",     # CVE-2026-25645
-  "starlette>=1.0.1",     # PYSEC-2026-161: Host-header path injection in URL reconstruction
+  "starlette>=1.3.1",     # PYSEC-2026-161: Host-header path injection in URL reconstruction; >=1.3.0: CVE-2026-54282 (path->authority injection in request.url); >=1.3.1: CVE-2026-54283 (urlencoded form-parse DoS)
   "urllib3>=2.7.0",        # CVE-2025-66418, CVE-2025-66471, CVE-2026-21441, CVE-2026-44431, CVE-2026-44432
 ]
 

@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **The Desktop Extension now lists its tools and prompts in Claude Desktop's details view.** `mcpb/manifest.json` gains the spec's `tools[]` (all 133, name + description) and `prompts[]` (all 6 workflow prompts, with arguments) arrays, and the `tools_generated`/`prompts_generated` flags flip to `false` — previously the manifest declared runtime generation with no listing, so Desktop showed no "Tools" section. The arrays are **generated, not hand-written** (`scripts/generate_mcpb_catalog.py`): names come from the registered server (all gates on) and descriptions from the `discover_capabilities` domain catalog, so the listing matches the model-facing discovery surface, including each gated tool's enabling env var. CI-guarded by `tests/test_doc_tool_counts.py` (manifest arrays vs. registered tools/prompts), so a tool change without a regeneration now fails CI. The listing is the advertised surface; per-session availability (gates, read-only mode) remains the job of `discover_capabilities`.
 
+### Security
+
+- **Bumped `cryptography` (→49.0.0) and `starlette` (→1.3.1) to clear three newly-published advisories flagged by the CI dependency audit.** `cryptography` ≥48.0.1 fixes GHSA-537c-gmf6-5ccf (statically-linked OpenSSL in the PyPI wheels, per the 2026-06-09 OpenSSL advisory); `starlette` ≥1.3.1 fixes CVE-2026-54282 (a request path lacking a leading `/` is folded into the URL authority, so `request.url.hostname`/`netloc` become attacker-controllable) and CVE-2026-54283 (DoS — `request.form()` silently ignored `max_fields`/`max_part_size` for `application/x-www-form-urlencoded` bodies). Both floors are recorded in the `[tool.uv] constraint-dependencies` security pins; no code changes, full suite green on the bump.
+
 ## [2.2.2] - 2026-06-10
 
 ### Added

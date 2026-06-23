@@ -1,5 +1,9 @@
 # Release notes
 
+### v2.2.3 — Tools and prompts visible in Claude Desktop (2026-06-23) [Improvement]
+
+**Browse every capability the Desktop Extension offers, before you ask.** Claude Desktop's details view now lists all 133 tools and 6 workflow prompts the extension provides — including each prompt's inputs — so you can see the full surface at a glance. Previously the extension generated its tools at runtime, with nothing shown in the details panel.
+
 ### v2.2.2 — Trustworthy capability discovery (2026-06-10) [Improvement]
 
 **Your assistant now knows exactly which tools it can use in your session.** The capability-discovery tool reports live availability instead of a static catalog: tools withheld by an opt-in safety flag, read-only mode, or module filtering are marked unavailable, and each safety-gated tool names the exact setting that enables it — so the assistant routes around tools it can't call and can tell you precisely how to enable a capability you want. Discovery responses also carry self-checking totals, letting clients verify they've seen the complete inventory rather than silently missing a domain.

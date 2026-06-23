@@ -677,9 +677,32 @@ async def run_readonly_tools() -> None:
             record("get_server_group", False, "skipped — no group_id")
 
         # ---- Events ----
-        # 20. list_events
-        resp = await _safe_call(session, "list_events", {"limit": 2})
-        record("list_events", resp is not None, _count_or_err(resp))
+        # 20. list_events — assert count_only CORRECTNESS, not just 200. The bug:
+        # snake_case `count_only` was an unknown param the API ignored, so a
+        # "count only" call returned a full page of event bodies and
+        # total_events == page size. The fix sends `countOnly=1` ->
+        # {"size": <total>, "results": []}. Correct behavior: count mode returns
+        # NO event bodies and a total >= any single page's returned length.
+        resp_page = await _safe_call(session, "list_events", {"limit": 5})
+        resp_count = await _safe_call(session, "list_events", {"count_only": True})
+        page_events = (resp_page or {}).get("data", {}).get("events", [])
+        count_data = (resp_count or {}).get("data", {})
+        count_total = count_data.get("total_events")
+        events_ok = (
+            resp_page is not None
+            and resp_count is not None
+            and isinstance(count_total, int)
+            # count mode returns the total only — no event bodies
+            and count_data.get("events") == []
+            # the true total is at least what a single small page returned
+            and count_total >= len(page_events)
+        )
+        record(
+            "list_events",
+            events_ok,
+            f"page_events={len(page_events)} count_only_total={count_total} "
+            f"count_only_bodies={len(count_data.get('events', []))}",
+        )
 
         # ---- Packages ----
         # 21. list_device_packages — assert COMPLETENESS, not just "got a response".

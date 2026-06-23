@@ -460,7 +460,15 @@ class GetNeedsAttentionReportParams(ForbidExtraModel):
 
 class GetEventsParams(ForbidExtraModel):
     page: int | None = Field(None, ge=0, description="Page number")
-    count_only: bool | None = Field(None, description="Return only count, not full data")
+    count_only: bool | None = Field(
+        None,
+        description=(
+            "Return only the total matching-event count (no event bodies), "
+            "honoring all other filters. Sets `total_events` to the true total "
+            "and `events` to []. Cheaper than paginating when you only need a "
+            "count (e.g. daily event totals)."
+        ),
+    )
     policy_id: int | None = Field(None, description="Filter by Policy ID")
     server_id: int | None = Field(None, description="Filter by Server/Device ID")
     user_id: int | None = Field(None, description="Filter by User ID")

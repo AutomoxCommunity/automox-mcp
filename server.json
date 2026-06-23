@@ -7,12 +7,12 @@
     "url": "https://github.com/AutomoxCommunity/automox-mcp",
     "source": "github"
   },
-  "version": "2.2.2",
+  "version": "2.2.3",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "automox-mcp",
-      "version": "2.2.2",
+      "version": "2.2.3",
       "transport": {
         "type": "stdio"
       },

@@ -531,6 +531,7 @@ def _apply_token_budget(
         meta["total_available"] = total
         meta["returned_count"] = len(response_dict["data"])
         meta["truncations"] = {"data": {"total": total, "returned": len(response_dict["data"])}}
+        _reconcile_after_truncation(meta, returned=len(response_dict["data"]))
     elif isinstance(data, dict):
         # Truncate ALL oversized lists in the mapping, not just the first.
         truncations: dict[str, dict[str, int]] = {}
@@ -550,8 +551,95 @@ def _apply_token_budget(
             # earlier consumers; new code should read `truncations` for
             # per-key counts.
             meta["total_available"] = sum(t["total"] for t in truncations.values())
+            # Reconcile sibling scalar count fields (e.g. `<x>_returned`,
+            # `total_<x>`, `total_devices`) that still equal the pre-truncation
+            # length down to the shrunk length so no count overstates what's
+            # present. Use the largest surviving list as the post-truncation
+            # reference length.
+            max_returned = max(t["returned"] for t in truncations.values())
+            _reconcile_sibling_counts(data, truncations=truncations, fallback_len=max_returned)
+            _reconcile_after_truncation(meta, returned=max_returned)
 
     return response_dict
+
+
+# Conventional sibling scalar count keys (suffix / prefix patterns) that travel
+# alongside a list in `data` and report its length. After truncation these would
+# overstate the shrunk list, so they are reconciled down. A full cursor /
+# suggested_next_call continuation is a follow-up (out of scope here).
+_COUNT_KEY_SUFFIXES = ("_returned", "_count")
+_COUNT_KEY_PREFIXES = ("total_",)
+
+
+def _count_key_base(key: str) -> str | None:
+    """Return the list name a count key references, or ``None`` if it isn't one.
+
+    ``total_devices`` -> ``devices``; ``events_returned`` -> ``events``;
+    ``groups_count`` -> ``groups``. A bare ``total``/``count`` yields ``""``.
+    """
+    for suffix in _COUNT_KEY_SUFFIXES:
+        if key.endswith(suffix):
+            return key[: -len(suffix)]
+    for prefix in _COUNT_KEY_PREFIXES:
+        if key.startswith(prefix):
+            return key[len(prefix) :]
+    return None
+
+
+def _reconcile_sibling_counts(
+    data: dict[str, Any],
+    *,
+    truncations: dict[str, dict[str, int]],
+    fallback_len: int,
+) -> None:
+    """Clamp conventional scalar count fields in *data* to their list's length.
+
+    A count key is clamped to the surviving length of the specific list it names
+    (e.g. ``total_devices`` -> ``data['devices']``); a generic count that names
+    no single list falls back to the largest surviving list. Only ints that
+    currently *overstate* their reference length are lowered; legitimately
+    smaller counts are left untouched.
+    """
+    for key, value in data.items():
+        if not isinstance(value, int) or isinstance(value, bool):
+            continue
+        base = _count_key_base(key)
+        if base is None:
+            continue
+        limit = truncations[base]["returned"] if base in truncations else fallback_len
+        if value > limit:
+            data[key] = limit
+
+
+def _reconcile_after_truncation(meta: dict[str, Any], *, returned: int) -> None:
+    """Ensure a truncated response never signals completeness.
+
+    When items were dropped, a ``metadata.pagination`` block must not assert the
+    page is complete: force ``has_more=True`` and clear any ``last=True`` (Spring
+    completeness flag) so the response cannot simultaneously claim completeness
+    and be truncated.
+    """
+    pagination = meta.get("pagination")
+    if isinstance(pagination, dict):
+        pagination["has_more"] = True
+        if pagination.get("last") is True:
+            pagination["last"] = False
+
+
+def _coerce_optional_int(value: Any) -> int | None:
+    """Coerce *value* to ``int`` when possible, else ``None``.
+
+    Booleans are rejected (``True``/``False`` are not meaningful counts) and
+    empty/garbage strings degrade to ``None`` instead of raising.
+    """
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def as_tool_response(result: Mapping[str, Any]) -> dict[str, Any]:
@@ -564,6 +652,15 @@ def as_tool_response(result: Mapping[str, Any]) -> dict[str, Any]:
     if correlation_id:
         metadata_dict["correlation_id"] = correlation_id
     data = result.get("data")
+    # Defensively coerce every strictly-typed reserved pagination key. Upstream
+    # metadata can forward a non-int value (e.g. "" or a string) into any of
+    # these; PaginationMetadata types them as int|None, so a raw value would
+    # raise a ValidationError here — outside call_tool_workflow's try/except —
+    # bypassing the format_validation_error sanitizer and crashing the tool.
+    # Degrade a non-coercible value to None rather than raise.
+    for _key in ("current_page", "total_pages", "total_count", "limit"):
+        if _key in metadata_dict:
+            metadata_dict[_key] = _coerce_optional_int(metadata_dict[_key])
     metadata = PaginationMetadata(**metadata_dict)
     response = ToolResponse(data=data, metadata=metadata)
     response_dict = cast(dict[str, Any], response.model_dump())
@@ -572,19 +669,17 @@ def as_tool_response(result: Mapping[str, Any]) -> dict[str, Any]:
     return _apply_token_budget(response_dict)
 
 
-def format_as_markdown_table(data: list[dict[str, Any]], *, max_col_width: int = 40) -> str:
-    """Convert a list of flat dicts into a Markdown table string."""
+def format_as_markdown_table(data: list[Any], *, max_col_width: int = 40) -> str:
+    """Convert a list of flat dicts into a Markdown table string.
+
+    Robust to non-dict rows: a list of scalars (e.g. UUID/name strings from
+    ``list_searches_for_device`` / ``device_search_typeahead``) renders as a
+    single ``value`` column rather than raising ``AttributeError`` on
+    ``row.get`` (the crash would propagate outside ``call_tool_workflow``'s
+    try/except and take down the tool).
+    """
     if not data:
         return "_No data_"
-
-    # Collect all keys preserving insertion order
-    columns: list[str] = []
-    seen: set[str] = set()
-    for row in data:
-        for key in row:
-            if key not in seen:
-                columns.append(key)
-                seen.add(key)
 
     def _cell(value: Any) -> str:
         text = str(value) if value is not None else ""
@@ -592,12 +687,34 @@ def format_as_markdown_table(data: list[dict[str, Any]], *, max_col_width: int =
             text = text[: max_col_width - 3] + "..."
         return text.replace("|", "\\|")
 
+    # Scalar rows (no dicts) → single-column table.
+    if not any(isinstance(row, Mapping) for row in data):
+        header = "| value |"
+        separator = "| --- |"
+        rows = ["| " + _cell(row) + " |" for row in data]
+        return "\n".join([header, separator, *rows])
+
+    # Collect all keys preserving insertion order (dict rows only).
+    columns: list[str] = []
+    seen: set[str] = set()
+    for row in data:
+        if not isinstance(row, Mapping):
+            continue
+        for key in row:
+            if key not in seen:
+                columns.append(key)
+                seen.add(key)
+
     header = "| " + " | ".join(columns) + " |"
     separator = "| " + " | ".join("---" for _ in columns) + " |"
 
     rows = []
     for row in data:
-        cells = [_cell(row.get(col)) for col in columns]
+        if isinstance(row, Mapping):
+            cells = [_cell(row.get(col)) for col in columns]
+        else:
+            # Non-dict row in a mixed list: place its scalar in the first column.
+            cells = [_cell(row)] + ["" for _ in columns[1:]]
         rows.append("| " + " | ".join(cells) + " |")
 
     return "\n".join([header, separator, *rows])

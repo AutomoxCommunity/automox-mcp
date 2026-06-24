@@ -176,7 +176,13 @@ class StubClient:
         return self._pop(self._get, path)
 
     async def post(
-        self, path: str, *, json_data: Any = None, params: Any = None, headers: Any = None
+        self,
+        path: str,
+        *,
+        json_data: Any = None,
+        params: Any = None,
+        headers: Any = None,
+        allow_text_response: bool = False,
     ) -> Any:
         self.calls.append(("POST", path, json_data))
         return self._pop(self._post, path)
@@ -210,7 +216,13 @@ class StubClient:
         return self._pop(self._patch, path)
 
     async def delete(
-        self, path: str, *, json_data: Any = None, params: Any = None, headers: Any = None
+        self,
+        path: str,
+        *,
+        json_data: Any = None,
+        params: Any = None,
+        headers: Any = None,
+        allow_text_response: bool = False,
     ) -> Any:
         # Record json_data when present (body-bearing DELETE), else params, so
         # existing param-only delete assertions stay unchanged.

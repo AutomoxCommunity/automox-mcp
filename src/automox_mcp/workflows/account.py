@@ -236,6 +236,18 @@ _ZONE_FIELDS = (
     "created_at",
     "updated_at",
 )
+# The zone DTO's `created_by` is a nested *User* blob (email, names,
+# two_factor_authentication, RBAC role). Surfacing it raw — especially across a
+# list endpoint that returns many zones at once — leaks user PII. Re-project it
+# through this allowlist so only a non-PII actor reference (id + display name)
+# survives; never email, 2FA, or RBAC role. Mirrors the nested-org redaction in
+# get_user (see _USER_ORG_FIELDS).
+_ZONE_CREATED_BY_FIELDS = (
+    "id",
+    "user_id",
+    "firstname",
+    "lastname",
+)
 # Nested org projection for get_user.orgs[]. The User DTO forwards each org
 # whole, and an org object can carry `access_key` (a per-org credential) plus
 # `saml`/`metadata` config blobs. Project an allowlist of navigation-safe
@@ -258,6 +270,18 @@ _USER_ORG_FIELDS = (
 
 def _project(item: Mapping[str, Any], fields: tuple[str, ...]) -> dict[str, Any]:
     return {key: item.get(key) for key in fields if item.get(key) is not None}
+
+
+def _project_zone(item: Mapping[str, Any]) -> dict[str, Any]:
+    """Project a zone DTO through the allowlist (drops `access_key`) and
+    re-project its nested `created_by` user blob down to a non-PII actor
+    reference. Shared by every zone read/write path so the redaction guarantee
+    holds uniformly (see SECURITY note above)."""
+    zone = _project(item, _ZONE_FIELDS)
+    created_by = zone.get("created_by")
+    if isinstance(created_by, Mapping):
+        zone["created_by"] = _project(created_by, _ZONE_CREATED_BY_FIELDS)
+    return zone
 
 
 def _envelope(response: Any) -> tuple[list[Any], dict[str, Any]]:
@@ -401,6 +425,9 @@ async def list_zones_for_user(
     """List the zones a given user belongs to."""
     response = await client.get(f"/accounts/{account_id}/users/{user_id}/zones")
     zones, meta = _envelope(response)
+    # SECURITY: project each zone through the allowlist so `access_key` and the
+    # nested `created_by` user PII are never forwarded raw (mirrors get_zone).
+    zones = [_project_zone(z) for z in zones if isinstance(z, Mapping)]
     meta["deprecated_endpoint"] = False
     meta["account_id"] = str(account_id)
 
@@ -425,6 +452,9 @@ async def list_zones(
         params["limit"] = limit
     response = await client.get(f"/accounts/{account_id}/zones", params=params or None)
     zones, meta = _envelope(response)
+    # SECURITY: project each zone through the allowlist so `access_key` and the
+    # nested `created_by` user PII are never forwarded raw (mirrors get_zone).
+    zones = [_project_zone(z) for z in zones if isinstance(z, Mapping)]
     meta["deprecated_endpoint"] = False
     meta["account_id"] = str(account_id)
 
@@ -442,7 +472,7 @@ async def get_zone(
 ) -> dict[str, Any]:
     """Get a single zone by UUID (access_key redacted)."""
     response = await client.get(f"/accounts/{account_id}/zones/{zone_id}")
-    detail = _project(response, _ZONE_FIELDS) if isinstance(response, Mapping) else {}
+    detail = _project_zone(response) if isinstance(response, Mapping) else {}
 
     return {
         "data": detail,
@@ -507,7 +537,7 @@ async def create_zone(
 ) -> dict[str, Any]:
     """Create a new zone (organization) in the account. access_key is redacted."""
     response = await client.post(f"/accounts/{account_id}/zones", json_data={"name": name})
-    detail = _project(response, _ZONE_FIELDS) if isinstance(response, Mapping) else {}
+    detail = _project_zone(response) if isinstance(response, Mapping) else {}
     detail["created"] = True
 
     return {

@@ -84,6 +84,7 @@ _HTML_TEMPLATE = """<!doctype html>
   .tfa { font-size: 11px; margin-top: 4px; }
   .tfa.off { color: var(--bad); }
   .tfa.on { color: var(--good); }
+  .tfa.unknown { color: var(--muted); }
   .actions { display: flex; flex-direction: column; gap: 6px; flex: 0 0 auto; }
   .btn {
     border: 1px solid var(--border); border-radius: 6px; padding: 4px 10px;
@@ -120,6 +121,16 @@ _HTML_TEMPLATE = """<!doctype html>
     var n = [u.firstname, u.lastname].filter(Boolean).join(" ");
     return n || u.name || u.email || "(unnamed user)";
   }
+  // Classify a 2FA field value. The Automox field carries the LITERAL STRING
+  // 'disabled' (not null) when 2FA is OFF, so bare truthiness is wrong — it
+  // would render a disabled account as protected. null/undefined/absent is an
+  // explicit unknown state; any other non-empty value is genuinely enabled.
+  function tfaState(tfa) {
+    if (tfa == null) return "unknown";
+    var v = String(tfa).trim().toLowerCase();
+    if (v === "" || v === "disabled" || v === "disable" || v === "none") return "off";
+    return "on";
+  }
   function roleNames(u) {
     var out = [];
     function add(list) {
@@ -148,6 +159,10 @@ _HTML_TEMPLATE = """<!doctype html>
     var key = userKey(u, i);
     var roles = roleNames(u);
     var tfa = u.tfa_type;
+    var tfaCls = tfaState(tfa);
+    var tfaLabel = tfaCls === "on" ? "2FA: " + esc(tfa)
+      : tfaCls === "off" ? "⚠ no 2FA"
+      : "2FA: unknown";
     var row = document.createElement("div");
     row.className = "row" + (state[key] ? " " + state[key] : "");
     var roleChips = roles.length
@@ -158,8 +173,7 @@ _HTML_TEMPLATE = """<!doctype html>
         '<div class="name">' + esc(fullName(u)) + "</div>" +
         '<div class="email">' + esc(u.email || "") + "</div>" +
         '<div class="roles">' + roleChips + "</div>" +
-        '<div class="tfa ' + (tfa ? "on" : "off") + '">' +
-          (tfa ? "2FA: " + esc(tfa) : "⚠ no 2FA") + "</div>" +
+        '<div class="tfa ' + tfaCls + '">' + tfaLabel + "</div>" +
       "</div>" +
       '<div class="actions">' +
         '<button class="btn certify' +

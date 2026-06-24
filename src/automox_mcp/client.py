@@ -166,6 +166,7 @@ class AutomoxClient:
         json_data: Mapping[str, Any] | None = None,
         params: Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
+        allow_text_response: bool = False,
     ) -> AutomoxResponse:
         return await self._request(
             "POST",
@@ -173,6 +174,7 @@ class AutomoxClient:
             params=params,
             json_data=json_data,
             headers=headers,
+            allow_text_response=allow_text_response,
         )
 
     async def put(
@@ -198,6 +200,7 @@ class AutomoxClient:
         json_data: Mapping[str, Any] | None = None,
         params: Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
+        allow_text_response: bool = False,
     ) -> AutomoxResponse:
         return await self._request(
             "DELETE",
@@ -205,6 +208,7 @@ class AutomoxClient:
             params=params,
             json_data=json_data,
             headers=headers,
+            allow_text_response=allow_text_response,
         )
 
     async def patch(
@@ -231,6 +235,7 @@ class AutomoxClient:
         params: Mapping[str, Any] | Sequence[tuple[str, Any]] | None = None,
         json_data: Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
+        allow_text_response: bool = False,
     ) -> AutomoxResponse:
         merged_headers, correlation_id = self._prepare_headers(headers)
         logger.debug(
@@ -253,7 +258,12 @@ class AutomoxClient:
         except httpx.RequestError as exc:
             self._raise_network_error(exc, method, path, start, correlation_id)
         return self._process_response(
-            response, method=method, path=path, correlation_id=correlation_id, start=start
+            response,
+            method=method,
+            path=path,
+            correlation_id=correlation_id,
+            start=start,
+            allow_text_response=allow_text_response,
         )
 
     async def post_multipart(
@@ -344,6 +354,7 @@ class AutomoxClient:
         path: str,
         correlation_id: str | None,
         start: float,
+        allow_text_response: bool = False,
     ) -> AutomoxResponse:
         latency_ms = (time.monotonic() - start) * 1000.0
         retry_after = response.headers.get("Retry-After")
@@ -395,6 +406,14 @@ class AutomoxClient:
             data: AutomoxResponse = response.json()
             return data
         except json.JSONDecodeError as exc:
+            if allow_text_response:
+                # Opt-in only: some success endpoints (Splashtop install/
+                # uninstall/force-disconnect) return 2xx with a bare, unquoted
+                # string body ('Command executed successfully') under an
+                # application/json content-type. Callers that know to expect
+                # this surface the text as a message rather than failing; every
+                # other caller keeps the strict-JSON guard below.
+                return {"message": response.text}
             raise AutomoxAPIError(
                 "invalid JSON response from Automox", response.status_code
             ) from exc

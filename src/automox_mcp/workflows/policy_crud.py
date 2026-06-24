@@ -1403,7 +1403,16 @@ async def list_devices_for_policies(
         "/server-groups-api/policies/servers",
         json_data={"policies": list(policies)},
     )
-    devices = _extract_list(response)
+
+    # The endpoint returns a {"servers": [...]} envelope, which extract_list does
+    # not recognize — it would wrap the whole envelope as a single bogus "device"
+    # and report total_devices=1 for any blast radius (a dangerously misleading
+    # pre-flight count). Parse it directly, mirroring preview_policy_device_filters,
+    # and fall back to extract_list for the bare-list / {"data": [...]} shapes.
+    if isinstance(response, Mapping) and "servers" in response:
+        devices = [s for s in (response.get("servers") or []) if isinstance(s, Mapping)]
+    else:
+        devices = _extract_list(response)
 
     return {
         "data": {

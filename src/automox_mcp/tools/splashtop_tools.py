@@ -215,6 +215,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                     _install_splashtop,
                     params,
                     params_model=SplashtopInstallParams,
+                    dump_mode="json",
                 )
             except BaseException:
                 await release_idempotency(request_id, "splashtop_install")
@@ -309,6 +310,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                     _initiate_connection,
                     params,
                     params_model=SplashtopInitiateConnectionParams,
+                    dump_mode="json",
                 )
             except BaseException:
                 await release_idempotency(request_id, "splashtop_initiate_connection")
@@ -423,6 +425,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                         "required_attended_access": required_attended_access,
                     },
                     params_model=SplashtopSetBulkAttendedAccessParams,
+                    dump_mode="json",
                 )
             except BaseException:
                 await release_idempotency(request_id, "splashtop_set_bulk_attended_access")

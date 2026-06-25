@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from collections.abc import Mapping
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -124,6 +126,57 @@ _RESULT_STATUS_KEYS = {
     "blocked": "blocked",
 }
 
+# A bare calendar date (YYYY-MM-DD) with nothing after it. Such a bound must be
+# normalized to a time-of-day boundary, or a lexicographic/instant comparison
+# silently drops every run on that day (bug #17: run_time
+# "2026-06-18T16:52:44.313Z" > end_time "2026-06-18" excludes the whole day).
+_BARE_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _parse_dt(value: str | None) -> datetime | None:
+    """Parse an ISO-8601-ish timestamp into a tz-aware (UTC) datetime.
+
+    Accepts a trailing 'Z' (normalized to +00:00) and treats a naive value as
+    UTC so mixed 'Z' vs '+00:00' forms compare correctly. Returns ``None`` when
+    the value is empty or unparseable so callers can degrade gracefully instead
+    of crashing the whole tool.
+    """
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed
+
+
+def _parse_end_bound(value: str | None) -> tuple[datetime | None, bool]:
+    """Parse an ``end_time`` bound, returning ``(bound, exclusive)``.
+
+    A bare-date ``end_time`` anchors to the start of the next day and is
+    compared *exclusively* (``run_dt >= bound`` excludes) so an inclusive
+    "through that day" keeps every run on that date (bug #17). An end_time with
+    a time component keeps the original inclusive semantics (``run_dt > bound``
+    excludes). An unparseable value yields ``(None, ...)`` — no bound.
+    """
+    if value and _BARE_DATE_RE.match(value.strip()):
+        day = datetime.fromisoformat(value.strip()).replace(tzinfo=UTC)
+        return day + timedelta(days=1), True
+    return _parse_dt(value), False
+
+
+def _parse_start_bound(value: str | None) -> datetime | None:
+    """Parse a ``start_time`` bound (inclusive at start-of-day for a bare date).
+
+    A bare-date ``start_time`` anchors to 00:00:00 UTC so a run at any time that
+    day is included. Timestamps with a time component pass through unchanged.
+    """
+    if value and _BARE_DATE_RE.match(value.strip()):
+        return datetime.fromisoformat(value.strip()).replace(tzinfo=UTC)
+    return _parse_dt(value)
+
 
 async def list_policy_runs_v2(
     client: AutomoxClient,
@@ -185,6 +238,12 @@ async def list_policy_runs_v2(
         policy_type_lower = policy_type.lower() if policy_type else None
         policy_name_lower = policy_name.lower() if policy_name else None
         status_key = _RESULT_STATUS_KEYS.get(result_status.lower()) if result_status else None
+        # Parse bounds once. A bare-date end_time becomes the exclusive
+        # start-of-next-day, so it's compared with `>=` to stay inclusive of
+        # that whole day (bug #17). Unparseable bounds parse to None and are
+        # treated as "no bound" rather than crashing the tool.
+        start_bound = _parse_start_bound(start_time)
+        end_bound, end_exclusive = _parse_end_bound(end_time)
 
         def _match(run: Mapping[str, Any]) -> bool:
             if policy_uuid_str and str(run.get("policy_uuid") or "") != policy_uuid_str:
@@ -197,11 +256,19 @@ async def list_policy_runs_v2(
                 policy_name_lower not in str(run.get("policy_name") or "").lower()
             ):
                 return False
-            run_time = str(run.get("run_time") or "")
-            if start_time and run_time < start_time:
-                return False
-            if end_time and run_time > end_time:
-                return False
+            run_dt = _parse_dt(str(run.get("run_time") or ""))
+            # An unparseable run_time can't be range-checked; don't drop it on a
+            # parse failure (degrade gracefully — keep filtering behavior sane).
+            if run_dt is not None:
+                if start_bound is not None and run_dt < start_bound:
+                    return False
+                # A bare-date end is exclusive at start-of-next-day (keeps the
+                # whole day); a full-timestamp end stays inclusive at the bound.
+                if end_bound is not None:
+                    if end_exclusive and run_dt >= end_bound:
+                        return False
+                    if not end_exclusive and run_dt > end_bound:
+                        return False
             if status_key is not None:
                 counter = run.get(status_key)
                 if not isinstance(counter, (int, float)) or counter <= 0:

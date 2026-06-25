@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.4] - 2026-06-24
+
+### Security
+
+- **Zone listings no longer leak `access_key` secrets or `created_by` user PII.** `list_zones` and `list_zones_for_user` returned each zone DTO verbatim from the envelope, surfacing every zone's `access_key` credential and the nested `created_by` blob (email, names, two-factor status, RBAC role) to the model — the single-zone `get_zone` already redacted through an allowlist, but the two list paths bypassed it. All zone read/create paths now share one `_project_zone` projector that drops `access_key` and reduces `created_by` to a non-PII id/name reference.
+- **The access-certification review App now reports 2FA-disabled accounts correctly.** The App classified the `tfa_type` field by raw JavaScript truthiness, so an account with 2FA OFF — the API sends the literal string `"disabled"`, not null — rendered green as "2FA: enabled", inverting the signal in an access-review surface where an operator could certify an unprotected account as protected. It now classifies `disabled`/`none`/empty as OFF, null/absent as an explicit unknown state, and shows green only for genuinely-enabled values.
+
+### Fixed
+
+- **The Splashtop install, initiate-connection, and bulk attended-access tools no longer crash.** Their `device_uuid`/`device_uuids` parameters are typed as `UUID`; the values were serialized as Python objects into the JSON request body and crashed httpx (`TypeError`), leaving all three tools dead on every call. They now dump in JSON mode so the UUIDs serialize as strings, matching the existing `policy_windows` pattern.
+- **Splashtop install / uninstall / force-disconnect no longer report success as failure.** These endpoints return HTTP 200 with a bare, unquoted string body (`Command executed successfully`) under an `application/json` content-type; the client treated any non-JSON 2xx body as a parse failure and raised `invalid JSON response`. The client gained a per-call `allow_text_response` opt-in — used only by these three Splashtop writes — that surfaces the text as `{"message": ...}`; the strict-JSON guard is unchanged for every other endpoint.
+- **`policy_run_results` no longer crashes on non-numeric upstream pagination metadata.** A non-coercible upstream `metadata.limit`/`total_count` raised a pydantic `ValidationError` outside the tool's error-handling boundary — crashing the call and echoing the raw upstream value instead of returning a sanitized error. The reserved pagination keys are now coerced defensively (non-coercible → null) and the source forwards are int-guarded.
+- **Markdown output no longer crashes on tools that return string lists.** `list_searches_for_device` and `device_search_typeahead` return bare arrays of strings; rendering them with `output_format="markdown"` raised `AttributeError`. The table renderer now handles scalar rows (single-column table) instead of assuming every row is a mapping.
+- **Token-budget truncation no longer misreports a truncated response as complete.** When an over-budget response was shrunk, it could still carry `has_more=false`/`last=true` and sibling count fields (e.g. `total_devices`, `events_returned`) that overstated the surviving list. Truncation now forces `has_more=true`, clears the completeness flag, and reconciles each count down to the length of the specific list it names.
+- **`list_devices_for_policies` now reports the real blast-radius device count.** It counted the `{"servers": [...]}` envelope as a single record, so `total_devices` was always 1 regardless of how many devices a policy actually targeted — a dangerously misleading pre-flight count. It now unwraps the `servers` envelope, mirroring `preview_policy_device_filters`.
+- **`policy_runs_v2` time filtering no longer drops a whole day.** `start_time`/`end_time` were compared lexicographically as strings, so a bare-date `end_time` (e.g. `2026-06-18`) excluded every run on that day, and mixed `Z`/`+00:00` forms sorted wrong. Bounds and run times are now parsed to timezone-aware datetimes, with bare-date start/end-of-day normalization for inclusive day ranges.
+- **`audit_trail_user_activity` no longer returns the whole-org event stream mislabeled as one actor.** When `actor_name` could not be resolved to an email/uuid, no filter was applied yet `applied_filters.actor_name` still echoed the requested name, so every actor's events came back labeled as that actor's activity. It now returns zero events with an honest `metadata.filter_ineffective` signal and never asserts the filter as applied when it wasn't.
+
 ## [2.2.3] - 2026-06-23
 
 ### Added

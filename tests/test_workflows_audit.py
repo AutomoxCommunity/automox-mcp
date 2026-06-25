@@ -527,5 +527,11 @@ async def test_audit_trail_lookup_handles_request_failure() -> None:
     assert lookup["reason"] == "actor_lookup_request_failed"
     assert lookup["error"]["status_code"] == 404
     assert lookup["error"]["payload"]["errors"] == ["Not found"]
-    # Since lookup failed, we should not filter out events
-    assert result["data"]["events_returned"] == 1
+    # The actor_name could not be resolved to an email/uuid, so the filter is
+    # NOT applied. The whole-org stream must not be returned mislabeled as this
+    # actor's activity: zero events plus an honest filter_ineffective signal.
+    assert result["data"]["events_returned"] == 0
+    assert result["metadata"]["applied_filters"]["actor_name"] is None
+    ineffective = result["metadata"]["filter_ineffective"]
+    assert ineffective["filter"] == "actor_name"
+    assert ineffective["reason"] == "actor_name_unresolved"

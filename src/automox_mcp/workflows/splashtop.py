@@ -129,6 +129,7 @@ async def install_splashtop(
         "/remotecontrol-st/install",
         json_data=body,
         params=params or None,
+        allow_text_response=True,
     )
 
     return {
@@ -220,6 +221,7 @@ async def force_disconnect(
     response = await client.post(
         f"/remotecontrol-st/force-disconnection/{device_uuid}",
         params={"os_family": os_family},
+        allow_text_response=True,
     )
 
     return {
@@ -297,6 +299,7 @@ async def uninstall_splashtop(
     await client.delete(
         f"/remotecontrol-st/uninstall/{device_uuid}",
         params={"os_family": os_family},
+        allow_text_response=True,
     )
 
     return {

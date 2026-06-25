@@ -710,13 +710,31 @@ async def audit_trail_user_activity(
         if resolved_uuid:
             normalized_uuid_filter = resolved_uuid
 
+    # An actor_name was requested, but the lookup could not resolve it to an
+    # email or uuid (missing account_uuid, no match, zero-score match, or an
+    # upstream error). Neither client-side filter is set, so the per-event loop
+    # below would otherwise return the WHOLE org event stream while
+    # applied_filters still echoed the requested name — every actor's events
+    # mislabeled as this actor's activity. Detect that case so we can refuse to
+    # claim the filter was applied and refuse to present unrelated events as
+    # this actor's filtered activity.
+    actor_name_unresolved = bool(
+        actor_name_text and not normalized_email_filter and not normalized_uuid_filter
+    )
+
     include_raw = bool(include_raw_events)
 
     filtered_events: list[dict[str, Any]] = []
     activity_counter: Counter[str] = Counter()
     matched_actor_context: dict[str, Any] | None = None
 
-    for event in events:
+    # When the requested actor_name did not resolve, we cannot identify which
+    # events belong to that actor. Returning the unfiltered stream as their
+    # activity is the mislabeling bug; return zero events and surface the
+    # ineffective-filter signal below instead.
+    matchable_events = [] if actor_name_unresolved else events
+
+    for event in matchable_events:
         actor_info = _extract_actor(event)
         target_user = _extract_target_user(event)
 
@@ -768,7 +786,11 @@ async def audit_trail_user_activity(
     applied_filters = {
         "actor_email": normalized_email_filter,
         "actor_uuid": normalized_uuid_filter,
-        "actor_name": actor_name_text,
+        # Only claim the name filter as applied when it actually resolved to an
+        # email/uuid that the per-event loop could match on. An unresolved name
+        # is reported via metadata.filter_ineffective instead, never asserted
+        # here as applied.
+        "actor_name": None if actor_name_unresolved else actor_name_text,
         "cursor": cursor,
         "limit": limit,
         "include_raw_events": include_raw,
@@ -789,7 +811,10 @@ async def audit_trail_user_activity(
     if resolved_actor:
         data["resolved_actor"] = resolved_actor
 
-    filter_applied = bool(normalized_email_filter or normalized_uuid_filter or actor_name_text)
+    # A filter is "applied" only when an effective client-side filter exists. An
+    # unresolved actor_name is NOT an applied filter (it matches nothing), so it
+    # must not gate the no-matches-in-page pagination advice below.
+    filter_applied = bool(normalized_email_filter or normalized_uuid_filter)
 
     metadata: dict[str, Any] = {
         "org_id": org_id,
@@ -833,6 +858,25 @@ async def audit_trail_user_activity(
                 "and re-query until both `events_returned=0` AND "
                 "`next_cursor=null`. A non-null `next_cursor` with "
                 "`events_returned=0` does NOT mean the actor was inactive."
+            ),
+        }
+    # The requested actor_name could not be resolved to an email or uuid, so no
+    # client-side filter could be applied. Surface an honest, events-adjacent
+    # signal: the actor filter did NOT apply, and (because we returned zero
+    # events) the response is not a list of this actor's activity. This prevents
+    # the consumer from reading the result as "Alice did nothing" or — worse —
+    # as the whole org's stream relabeled as Alice's.
+    if actor_name_unresolved:
+        metadata["filter_ineffective"] = {
+            "filter": "actor_name",
+            "requested_actor_name": actor_name_text,
+            "reason": "actor_name_unresolved",
+            "advice": (
+                "The requested actor_name could not be resolved to a user "
+                "(email/uuid), so the actor filter was not applied and no "
+                "events are returned. `events_returned=0` here does NOT mean "
+                "the actor had no activity. Provide actor_email or actor_uuid, "
+                "or verify the name, then re-query."
             ),
         }
     if api_next_link:

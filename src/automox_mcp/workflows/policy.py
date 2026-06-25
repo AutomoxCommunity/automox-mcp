@@ -840,10 +840,14 @@ async def describe_policy_run_result(
             ),
         },
         # Legacy fields retained for backwards-compat (#52). Canonical
-        # pagination block lives under metadata.pagination.
-        "page": upstream_page,
-        "limit": upstream_limit,
-        "total_count": upstream_total,
+        # pagination block lives under metadata.pagination. Reserved keys
+        # limit/total_count are strictly typed (int|None) on PaginationMetadata,
+        # so guard the raw upstream forwards with the same isinstance check
+        # already applied below — a non-int (e.g. "") would otherwise raise an
+        # uncaught ValidationError in as_tool_response.
+        "page": upstream_page if isinstance(upstream_page, int) else None,
+        "limit": upstream_limit if isinstance(upstream_limit, int) else None,
+        "total_count": upstream_total if isinstance(upstream_total, int) else None,
         "pagination": build_pagination_metadata(
             page=upstream_page if isinstance(upstream_page, int) else None,
             page_size=upstream_limit if isinstance(upstream_limit, int) else None,

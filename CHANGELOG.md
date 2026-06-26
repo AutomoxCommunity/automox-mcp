@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.5] - 2026-06-26
+
+### Fixed
+
+- **`list_events` no longer reports a per-page count as the organization-wide total.** The endpoint returns a bare list with no upstream total, so a normal (non-count) response now reports `events_returned` (the number of events on this page) plus a `metadata.pagination` block and a `suggested_next_call`, instead of a `total_events` that under-reported by a page on any limited query. Count mode (`count_only=true`) still returns the real `total_events` from the upstream `size`. **Note:** `total_events` is no longer present on normal `list_events` responses — read `events_returned` and `metadata.pagination`.
+- **`list_saved_searches` now returns usable saved searches.** The endpoint returns a Spring `Page` envelope that was being collapsed into a single empty record, so every saved search came back as `{}` with no id/name/query. The envelope is now unwrapped, each saved search retains its `id`/`name`/`search`, and pagination is surfaced via `metadata.pagination`.
+- **Write tools no longer block a corrected retry after a failed first attempt.** `apply_policy_changes`, `create`/`update`/`delete_policy_window`, `invite_user_to_account`, `remove_user_from_account`, `create`/`update`/`delete_server_group`, and `upload_action_set` reserved an idempotency key but did not release it when the call failed (e.g. a validation error), so a retry with the same `request_id` — even after correcting the payload — silently returned a duplicate no-op for the full key TTL. They now release the reservation on failure, so a corrected retry executes.
+- **Several read tools and one resource no longer crash on unexpected upstream shapes.** `resource://servergroups/list` no longer raises when a server group's `policies` is `null`; `describe_policy` tolerates a non-numeric `schedule_days` (degrading instead of raising); and `summarize_policy_activity`, `summarize_policy_execution_history`, `list_device_packages`, `search_devices`, and `device_health_metrics` skip non-object elements in a `/servers` (or run) list instead of raising.
+
 ## [2.2.4] - 2026-06-24
 
 ### Security

@@ -91,12 +91,16 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "account_rbac_role": account_rbac_role,
                 "zone_assignments": zone_assignments,
             }
-            result = await call_tool_workflow(
-                client,
-                workflows.invite_user_to_account,
-                params,
-                params_model=InviteUserParams,
-            )
+            try:
+                result = await call_tool_workflow(
+                    client,
+                    workflows.invite_user_to_account,
+                    params,
+                    params_model=InviteUserParams,
+                )
+            except BaseException:
+                await release_idempotency(request_id, "invite_user_to_account")
+                raise
             await store_idempotency(request_id, "invite_user_to_account", result)
             return result
 
@@ -122,12 +126,16 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "account_id": _resolve_account_id(None),
                 "user_id": user_id,
             }
-            result = await call_tool_workflow(
-                client,
-                workflows.remove_user_from_account,
-                params,
-                params_model=RemoveUserFromAccountParams,
-            )
+            try:
+                result = await call_tool_workflow(
+                    client,
+                    workflows.remove_user_from_account,
+                    params,
+                    params_model=RemoveUserFromAccountParams,
+                )
+            except BaseException:
+                await release_idempotency(request_id, "remove_user_from_account")
+                raise
             await store_idempotency(request_id, "remove_user_from_account", result)
             return result
 

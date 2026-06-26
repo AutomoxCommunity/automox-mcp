@@ -217,6 +217,17 @@ _MAX_STALE_DEVICE_LIMIT = 200
 _STALE_CHECK_IN_THRESHOLD_DAYS = 30
 
 
+def _mapping_rows(page: Sequence[Any]) -> list[Mapping[str, Any]]:
+    """Keep only Mapping elements from a ``/servers`` page.
+
+    The API can return a page whose elements are not all objects; iterating and
+    calling ``.get(...)`` on a scalar would raise ``AttributeError`` and fail the
+    whole tool. Mirrors the guard ``list_devices_needing_attention`` already
+    applies to its report list.
+    """
+    return [item for item in page if isinstance(item, Mapping)]
+
+
 def _add_followup(metadata: dict[str, Any], tool: str, note: str) -> None:
     """Append a suggested follow-up entry without introducing duplicates."""
     followups = metadata.setdefault("suggested_followups", [])
@@ -679,7 +690,7 @@ async def list_device_inventory(
         Called by parallel_paginate in strict page order; safe to mutate
         ``curated_devices`` from here.
         """
-        for item in items:
+        for item in _mapping_rows(items):
             summary_fields = _summarize_device_common_fields(item)
             is_managed = summary_fields["is_managed"]
             if managed is not None and is_managed != managed:
@@ -1215,7 +1226,7 @@ async def search_devices(
 
     def _process_search_page(_page_num: int, devices: Sequence[Any]) -> bool:
         """Apply client-side filters per-device; stop when limit reached."""
-        for device in devices:
+        for device in _mapping_rows(devices):
             if hostname_term:
                 name = str(device.get("name") or device.get("hostname") or "").lower()
                 custom_name = str(device.get("custom_name") or "").lower()
@@ -1364,7 +1375,7 @@ async def summarize_device_health(
         normalized_limit = max(0, min(int(max_stale_devices), _MAX_STALE_DEVICE_LIMIT))
         stale_limit = normalized_limit
 
-    for device in devices:
+    for device in _mapping_rows(devices):
         summary_fields = _summarize_device_common_fields(device)
         is_managed = summary_fields["is_managed"]
         totals["managed" if is_managed else "unmanaged"] += 1

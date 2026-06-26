@@ -58,12 +58,17 @@ async def summarize_policy_activity(
         params=run_params,
     )
 
+    # Accept only `list` here (not the broader Sequence): a bare `str` and a
+    # `bytes` response are Sequences too, and a string `data` would iterate
+    # into per-character items that have no `.get`. Restricting to list, plus
+    # the per-item Mapping guard below, makes a non-list / non-dict-element
+    # body yield zero runs instead of an AttributeError crash.
     runs: Sequence[Mapping[str, Any]] = []
     if isinstance(policy_runs, Mapping):
         run_items = policy_runs.get("data")
-        if isinstance(run_items, Sequence):
+        if isinstance(run_items, list):
             runs = run_items
-    elif isinstance(policy_runs, Sequence):
+    elif isinstance(policy_runs, list):
         runs = policy_runs
 
     # Each run item contains aggregate device counts: success, failed, pending,
@@ -74,6 +79,8 @@ async def summarize_policy_activity(
     )
 
     for item in runs:
+        if not isinstance(item, Mapping):
+            continue
         failed = item.get("failed") or 0
         success = item.get("success") or 0
         device_count = item.get("device_count") or 0
@@ -216,12 +223,14 @@ async def summarize_policy_execution_history(
 
     if isinstance(payload, Mapping):
         run_items = payload.get("data")
-        if isinstance(run_items, Sequence):
+        # Accept only `list` (not the broader Sequence): a string `data` is a
+        # Sequence that would slice into per-character items with no `.get`.
+        if isinstance(run_items, list):
             runs = run_items
         # Try to extract policy name from first run item
-        if runs:
+        if runs and isinstance(runs[0], Mapping):
             policy_name = runs[0].get("policy_name")
-    elif isinstance(payload, Sequence):
+    elif isinstance(payload, list):
         runs = payload  # type: ignore[assignment]
 
     runs = list(_take(runs, limit))
@@ -230,6 +239,8 @@ async def summarize_policy_execution_history(
     timeline = []
 
     for item in runs:
+        if not isinstance(item, Mapping):
+            continue
         exec_token = item.get("execution_token") or item.get("exec_token")
         run_time = item.get("run_time")
         failed = item.get("failed") or 0
@@ -670,10 +681,14 @@ async def describe_policy(
                 logger.debug("Failed to fetch policy history: %s", exc)
                 recent_activity = None
 
-    # Decode schedule_days bitmask for better readability and add to top level
+    # Decode schedule_days bitmask for better readability and add to top level.
+    # schedule_days is a bitmask but the upstream type is known-uncertain (a
+    # non-int like the string "62" would raise TypeError in the bitmask AND
+    # below); gate on int (excluding bool) exactly as summarize_policies does
+    # and skip decoding gracefully when it is not an int.
     schedule_interpretation = None
     schedule_days = policy_data.get("schedule_days")
-    if schedule_days is not None:
+    if isinstance(schedule_days, int) and not isinstance(schedule_days, bool):
         schedule_interpretation = _decode_schedule_days_bitmask(schedule_days)
 
     data = {

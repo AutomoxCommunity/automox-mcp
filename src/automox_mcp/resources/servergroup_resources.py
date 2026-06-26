@@ -51,7 +51,7 @@ def register(server: FastMCP, *, client: AutomoxClient) -> None:
                         "name": group.get("name") or "(unnamed)",
                         "organization_id": group.get("organization_id"),
                         "server_count": group.get("server_count", 0),
-                        "policy_count": len(group.get("policies", [])),
+                        "policy_count": len(group.get("policies") or []),
                     }
                 )
 

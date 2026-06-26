@@ -21,6 +21,7 @@ from ..utils.tooling import (
     call_tool_workflow,
     check_idempotency,
     maybe_format_markdown,
+    release_idempotency,
     store_idempotency,
 )
 
@@ -133,13 +134,17 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "notes": notes,
                 "policies": policies,
             }
-            result = await call_tool_workflow(
-                client,
-                workflows.create_server_group,
-                params,
-                params_model=CreateServerGroupParams,
-                inject_org_id=True,
-            )
+            try:
+                result = await call_tool_workflow(
+                    client,
+                    workflows.create_server_group,
+                    params,
+                    params_model=CreateServerGroupParams,
+                    inject_org_id=True,
+                )
+            except BaseException:
+                await release_idempotency(request_id, "create_server_group")
+                raise
             await store_idempotency(request_id, "create_server_group", result)
             return result
 
@@ -187,13 +192,17 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "notes": notes,
                 "policies": policies,
             }
-            result = await call_tool_workflow(
-                client,
-                workflows.update_server_group,
-                params,
-                params_model=UpdateServerGroupParams,
-                inject_org_id=True,
-            )
+            try:
+                result = await call_tool_workflow(
+                    client,
+                    workflows.update_server_group,
+                    params,
+                    params_model=UpdateServerGroupParams,
+                    inject_org_id=True,
+                )
+            except BaseException:
+                await release_idempotency(request_id, "update_server_group")
+                raise
             await store_idempotency(request_id, "update_server_group", result)
             return result
 
@@ -218,12 +227,16 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             params = {
                 "group_id": group_id,
             }
-            result = await call_tool_workflow(
-                client,
-                workflows.delete_server_group,
-                params,
-                params_model=DeleteServerGroupParams,
-            )
+            try:
+                result = await call_tool_workflow(
+                    client,
+                    workflows.delete_server_group,
+                    params,
+                    params_model=DeleteServerGroupParams,
+                )
+            except BaseException:
+                await release_idempotency(request_id, "delete_server_group")
+                raise
             await store_idempotency(request_id, "delete_server_group", result)
             return result
 

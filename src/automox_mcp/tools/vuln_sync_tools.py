@@ -224,12 +224,16 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             cached = await check_idempotency(request_id, "upload_action_set")
             if cached is not None:
                 return cached
-            result = await call_tool_workflow(
-                client,
-                _upload_action_set,
-                {"csv_content": csv_content, "source": source, "filename": filename},
-                params_model=UploadActionSetParams,
-            )
+            try:
+                result = await call_tool_workflow(
+                    client,
+                    _upload_action_set,
+                    {"csv_content": csv_content, "source": source, "filename": filename},
+                    params_model=UploadActionSetParams,
+                )
+            except BaseException:
+                await release_idempotency(request_id, "upload_action_set")
+                raise
             await store_idempotency(request_id, "upload_action_set", result)
             return result
 

@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from ..client import AutomoxClient
+from ..utils.response import build_pagination_metadata
 
 
 async def list_events(
@@ -70,7 +71,6 @@ async def list_events(
     else:
         events_list = [events] if events else []
 
-    total = api_total if api_total is not None else len(events_list)
     summary: list[dict[str, Any]] = []
     for event in events_list:
         if not isinstance(event, Mapping):
@@ -89,12 +89,56 @@ async def list_events(
         }
         summary.append(entry)
 
-    return {
-        "data": {
-            "total_events": total,
-            "events": summary,
+    data: dict[str, Any] = {}
+    metadata: dict[str, Any] = {"deprecated_endpoint": False}
+
+    if api_total is not None:
+        # Count mode (countOnly=1): upstream supplies a real org-wide total
+        # under `size`, with no event bodies. Only here can we claim a grand
+        # total; count_only suppresses the events array.
+        data["total_events"] = api_total
+        data["events"] = []
+        return {"data": data, "metadata": metadata}
+
+    # Normal mode: the live /events endpoint returns a bare list with no
+    # upstream total, so we can only report how many came back on THIS page —
+    # never a grand total (presenting len(page) as `total_events`
+    # under-reported by a page on any limited query).
+    events_returned = len(summary)
+    data["events_returned"] = events_returned
+    data["events"] = summary
+
+    # /events is offset-paginated with no total, so "more pages exist" is
+    # inferred from a full page (returned == limit) rather than a counter.
+    has_more = limit is not None and events_returned >= limit
+    current_page = page if page is not None else 0
+    next_page = current_page + 1 if has_more else None
+    metadata["pagination"] = build_pagination_metadata(
+        page=current_page,
+        page_size=limit,
+        has_more=has_more,
+        extra={
+            "returned_count": events_returned,
+            "next_page": next_page,
         },
-        "metadata": {
-            "deprecated_endpoint": False,
-        },
-    }
+    )
+    if has_more:
+        metadata["suggested_next_call"] = {
+            "tool": "list_events",
+            "args": {
+                k: v
+                for k, v in {
+                    "page": next_page,
+                    "limit": limit,
+                    "policy_id": policy_id,
+                    "server_id": server_id,
+                    "user_id": user_id,
+                    "event_name": event_name,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                }.items()
+                if v is not None
+            },
+        }
+
+    return {"data": data, "metadata": metadata}

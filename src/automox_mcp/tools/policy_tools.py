@@ -505,12 +505,15 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             if cached is not None:
                 return cached
 
-            normalized_operations = workflows.normalize_policy_operations_input(operations)
-            params = {
-                "operations": normalized_operations,
-                "preview": preview,
-            }
             try:
+                # Normalization can raise on malformed input; keep it inside the
+                # try so the in-flight idempotency reservation is released (below)
+                # and a corrected retry with the same request_id isn't shadowed.
+                normalized_operations = workflows.normalize_policy_operations_input(operations)
+                params = {
+                    "operations": normalized_operations,
+                    "preview": preview,
+                }
                 result = await call_tool_workflow(
                     client,
                     workflows.apply_policy_changes,

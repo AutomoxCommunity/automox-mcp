@@ -42,7 +42,8 @@ async def test_list_events_basic():
     client = StubClient(get_responses={"/events": [events_payload]})
     result = await list_events(cast(AutomoxClient, client), org_id=42)
 
-    assert result["data"]["total_events"] == 2
+    assert result["data"]["events_returned"] == 2
+    assert "total_events" not in result["data"]
     assert len(result["data"]["events"]) == 2
     first = result["data"]["events"][0]
     assert first["id"] == 1
@@ -57,7 +58,7 @@ async def test_list_events_empty_response():
     client = StubClient(get_responses={"/events": [[]]})
     result = await list_events(cast(AutomoxClient, client), org_id=42)
 
-    assert result["data"]["total_events"] == 0
+    assert result["data"]["events_returned"] == 0
     assert result["data"]["events"] == []
 
 
@@ -97,7 +98,7 @@ async def test_list_events_filters_passed_through():
         end_date="2026-03-31",
     )
 
-    assert result["data"]["total_events"] == 1
+    assert result["data"]["events_returned"] == 1
     assert result["data"]["events"][0]["id"] == 7
 
 
@@ -150,7 +151,7 @@ async def test_list_events_unexpected_dict_shape():
     """
     client = StubClient(get_responses={"/events": [{"unexpected": "value"}]})
     result = await list_events(cast(AutomoxClient, client), org_id=1)
-    assert result["data"]["total_events"] == 0
+    assert result["data"]["events_returned"] == 0
     assert result["data"]["events"] == []
 
 
@@ -159,8 +160,9 @@ async def test_list_events_non_list_non_dict_response():
     """Unexpected scalar response is wrapped into a single-element list."""
     client = StubClient(get_responses={"/events": ["unexpected"]})
     result = await list_events(cast(AutomoxClient, client), org_id=1)
-    # "unexpected" is not a Mapping, so it gets skipped in the loop
-    assert result["data"]["total_events"] == 1
+    # "unexpected" is not a Mapping, so it is skipped; events_returned counts
+    # only the events actually returned (0), not the raw page length.
+    assert result["data"]["events_returned"] == 0
     assert result["data"]["events"] == []
 
 
@@ -185,7 +187,7 @@ async def test_list_events_skips_non_mapping_items():
     ]
     client = StubClient(get_responses={"/events": [events]})
     result = await list_events(cast(AutomoxClient, client), org_id=1)
-    assert result["data"]["total_events"] == 3
+    assert result["data"]["events_returned"] == 1
     assert len(result["data"]["events"]) == 1
 
 
@@ -194,7 +196,7 @@ async def test_list_events_none_response():
     """None response returns empty events."""
     client = StubClient(get_responses={"/events": [None]})
     result = await list_events(cast(AutomoxClient, client), org_id=1)
-    assert result["data"]["total_events"] == 0
+    assert result["data"]["events_returned"] == 0
     assert result["data"]["events"] == []
 
 

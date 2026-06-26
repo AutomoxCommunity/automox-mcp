@@ -16,6 +16,7 @@ from ..utils.tooling import (
     call_tool_workflow,
     check_idempotency,
     maybe_format_markdown,
+    release_idempotency,
     store_idempotency,
 )
 
@@ -472,14 +473,18 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "dtstart": dtstart,
                 "status": status,
             }
-            result = await call_tool_workflow(
-                client,
-                workflows.create_policy_window,
-                params,
-                params_model=CreatePolicyWindowParams,
-                org_uuid_field="org_uuid",
-                dump_mode="json",
-            )
+            try:
+                result = await call_tool_workflow(
+                    client,
+                    workflows.create_policy_window,
+                    params,
+                    params_model=CreatePolicyWindowParams,
+                    org_uuid_field="org_uuid",
+                    dump_mode="json",
+                )
+            except BaseException:
+                await release_idempotency(request_id, "create_policy_window")
+                raise
             await store_idempotency(request_id, "create_policy_window", result)
             return result
 
@@ -531,14 +536,18 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "group_uuids": group_uuids,
                 "status": status,
             }
-            result = await call_tool_workflow(
-                client,
-                workflows.update_policy_window,
-                params,
-                params_model=UpdatePolicyWindowParams,
-                org_uuid_field="org_uuid",
-                dump_mode="json",
-            )
+            try:
+                result = await call_tool_workflow(
+                    client,
+                    workflows.update_policy_window,
+                    params,
+                    params_model=UpdatePolicyWindowParams,
+                    org_uuid_field="org_uuid",
+                    dump_mode="json",
+                )
+            except BaseException:
+                await release_idempotency(request_id, "update_policy_window")
+                raise
             await store_idempotency(request_id, "update_policy_window", result)
             return result
 
@@ -565,14 +574,18 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "org_uuid": org_uuid,
                 "window_uuid": window_uuid,
             }
-            result = await call_tool_workflow(
-                client,
-                workflows.delete_policy_window,
-                params,
-                params_model=DeletePolicyWindowParams,
-                org_uuid_field="org_uuid",
-                dump_mode="json",
-            )
+            try:
+                result = await call_tool_workflow(
+                    client,
+                    workflows.delete_policy_window,
+                    params,
+                    params_model=DeletePolicyWindowParams,
+                    org_uuid_field="org_uuid",
+                    dump_mode="json",
+                )
+            except BaseException:
+                await release_idempotency(request_id, "delete_policy_window")
+                raise
             await store_idempotency(request_id, "delete_policy_window", result)
             return result
 

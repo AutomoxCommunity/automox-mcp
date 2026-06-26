@@ -85,28 +85,61 @@ async def list_saved_searches(
     *,
     org_id: int | None = None,
 ) -> dict[str, Any]:
-    """List saved device searches."""
+    """List saved device searches.
+
+    The upstream returns a Spring ``Page`` envelope (``content`` +
+    ``totalElements``/``last``), not a ``data`` list — ``extract_list`` has no
+    special-case for it and would wrap the whole envelope as a single bogus
+    record, so every saved search rendered as ``{}`` and the model lost the
+    ``id`` it needs to get/run/delete the search. We unwrap ``content`` (mirroring
+    ``advanced_device_search``) and pass each saved-search DTO through unmodified
+    so its real fields survive — note the DTO uses ``search`` (the filter spec),
+    not ``query`` (the same envelope ``create_saved_search`` writes). Spring
+    pagination is re-emitted under ``metadata.pagination``.
+    """
     org_uuid = await _resolve_org(client, org_id)
     response = await client.get(
         f"/server-groups-api/v1/organizations/{org_uuid}/device/saved-search/list",
     )
 
-    searches = _extract_list(response)
-    summaries: list[dict[str, Any]] = []
-    for item in searches:
-        entry: dict[str, Any] = {}
-        for key in ("id", "name", "description", "query", "created_at", "updated_at"):
-            val = item.get(key)
-            if val is not None:
-                entry[key] = val
-        summaries.append(entry)
+    searches: list[Mapping[str, Any]]
+    total: Any = None
+    pagination: dict[str, Any] | None = None
+    if isinstance(response, Mapping) and "content" in response:
+        content = response.get("content")
+        searches = (
+            [item for item in content if isinstance(item, Mapping)]
+            if isinstance(content, Sequence) and not isinstance(content, (str, bytes))
+            else []
+        )
+        total = response.get("total_elements")
+        if total is None:
+            total = response.get("totalElements")
+        is_last = response.get("last")
+        pagination = (
+            build_pagination_metadata(
+                page=response.get("number"),
+                page_size=response.get("size"),
+                total_elements=total,
+                total_pages=response.get("total_pages") or response.get("totalPages"),
+                has_more=(not is_last) if is_last is not None else None,
+                extra={"first": response.get("first"), "last": is_last},
+            )
+            or None
+        )
+    else:
+        searches = _extract_list(response)
+
+    metadata: dict[str, Any] = {"deprecated_endpoint": False}
+    if pagination:
+        metadata["pagination"] = pagination
 
     return {
         "data": {
-            "total_searches": len(summaries),
-            "saved_searches": summaries,
+            "total_searches": total if total is not None else len(searches),
+            "saved_searches": list(searches),
         },
-        "metadata": {"deprecated_endpoint": False},
+        "metadata": metadata,
     }
 
 

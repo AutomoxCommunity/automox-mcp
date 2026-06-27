@@ -377,10 +377,14 @@ def build_transport_security_middleware(
     # --- Security headers (always on) ---
     middlewares.append(ASGIMiddleware(SecurityHeadersMiddleware))
 
-    # --- Auth rate limiting (always on for HTTP/SSE) ---
-    middlewares.append(ASGIMiddleware(AuthRateLimitMiddleware))
-
     # --- DNS rebinding protection ---
+    # NB: appended BEFORE the auth rate limiter so it wraps it (Starlette applies
+    # the list outermost-first). A transport-security rejection (e.g. 403 for an
+    # invalid Origin) is a config/transport error, not an auth attempt, and must
+    # not flow back through AuthRateLimitMiddleware's send-wrapper — otherwise a
+    # misconfigured client/proxy gets IP-blocked and an unauthenticated attacker
+    # can trip the limiter cheaply. Genuine auth 401/403s originate in the inner
+    # app and still pass through the limiter.
     dns_protection = _env_flag("AUTOMOX_MCP_DNS_REBINDING_PROTECTION", default=True)
     if not dns_protection:
         logger.warning(
@@ -388,6 +392,8 @@ def build_transport_security_middleware(
             "AUTOMOX_MCP_DNS_REBINDING_PROTECTION=false. "
             "This is NOT recommended for production."
         )
+        # --- Auth rate limiting (always on for HTTP/SSE) ---
+        middlewares.append(ASGIMiddleware(AuthRateLimitMiddleware))
         return middlewares
 
     # Build allowed hosts
@@ -419,12 +425,19 @@ def build_transport_security_middleware(
     allowed_origins: list[str] = []
 
     def _add_origin_variants(h: str, p: int) -> None:
-        """Add http://host:port origin, plus bracket variant for IPv6."""
-        if ":" in h and not h.startswith("["):
-            # IPv6: browsers use bracketed form in Origin headers
-            allowed_origins.append(f"http://[{h}]:{p}")
-        else:
-            allowed_origins.append(f"http://{h}:{p}")
+        """Add origin variants for ``host``: the explicit ``http://host:port`` form
+        plus the default-port ``https://host`` form (no ``:443``).
+
+        A same-host browser MCP client under TLS sends ``Origin: https://host``
+        with the default 443 port omitted, which the explicit ``http://host:port``
+        entry never matches. Emitting the scheme-aware default-port form lets the
+        auto-allowlist cover that case without a manual override. Both bracket the
+        host for IPv6, since browsers use the bracketed form in Origin headers.
+        """
+        host_token = f"[{h}]" if ":" in h and not h.startswith("[") else h
+        allowed_origins.append(f"http://{host_token}:{p}")
+        # Default-port HTTPS form (443 omitted) for same-host TLS browser clients.
+        allowed_origins.append(f"https://{host_token}")
 
     # Allow the server's own origin
     _add_origin_variants(host, port)
@@ -450,6 +463,12 @@ def build_transport_security_middleware(
             allowed_origins=allowed_origins,
         )
     )
+
+    # --- Auth rate limiting (always on for HTTP/SSE) ---
+    # Appended last so it sits INSIDE the DNS-rebinding middleware: only responses
+    # that survive transport-security validation reach its send-wrapper, so its
+    # 403s (invalid Origin) are never miscounted as auth failures.
+    middlewares.append(ASGIMiddleware(AuthRateLimitMiddleware))
 
     return middlewares
 

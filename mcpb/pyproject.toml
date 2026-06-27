@@ -1,10 +1,10 @@
 [project]
 name = "automox-mcp-bundle"
-version = "2.2.5"
+version = "2.2.6"
 description = "MCPB Desktop Extension wrapper for the official Automox MCP server"
 requires-python = ">=3.11"
 dependencies = [
-  "automox-mcp>=2.2.5",
+  "automox-mcp>=2.2.6",
 ]
 
 # This pyproject.toml is consumed by `uv run` inside the MCPB bundle.

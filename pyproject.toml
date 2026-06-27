@@ -1,6 +1,6 @@
 [project]
 name = "automox-mcp"
-version = "2.2.5"
+version = "2.2.6"
 description = "Official MCP server for Automox"
 readme = "README.md"
 authors = [
@@ -22,6 +22,7 @@ dependencies = [
   "cryptography>=48.0.1",  # GHSA-537c-gmf6-5ccf: bundled-OpenSSL fix in wheels
   "fastmcp>=3.4.2",
   "httpx>=0.28",
+  "joserfc>=1.6.7",  # CVE-2026-48990: JWS payload-size-limit bypass; transitive via fastmcp
   "pydantic>=2.12",
   "python-dotenv>=1.1"
 ]

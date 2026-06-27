@@ -233,6 +233,14 @@ def _create_jwt_auth() -> Any | None:
 
     public_key = _env_str("AUTOMOX_MCP_OAUTH_PUBLIC_KEY")
 
+    # JWTVerifier accepts exactly one of jwks_uri / public_key; reject the
+    # ambiguous both-set case here with a friendly message instead of letting
+    # the library raise an opaque ValueError at construction.
+    if jwks_uri and public_key:
+        raise RuntimeError(
+            "Set exactly one of AUTOMOX_MCP_OAUTH_JWKS_URI or AUTOMOX_MCP_OAUTH_PUBLIC_KEY."
+        )
+
     # If public_key looks like a file path, read it
     if public_key and not public_key.startswith("-----"):
         key_path = Path(public_key).expanduser()
@@ -308,8 +316,13 @@ def _create_jwt_auth() -> Any | None:
             "will be accepted, enabling cross-service token reuse. "
             "Set AUTOMOX_MCP_OAUTH_AUDIENCE to your server's resource identifier."
         )
-    algorithm = _env_str("AUTOMOX_MCP_OAUTH_ALGORITHM") or "RS256"
-    # Validate algorithm compatibility with key type
+    # Normalize once at read time so the guards below AND the forwarded
+    # verifier_kwargs['algorithm'] all use the canonical uppercase form that
+    # JWTVerifier accepts (it rejects case variants like "rs256").
+    algorithm = (_env_str("AUTOMOX_MCP_OAUTH_ALGORITHM") or "RS256").upper()
+    # Validate algorithm compatibility with key type. All entries are uppercase
+    # so the canonical `algorithm` matches directly. EdDSA is intentionally
+    # absent — JWTVerifier does not support it downstream.
     _ASYMMETRIC_ALGORITHMS = {
         "RS256",
         "RS384",
@@ -320,23 +333,22 @@ def _create_jwt_auth() -> Any | None:
         "PS256",
         "PS384",
         "PS512",
-        "EdDSA",
     }
     _HMAC_ALGORITHMS = {"HS256", "HS384", "HS512"}
-    if algorithm.upper() in _HMAC_ALGORITHMS and public_key:
+    if algorithm in _HMAC_ALGORITHMS and public_key:
         raise RuntimeError(
             f"AUTOMOX_MCP_OAUTH_ALGORITHM={algorithm} is an HMAC algorithm but a public key "
             "is configured. HMAC algorithms use shared secrets, not public keys. "
             "Use an asymmetric algorithm (e.g., RS256, ES256) with public keys."
         )
-    if algorithm.upper() in _HMAC_ALGORITHMS and jwks_uri:
+    if algorithm in _HMAC_ALGORITHMS and jwks_uri:
         raise RuntimeError(
             f"AUTOMOX_MCP_OAUTH_ALGORITHM={algorithm} is an HMAC algorithm but a JWKS URI "
             "is configured. HMAC shared secrets must not be fetched from a JWKS endpoint — "
             "this combination enables key-confusion attacks. "
             "Use an asymmetric algorithm (e.g., RS256, ES256) with JWKS."
         )
-    if algorithm.upper() not in _ASYMMETRIC_ALGORITHMS | _HMAC_ALGORITHMS:
+    if algorithm not in _ASYMMETRIC_ALGORITHMS | _HMAC_ALGORITHMS:
         raise RuntimeError(
             f"AUTOMOX_MCP_OAUTH_ALGORITHM={algorithm} is not a recognized JWT algorithm. "
             f"Supported: {', '.join(sorted(_ASYMMETRIC_ALGORITHMS | _HMAC_ALGORITHMS))}"

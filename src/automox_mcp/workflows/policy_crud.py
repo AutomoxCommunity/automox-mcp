@@ -12,8 +12,8 @@ from fastmcp.exceptions import ToolError
 
 from ..client import AutomoxAPIError, AutomoxClient
 from ..utils.pagination import parallel_paginate
+from ..utils.response import build_pagination_metadata, require_org_id
 from ..utils.response import extract_list as _extract_list
-from ..utils.response import require_org_id
 from ..utils.upload import get_upload_timeout_seconds, validate_upload_path
 
 logger = logging.getLogger(__name__)
@@ -1383,9 +1383,43 @@ async def preview_policy_device_filters(
         devices = _extract_list(response)
         total = len(devices)
 
+    devices_returned = len(devices)
+
+    data: dict[str, Any] = {"total_devices": total, "devices": devices}
+    metadata: dict[str, Any] = {"deprecated_endpoint": False, "org_id": resolved_org_id}
+
+    # When a limit is applied the device list is a page, not the whole set: emit
+    # an explicit pagination block (has_more) and the exact next invocation. The
+    # per-page count is surfaced as `devices_returned` so it can't be misread as
+    # the grand total when `total` (the envelope size) exceeds this page.
+    if limit is not None:
+        data["devices_returned"] = devices_returned
+        effective_page = page if page is not None else 0
+        has_more = total > (effective_page + 1) * limit
+        metadata["pagination"] = build_pagination_metadata(
+            page=effective_page,
+            page_size=limit,
+            total_elements=total,
+            has_more=has_more,
+        )
+        if has_more:
+            metadata["suggested_next_call"] = {
+                "tool": "preview_policy_device_filters",
+                "args": {
+                    k: v
+                    for k, v in {
+                        "device_filters": device_filters,
+                        "server_groups": server_groups,
+                        "page": effective_page + 1,
+                        "limit": limit,
+                    }.items()
+                    if v is not None
+                },
+            }
+
     return {
-        "data": {"total_devices": total, "devices": devices},
-        "metadata": {"deprecated_endpoint": False, "org_id": resolved_org_id},
+        "data": data,
+        "metadata": metadata,
     }
 
 

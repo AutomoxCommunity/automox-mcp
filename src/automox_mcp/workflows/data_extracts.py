@@ -80,11 +80,25 @@ async def list_data_extracts(
             entry["has_download_url"] = True
         extracts.append(entry)
 
+    # Pagination honesty: `total_extracts` is a true grand total ONLY when the
+    # `{results, size}` envelope supplies `size`. On the bare-list fallback there
+    # is no upstream total, so labelling the page length `total_extracts` would
+    # overstate a single page as the whole set — emit `extracts_returned` instead.
+    data: dict[str, Any] = {
+        "extracts_returned": len(extracts),
+        "extracts": extracts,
+    }
+    if isinstance(total, int):
+        data["total_extracts"] = total
+    else:
+        # Deprecated alias: a non-envelope caller historically read
+        # `total_extracts` and got the per-page count. Keep it (equal to
+        # `extracts_returned`) so existing readers don't break; prefer
+        # `extracts_returned` for the honest per-page count.
+        data["total_extracts"] = len(extracts)
+
     return {
-        "data": {
-            "total_extracts": total if isinstance(total, int) else len(extracts),
-            "extracts": extracts,
-        },
+        "data": data,
         "metadata": {
             "deprecated_endpoint": False,
             "field_notes": _EXTRACT_FIELD_NOTES,

@@ -6,7 +6,33 @@ from collections.abc import Mapping
 from typing import Any
 
 from ..client import AutomoxClient
+from ..utils.response import build_pagination_metadata
 from ..utils.response import extract_list as _extract_list
+
+
+def _page_pagination(
+    *,
+    page: int | None,
+    limit: int | None,
+    returned: int,
+) -> tuple[dict[str, Any], int | None]:
+    """Build offset-pagination metadata for an upstream that returns no total.
+
+    These remediation list endpoints return a bare page with no grand total, so
+    "more pages may exist" is inferred from a full page (``returned >= limit``)
+    rather than a counter. Returns the ``metadata.pagination`` block plus the
+    next page number (``None`` when the page is short / not the last full page).
+    """
+    current_page = page if page is not None else 0
+    has_more = limit is not None and returned >= limit
+    next_page = current_page + 1 if has_more else None
+    pagination = build_pagination_metadata(
+        page=current_page,
+        page_size=limit,
+        has_more=has_more,
+        extra={"limit": limit, "returned_count": returned, "next_page": next_page},
+    )
+    return pagination, next_page
 
 
 def _summarize_action_set(item: Mapping[str, Any]) -> dict[str, Any]:
@@ -112,12 +138,28 @@ async def list_remediation_action_sets(
     items = _extract_list(response)
     summaries = [_summarize_action_set(item) for item in items]
 
+    pagination, next_page = _page_pagination(page=page, limit=limit, returned=len(summaries))
+    metadata: dict[str, Any] = {
+        "deprecated_endpoint": False,
+        "pagination": pagination,
+    }
+    if next_page is not None:
+        metadata["suggested_next_call"] = {
+            "tool": "list_remediation_action_sets",
+            "args": {"page": next_page, "limit": limit},
+        }
+
     return {
         "data": {
+            # Per-page count only: this endpoint supplies no grand total, so a
+            # full page means more may exist (see metadata.pagination).
+            "action_sets_returned": len(summaries),
+            # Deprecated alias of action_sets_returned (per-page count, NOT a
+            # grand total) retained for existing readers.
             "total_action_sets": len(summaries),
             "action_sets": summaries,
         },
-        "metadata": {"deprecated_endpoint": False},
+        "metadata": metadata,
     }
 
 
@@ -184,13 +226,33 @@ async def get_action_set_issues(
 
     issues = _extract_list(response)
 
+    pagination, next_page = _page_pagination(page=page, limit=limit, returned=len(issues))
+    metadata: dict[str, Any] = {
+        "deprecated_endpoint": False,
+        "pagination": pagination,
+    }
+    if next_page is not None:
+        metadata["suggested_next_call"] = {
+            "tool": "get_action_set_issues",
+            "args": {
+                "action_set_id": action_set_id,
+                "page": next_page,
+                "limit": limit,
+            },
+        }
+
     return {
         "data": {
             "action_set_id": action_set_id,
+            # Per-page count only: this endpoint supplies no grand total, so a
+            # full page means more may exist (see metadata.pagination).
+            "issues_returned": len(issues),
+            # Deprecated alias of issues_returned (per-page count, NOT a grand
+            # total) retained for existing readers.
             "total_issues": len(issues),
             "issues": issues,
         },
-        "metadata": {"deprecated_endpoint": False},
+        "metadata": metadata,
     }
 
 
@@ -215,14 +277,34 @@ async def get_action_set_solutions(
 
     solutions = _extract_list(response)
 
+    pagination, next_page = _page_pagination(page=page, limit=limit, returned=len(solutions))
+    suggested_next_call: dict[str, Any] | None = None
+    if next_page is not None:
+        suggested_next_call = {
+            "tool": "get_action_set_solutions",
+            "args": {
+                "action_set_id": action_set_id,
+                "page": next_page,
+                "limit": limit,
+            },
+        }
+
     return {
         "data": {
             "action_set_id": action_set_id,
+            # Per-page count only: this endpoint supplies no grand total, so a
+            # full page means more may exist (see metadata.pagination).
+            "solutions_returned": len(solutions),
+            # Deprecated alias of solutions_returned (per-page count, NOT a
+            # grand total) retained for the remediation-apply MCP App and the
+            # ActionSetSolutionsData output schema, which still read it.
             "total_solutions": len(solutions),
             "solutions": solutions,
         },
         "metadata": {
             "deprecated_endpoint": False,
+            "pagination": pagination,
+            **({"suggested_next_call": suggested_next_call} if suggested_next_call else {}),
             # Legend only — the raw `solutions` payload is forwarded verbatim
             # (no per-item severity/status mutation). The spec types these
             # fields as bare strings with no enum; vocabulary notes below mark

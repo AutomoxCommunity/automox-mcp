@@ -62,18 +62,27 @@ async def list_webhooks(
 
     webhooks: list[dict[str, Any]] = []
     next_cursor: str | None = None
+    total: int | None = None
     if isinstance(result, Mapping):
         raw_items = result.get("data") or result.get("webhooks") or []
         if isinstance(raw_items, list):
             webhooks = [_summarize_webhook(w) for w in raw_items if isinstance(w, Mapping)]
         next_cursor = result.get("nextCursor") or result.get("next_cursor")
+        raw_total = result.get("total") or result.get("totalElements")
+        if isinstance(raw_total, int):
+            total = raw_total
     elif isinstance(result, list):
         webhooks = [_summarize_webhook(w) for w in result if isinstance(w, Mapping)]
 
+    # webhooks_returned is the page count. Emit a real total_webhooks only when
+    # the upstream supplies one — reporting the page count under a grand-total
+    # name is dishonest when a next cursor (more pages) exists.
     data: dict[str, Any] = {
-        "total_webhooks": len(webhooks),
+        "webhooks_returned": len(webhooks),
         "webhooks": webhooks,
     }
+    if total is not None:
+        data["total_webhooks"] = total
     if next_cursor:
         # Legacy alias retained for backwards-compat. Canonical location is
         # metadata.pagination.next_cursor (issue #52).
@@ -85,6 +94,7 @@ async def list_webhooks(
             "deprecated_endpoint": False,
             "pagination": build_pagination_metadata(
                 page_size=limit,
+                total_elements=total,
                 has_more=bool(next_cursor),
                 next_cursor=next_cursor,
             ),

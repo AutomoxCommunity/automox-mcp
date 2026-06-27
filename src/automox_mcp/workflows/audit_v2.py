@@ -307,6 +307,13 @@ async def audit_events_ocsf(
         "data": {
             "org_uuid": resolved_uuid,
             "date": date,
+            # Per-page count only: this is a count of the events returned on
+            # THIS page after client-side filtering, NOT a grand total. When
+            # metadata.pagination.has_more is true, more pages exist — never
+            # present this as a date-wide total.
+            "events_returned": len(summaries),
+            # Deprecated alias of events_returned (per-page count, NOT a grand
+            # total) retained for existing readers.
             "total_events": len(summaries),
             "events": summaries,
         },

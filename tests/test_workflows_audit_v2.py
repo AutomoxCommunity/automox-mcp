@@ -109,7 +109,7 @@ async def test_returns_all_events() -> None:
         date="2026-03-25",
     )
 
-    assert result["data"]["total_events"] == 3
+    assert result["data"]["events_returned"] == 3
     assert result["data"]["date"] == "2026-03-25"
     assert result["data"]["org_uuid"] == _ORG_UUID
     # Real payloads have NO category_name field; the projection must not invent
@@ -213,7 +213,7 @@ async def test_category_filter_narrows_via_type_name_prefix() -> None:
         category_name="authentication",
     )
 
-    assert result["data"]["total_events"] == 1
+    assert result["data"]["events_returned"] == 1
     assert result["data"]["events"][0]["type_name"] == "Authentication: Logoff"
     # events_before_filter still reports the unfiltered count so an empty
     # filtered result is distinguishable from "no activity".
@@ -234,7 +234,7 @@ async def test_category_filter_entity_management_does_not_match_authentication()
         category_name="entity_management",
     )
 
-    assert result["data"]["total_events"] == 1
+    assert result["data"]["events_returned"] == 1
     assert result["data"]["events"][0]["type_name"] == "Entity Management: Create"
 
 
@@ -252,7 +252,7 @@ async def test_unknown_category_token_does_not_zero_results() -> None:
         category_name="not_a_real_category",
     )
 
-    assert result["data"]["total_events"] == 3
+    assert result["data"]["events_returned"] == 3
     assert result["metadata"]["applied_filters"]["category_name_matched"] is False
     assert result["metadata"]["events_before_filter"] == 3
     assert any("could not be mapped" in note for note in result["metadata"]["field_notes"])
@@ -269,7 +269,7 @@ async def test_filters_by_type_name() -> None:
         type_name="Entity Management: Create",
     )
 
-    assert result["data"]["total_events"] == 1
+    assert result["data"]["events_returned"] == 1
 
 
 @pytest.mark.asyncio
@@ -303,7 +303,7 @@ async def test_handles_wrapped_response() -> None:
         date="2026-03-25",
     )
 
-    assert result["data"]["total_events"] == 3
+    assert result["data"]["events_returned"] == 3
     assert result["metadata"]["next_cursor"] == "cursor-xyz"
 
 
@@ -316,7 +316,7 @@ async def test_handles_empty_response() -> None:
         org_id=42,
         date="2026-03-25",
     )
-    assert result["data"]["total_events"] == 0
+    assert result["data"]["events_returned"] == 0
 
 
 @pytest.mark.asyncio
@@ -329,7 +329,7 @@ async def test_category_filter_case_insensitive() -> None:
         date="2026-03-25",
         category_name="AUTHENTICATION",
     )
-    assert result["data"]["total_events"] == 1
+    assert result["data"]["events_returned"] == 1
     assert result["data"]["events"][0]["type_name"] == "Authentication: Logoff"
 
 
@@ -347,7 +347,7 @@ async def test_unverified_prefix_labeled_in_field_notes() -> None:
         date="2026-03-25",
         category_name="account_change",
     )
-    assert result["data"]["total_events"] == 0
+    assert result["data"]["events_returned"] == 0
     assert result["metadata"]["events_before_filter"] == 3
     assert result["metadata"]["applied_filters"]["category_name_matched"] is True
     notes = result["metadata"]["field_notes"]

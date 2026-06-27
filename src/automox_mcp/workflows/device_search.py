@@ -312,6 +312,8 @@ async def get_device_assignments(
     client: AutomoxClient,
     *,
     org_id: int | None = None,
+    page: int | None = None,
+    limit: int | None = None,
 ) -> dict[str, Any]:
     """Get device-to-policy/group assignments.
 
@@ -325,15 +327,29 @@ async def get_device_assignments(
     Now we explicitly extract `content` and re-emit the Spring
     pagination fields under `metadata.pagination` in the project's
     canonical shape.
+
+    Pagination honesty: `data.total_assignments` is the grand total across
+    all pages (the envelope `total_elements`), while `data.assignments_returned`
+    is the count on THIS page. When more pages remain, `metadata.suggested_next_call`
+    points at the next page. `page`/`limit` are forwarded upstream so a caller
+    can walk past page 0.
     """
     org_uuid = await _resolve_org(client, org_id)
 
+    params: dict[str, Any] = {}
+    if page is not None:
+        params["page"] = page
+    if limit is not None:
+        params["limit"] = limit
+
     response = await client.get(
         f"/server-groups-api/v1/organizations/{org_uuid}/assignments",
+        params=params or None,
     )
 
     assignments: list[Mapping[str, Any]]
     pagination: dict[str, Any] | None = None
+    total_elements: Any = None
     if isinstance(response, Mapping) and "content" in response:
         content = response.get("content")
         assignments = (
@@ -357,12 +373,13 @@ async def get_device_assignments(
         )
         total_pages = _first_present(response.get("total_pages"), response.get("totalPages"))
         is_last = response.get("last")
+        has_more = (not is_last) if is_last is not None else None
         pagination = build_pagination_metadata(
             page=response.get("number"),
             page_size=response.get("size"),
             total_elements=total_elements,
             total_pages=total_pages,
-            has_more=(not is_last) if is_last is not None else None,
+            has_more=has_more,
             extra={
                 "first": response.get("first"),
                 "last": is_last,
@@ -373,17 +390,33 @@ async def get_device_assignments(
                 "sort": sort_block,
             },
         )
+        # has_more may have been derived inside build_pagination_metadata
+        # (from total_elements/page/page_size) when last was absent.
+        if has_more is None:
+            has_more = pagination.get("has_more")
         pagination = pagination or None
     else:
         assignments = _extract_list(response)
+        has_more = None
 
     metadata: dict[str, Any] = {"deprecated_endpoint": False}
     if pagination:
         metadata["pagination"] = pagination
+    if has_more:
+        next_page = (page if page is not None else 0) + 1
+        metadata["suggested_next_call"] = {
+            "tool": "get_device_assignments",
+            "args": {k: v for k, v in {"page": next_page, "limit": limit}.items() if v is not None},
+        }
 
+    # `total_assignments` is the grand total across all pages (the Spring
+    # `total_elements`); on the bare-list fallback the upstream gives no total,
+    # so it falls back to the page length. `assignments_returned` is always the
+    # count on THIS page.
     return {
         "data": {
-            "total_assignments": len(assignments),
+            "total_assignments": total_elements if total_elements is not None else len(assignments),
+            "assignments_returned": len(assignments),
             "assignments": assignments,
         },
         "metadata": metadata,
@@ -794,21 +827,34 @@ async def run_saved_search(
 
     devices: list[Any]
     pagination: dict[str, Any] | None = None
+    total_elements: Any = None
+    has_more: bool | None = None
     if isinstance(response, Mapping) and "content" in response:
         content = response.get("content")
-        devices = list(content) if isinstance(content, Sequence) else []
+        devices = (
+            list(content)
+            if isinstance(content, Sequence) and not isinstance(content, (str, bytes))
+            else []
+        )
+        total_elements = response.get("total_elements")
+        if total_elements is None:
+            total_elements = response.get("totalElements")
+        total_pages = response.get("total_pages") or response.get("totalPages")
         is_last = response.get("last")
+        has_more = (not is_last) if is_last is not None else None
         pagination = (
             build_pagination_metadata(
                 page=response.get("number"),
                 page_size=response.get("size"),
-                total_elements=response.get("totalElements"),
-                total_pages=response.get("totalPages"),
-                has_more=(not is_last) if is_last is not None else None,
+                total_elements=total_elements,
+                total_pages=total_pages,
+                has_more=has_more,
                 extra={"first": response.get("first"), "last": is_last},
             )
             or None
         )
+        if has_more is None and pagination is not None:
+            has_more = pagination.get("has_more")
     else:
         devices = _extract_list(response)
 
@@ -818,11 +864,30 @@ async def run_saved_search(
     }
     if pagination:
         metadata["pagination"] = pagination
+    if has_more:
+        next_page = (page if page is not None else 0) + 1
+        metadata["suggested_next_call"] = {
+            "tool": "run_saved_search",
+            "args": {
+                k: v
+                for k, v in {
+                    "search_id": search_id,
+                    "page": next_page,
+                    "size": size,
+                    "fields": fields,
+                }.items()
+                if v is not None
+            },
+        }
 
+    # `total_devices` is the grand total across all pages (the Spring
+    # `total_elements`); it falls back to the page length only when the upstream
+    # gives no total. `devices_returned` is always the count on THIS page.
     return {
         "data": {
             "search_id": search_id,
-            "total_devices": len(devices),
+            "total_devices": total_elements if total_elements is not None else len(devices),
+            "devices_returned": len(devices),
             "devices": devices,
         },
         "metadata": metadata,

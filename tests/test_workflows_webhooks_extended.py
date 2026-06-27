@@ -47,7 +47,7 @@ async def test_list_webhooks_empty_mapping_returns_zero() -> None:
     """An API mapping with no 'data' or 'webhooks' key yields zero webhooks."""
     client = StubClient(get_responses={f"/organizations/{_ORG_UUID}/webhooks": [{}]})
     result = await list_webhooks(cast(AutomoxClient, client), org_uuid=_ORG_UUID)
-    assert result["data"]["total_webhooks"] == 0
+    assert result["data"]["webhooks_returned"] == 0
     assert result["data"]["webhooks"] == []
 
 

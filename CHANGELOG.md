@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.7] - 2026-06-27
+
+### Fixed
+
+- **List and report tools now report honest counts and real pagination.** Across the tool surface a single page's length was reported under a grand-total name (e.g. `total_users`, `total_organizations`, `total_groups`, `total_webhooks`, `total_assignments`, `total_runs`, `total_windows`, `total_approvals_considered`, the action-set / OCSF-events / data-extract counts), with no way to fetch the rest. Each tool now reports a per-page `*_returned` count, surfaces a real grand total **only** when the upstream API provides one (a Spring `Page` `totalElements` or an envelope `size`), and emits a `metadata.pagination` block plus a `suggested_next_call` to advance the page. **Note:** where a count field was renamed, the old name is retained as a deprecated alias (marked as a per-page count, not a grand total) for backward compatibility — prefer the `*_returned` fields and `metadata.pagination`.
+- **`policy_catalog` totals no longer overcount.** The pagination totals were derived from a different (unfiltered) population than the returned page, so `has_more`/`total_pages` could claim more pages than the filtered result actually holds. Totals are now derived from the returned set itself.
+- **Truncated and capped responses no longer claim to be complete.** `list_devices_needing_attention` now paginates fully (and reports a continuation if a page cap is hit); `summarize_device_health` flags `response_truncated` only when data is actually dropped and treats its `limit` as a device-sample cap matching the documented contract; `list_device_packages` and `get_device_full_profile` no longer silently cap the package set at a small page size; and `search_org_packages` no longer reports `has_more=true` for a complete short page.
+- **`policy_history_detail`** now reports the returned slice vs. the total available (with a continuation when truncated), and `recent_runs_limit=0` correctly omits the run list (it previously returned all runs).
+
 ## [2.2.6] - 2026-06-26
 
 ### Security

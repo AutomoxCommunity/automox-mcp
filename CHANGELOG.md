@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.6] - 2026-06-26
+
+### Security
+
+- **The per-IP authentication rate limiter no longer blocks clients over a transport-layer rejection.** An invalid-`Origin` / DNS-rebinding `403` was being counted as an authentication failure, so a misconfigured client (or a shared-IP reverse proxy) was IP-blocked for 5 minutes after 10 such requests, and an unauthenticated caller could trip the limiter cheaply. The DNS-rebinding/Origin check now sits outside the rate limiter, so transport-security rejections are no longer counted — while genuine authentication failures still are.
+- **Floored the transitive `joserfc` dependency to `>=1.6.7`** to pick up the fix for a JWS payload-size-limit bypass (CVE-2026-48990), where an oversized RFC 7797 `b64=false` payload could deserialize past the configured size limit.
+
+### Fixed
+
+- **The `AUTOMOX_MCP_OAUTH_ALGORITHM` setting is now case-insensitive.** A lowercase/mixed-case value (e.g. `rs256`) cleared the wrapper's validation but then crashed the server at startup inside the JWT verifier; the value is normalized so the server starts.
+- **Setting both `AUTOMOX_MCP_OAUTH_JWKS_URI` and `AUTOMOX_MCP_OAUTH_PUBLIC_KEY` now fails fast with a clear error** naming the conflict, instead of crashing at startup with an opaque library error.
+- **`EdDSA` is no longer advertised as a supported OAuth algorithm** — it was enumerated but always rejected (and unsupported downstream); configuring it now returns a clear "not a recognized algorithm" error.
+- **The auto-derived `Origin` allowlist now matches a same-host client over HTTPS.** Under TLS, a same-host browser client's `https://{host}` Origin (default port) previously failed validation unless `AUTOMOX_MCP_ALLOWED_ORIGINS` was set manually.
+
 ## [2.2.5] - 2026-06-26
 
 ### Fixed

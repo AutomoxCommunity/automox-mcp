@@ -222,14 +222,19 @@ async def test_list_packages_passes_pagination() -> None:
 
 
 @pytest.mark.asyncio
-async def test_list_packages_auto_paginates_until_short_page() -> None:
-    """Default (no page) walks every page so 'is X installed?' is not truncated."""
+async def test_list_packages_auto_paginates_until_short_page(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Default (no page) walks every page so 'is X installed?' is not truncated.
+
+    The walk runs at the (here shrunk) default page size — NOT at any caller
+    `limit` — so a package on a later page is never lost.
+    """
+    monkeypatch.setattr("automox_mcp.workflows.packages._DEFAULT_PACKAGE_PAGE_SIZE", 2)
     page0 = [{"id": 1, "name": "a"}, {"id": 2, "name": "b"}]  # full page (size 2)
     page1 = [{"id": 3, "name": "nginx"}]  # short page → end of data
     client = StubClient(get_responses={"/servers/101/packages": [page0, page1]})
-    result = await list_device_packages(
-        cast(AutomoxClient, client), org_id=555, device_id=101, limit=2
-    )
+    result = await list_device_packages(cast(AutomoxClient, client), org_id=555, device_id=101)
 
     assert result["data"]["total_packages"] == 3
     names = [p["name"] for p in result["data"]["packages"]]
@@ -238,22 +243,23 @@ async def test_list_packages_auto_paginates_until_short_page() -> None:
 
 
 @pytest.mark.asyncio
-async def test_list_packages_auto_paginate_hits_safety_cap() -> None:
+async def test_list_packages_auto_paginate_hits_safety_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """A host with more pages than the cap stops at _MAX_PACKAGE_PAGES and flags incomplete.
 
-    With page_size 2 and every page full, pagination never sees a short page,
-    so it walks exactly _MAX_PACKAGE_PAGES pages and reports complete=False —
-    the signal that the result is truncated, not exhaustive.
+    With every page full at the default page size, pagination never sees a short
+    page, so it walks exactly _MAX_PACKAGE_PAGES pages and reports complete=False
+    — the signal that the result is truncated, not exhaustive.
     """
+    monkeypatch.setattr("automox_mcp.workflows.packages._DEFAULT_PACKAGE_PAGE_SIZE", 2)
     # One full page (size 2) per cap slot — never a short page to end early.
     full_pages = [
         [{"id": 2 * n, "name": f"pkg{2 * n}"}, {"id": 2 * n + 1, "name": f"pkg{2 * n + 1}"}]
         for n in range(_MAX_PACKAGE_PAGES)
     ]
     client = StubClient(get_responses={"/servers/101/packages": full_pages})
-    result = await list_device_packages(
-        cast(AutomoxClient, client), org_id=555, device_id=101, limit=2
-    )
+    result = await list_device_packages(cast(AutomoxClient, client), org_id=555, device_id=101)
 
     assert result["data"]["total_packages"] == _MAX_PACKAGE_PAGES * 2
     assert result["metadata"]["complete"] is False
@@ -263,15 +269,43 @@ async def test_list_packages_auto_paginate_hits_safety_cap() -> None:
 
 @pytest.mark.asyncio
 async def test_list_packages_explicit_page_signals_more() -> None:
-    """A full explicit page flags has_more — the endpoint gives no total."""
+    """A full explicit page flags has_more and reports a page-scoped count.
+
+    The count is named ``packages_returned`` (this page), never the exhaustive
+    ``total_packages`` key the auto-paginate path uses, and a full page emits a
+    ``suggested_next_call`` for the next page.
+    """
     full_page = [{"id": i} for i in range(50)]
     client = StubClient(get_responses={"/servers/101/packages": [full_page]})
     result = await list_device_packages(
         cast(AutomoxClient, client), org_id=555, device_id=101, page=0, limit=50
     )
 
-    assert result["data"]["total_packages"] == 50
-    assert result["metadata"]["pagination"] == {"page": 0, "page_size": 50, "has_more": True}
+    assert result["data"]["packages_returned"] == 50
+    assert "total_packages" not in result["data"]
+    pagination = result["metadata"]["pagination"]
+    assert pagination["page"] == 0
+    assert pagination["page_size"] == 50
+    assert pagination["has_more"] is True
+    assert pagination["next_page"] == 1
+    assert result["metadata"]["suggested_next_call"] == {
+        "tool": "list_device_packages",
+        "args": {"device_id": 101, "page": 1, "limit": 50},
+    }
+
+
+@pytest.mark.asyncio
+async def test_list_packages_explicit_short_page_no_suggested_next_call() -> None:
+    """A short explicit page reports has_more False and no continuation."""
+    short_page = [{"id": i} for i in range(3)]
+    client = StubClient(get_responses={"/servers/101/packages": [short_page]})
+    result = await list_device_packages(
+        cast(AutomoxClient, client), org_id=555, device_id=101, page=0, limit=50
+    )
+
+    assert result["data"]["packages_returned"] == 3
+    assert result["metadata"]["pagination"]["has_more"] is False
+    assert "suggested_next_call" not in result["metadata"]
 
 
 @pytest.mark.asyncio

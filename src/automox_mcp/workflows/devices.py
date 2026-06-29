@@ -12,8 +12,8 @@ from typing import Any, Literal, cast
 
 from ..client import AutomoxAPIError, AutomoxClient
 from ..utils.pagination import parallel_paginate
+from ..utils.response import build_pagination_metadata, require_org_id
 from ..utils.response import normalize_status as _normalize_status
-from ..utils.response import require_org_id
 from ..utils.sanitize import CODE_BEARING_FIELDS
 from .device_inventory import get_device_inventory
 
@@ -215,6 +215,11 @@ _MAX_HEALTH_RESPONSE_BYTES = 18_000
 _DEFAULT_MAX_STALE_DEVICES = 25
 _MAX_STALE_DEVICE_LIMIT = 200
 _STALE_CHECK_IN_THRESHOLD_DAYS = 30
+# Safety cap on offset pages walked by ``list_devices_needing_attention``.
+# The endpoint is offset-paginated with no total, so we walk pages until a
+# short one signals the end; this bounds the walk on a pathologically large
+# non-compliant fleet rather than spinning forever.
+_MAX_NEEDS_ATTENTION_PAGES = 20
 
 
 def _mapping_rows(page: Sequence[Any]) -> list[Mapping[str, Any]]:
@@ -517,6 +522,91 @@ def _sanitize_raw_device_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
     return cast(dict[str, Any], sanitized_payload)
 
 
+def _extract_needs_attention_devices(report: Any) -> list[Mapping[str, Any]]:
+    """Pull the flagged-device list out of a /reports/needs-attention page.
+
+    The endpoint may return ``{"data": [...]}``, the nested
+    ``{"nonCompliant": {"devices": [...]}}`` shape, or a bare list.
+    """
+    if isinstance(report, Mapping):
+        items = report.get("data")
+        if isinstance(items, Sequence) and not isinstance(items, (str, bytes, bytearray)):
+            return [item for item in items if isinstance(item, Mapping)]
+        if not items:
+            nc = report.get("nonCompliant")
+            if isinstance(nc, Mapping):
+                nc_devices = nc.get("devices")
+                if isinstance(nc_devices, Sequence) and not isinstance(
+                    nc_devices, (str, bytes, bytearray)
+                ):
+                    return [item for item in nc_devices if isinstance(item, Mapping)]
+        return []
+    if isinstance(report, Sequence) and not isinstance(report, (str, bytes, bytearray)):
+        return [item for item in report if isinstance(item, Mapping)]
+    return []
+
+
+def _curate_needs_attention_device(item: Mapping[str, Any]) -> dict[str, Any]:
+    """Project one needs-attention report row into the model-facing shape.
+
+    The endpoint returns camelCase Automox console fields (`id`, `groupId`,
+    `lastRefreshTime`, `compliant`, `policies`); earlier revisions of this
+    wrapper looked for snake_case fields that the endpoint does not produce,
+    so every diagnostic field came back null.
+    """
+    compliant = item.get("compliant")
+    if compliant is False:
+        policy_status: Any = "non_compliant"
+    elif compliant is True:
+        policy_status = "compliant"
+    else:
+        # Defensive fallback for older snake_case payloads or future
+        # additions to the report shape.
+        policy_status = item.get("policy_status") or item.get("status")
+
+    policies = item.get("policies")
+    has_policies = isinstance(policies, Sequence) and not isinstance(
+        policies, (str, bytes, bytearray)
+    )
+    failing_policies: list[dict[str, Any]] = []
+    if has_policies:
+        for pol in cast(Sequence[Any], policies)[:5]:
+            if not isinstance(pol, Mapping):
+                continue
+            # severity/reasonForFail/policyCreateTime are the triage signals
+            # the report DTO carries that the old projection dropped.
+            failing_policies.append(
+                {
+                    k: v
+                    for k, v in {
+                        "policy_id": pol.get("id"),
+                        "policy_name": pol.get("name"),
+                        "policy_type": pol.get("type"),
+                        "severity": pol.get("severity"),
+                        "reason": pol.get("reasonForFail"),
+                        "policy_create_time": pol.get("policyCreateTime"),
+                    }.items()
+                    if v not in (None, "", [], {})
+                }
+            )
+    failing_policies_count = len(cast(Sequence[Any], policies)) if has_policies else None
+
+    return {
+        "device_id": item.get("device_id") or item.get("id"),
+        "device_name": _format_device_display_name(item),
+        "policy_status": policy_status,
+        "failing_policies_count": failing_policies_count,
+        "failing_policies": failing_policies or None,
+        "last_check_in": item.get("lastRefreshTime")
+        or item.get("last_check_in")
+        or item.get("last_seen"),
+        "server_group_id": item.get("groupId") or item.get("server_group_id"),
+        "needs_reboot": item.get("needsReboot"),
+        "os_family": item.get("os_family"),
+        "connected": item.get("connected"),
+    }
+
+
 async def list_devices_needing_attention(
     client: AutomoxClient,
     *,
@@ -524,108 +614,66 @@ async def list_devices_needing_attention(
     group_id: int | None = None,
     limit: int = 20,
 ) -> dict[str, Any]:
-    """Highlight devices that Automox flags as needing attention."""
+    """Highlight every device that Automox flags as needing attention.
+
+    The upstream ``/reports/needs-attention`` endpoint is offset-paginated
+    with no total count. ``limit`` is the per-request page size; this wrapper
+    walks pages by offset until a short page signals the end, so the returned
+    list is the COMPLETE set of flagged devices (bounded by an internal page
+    cap), not just the first page. ``metadata.pagination.has_more`` reports
+    whether that cap was hit before exhausting the report.
+    """
 
     resolved_org_id = require_org_id(client, org_id)
 
-    params = {"o": resolved_org_id, "limit": limit, "offset": 0}
+    base_params: dict[str, Any] = {"o": resolved_org_id, "limit": limit}
     if group_id is not None:
-        params["groupId"] = group_id
+        base_params["groupId"] = group_id
 
-    report = await client.get("/reports/needs-attention", params=params)
-
-    # The API may return {"data": [...]} or {"nonCompliant": {"devices": [...]}} or a list
-    devices: Sequence[Mapping[str, Any]] = []
-    if isinstance(report, Mapping):
-        items = report.get("data")
-        if isinstance(items, Sequence):
-            devices = items
-        elif not items:
-            # Try nested format: {"nonCompliant": {"devices": [...]}}
-            nc = report.get("nonCompliant")
-            if isinstance(nc, Mapping):
-                nc_devices = nc.get("devices")
-                if isinstance(nc_devices, Sequence):
-                    devices = nc_devices
-    elif isinstance(report, Sequence):
-        devices = [item for item in report if isinstance(item, Mapping)]
-
-    # Field-name mapping for /reports/needs-attention. The endpoint returns
-    # camelCase Automox console fields (`id`, `groupId`, `lastRefreshTime`,
-    # `compliant`, `policies`); earlier revisions of this wrapper looked for
-    # snake_case fields that the endpoint does not produce, so every
-    # diagnostic field came back null.
-    curated_devices = []
-    for item in devices:
-        compliant = item.get("compliant")
-        if compliant is False:
-            policy_status: Any = "non_compliant"
-        elif compliant is True:
-            policy_status = "compliant"
-        else:
-            # Defensive fallback for older snake_case payloads or future
-            # additions to the report shape.
-            policy_status = item.get("policy_status") or item.get("status")
-
-        policies = item.get("policies")
-        failing_policies: list[dict[str, Any]] = []
-        if isinstance(policies, Sequence) and not isinstance(policies, (str, bytes, bytearray)):
-            for pol in policies[:5]:
-                if not isinstance(pol, Mapping):
-                    continue
-                # severity/reasonForFail/policyCreateTime are the triage signals
-                # the report DTO carries that the old projection dropped — all
-                # three were present on every live nonCompliant policy entry
-                # (verified 2026-06-05). See metadata.field_notes for the
-                # severity enum caveat.
-                failing_policies.append(
-                    {
-                        k: v
-                        for k, v in {
-                            "policy_id": pol.get("id"),
-                            "policy_name": pol.get("name"),
-                            "policy_type": pol.get("type"),
-                            "severity": pol.get("severity"),
-                            "reason": pol.get("reasonForFail"),
-                            "policy_create_time": pol.get("policyCreateTime"),
-                        }.items()
-                        if v not in (None, "", [], {})
-                    }
-                )
-        failing_policies_count = (
-            len(policies)
-            if isinstance(policies, Sequence) and not isinstance(policies, (str, bytes, bytearray))
-            else None
-        )
-
-        curated_devices.append(
-            {
-                "device_id": item.get("device_id") or item.get("id"),
-                "device_name": _format_device_display_name(item),
-                "policy_status": policy_status,
-                "failing_policies_count": failing_policies_count,
-                "failing_policies": failing_policies or None,
-                "last_check_in": item.get("lastRefreshTime")
-                or item.get("last_check_in")
-                or item.get("last_seen"),
-                "server_group_id": item.get("groupId") or item.get("server_group_id"),
-                "needs_reboot": item.get("needsReboot"),
-                "os_family": item.get("os_family"),
-                "connected": item.get("connected"),
-            }
-        )
+    curated_devices: list[dict[str, Any]] = []
+    pages_walked = 0
+    hit_page_cap = False
+    for page_index in range(_MAX_NEEDS_ATTENTION_PAGES):
+        page_params = dict(base_params)
+        page_params["offset"] = page_index * limit
+        report = await client.get("/reports/needs-attention", params=page_params)
+        page_devices = _extract_needs_attention_devices(report)
+        pages_walked += 1
+        for item in page_devices:
+            curated_devices.append(_curate_needs_attention_device(item))
+        # A short page (fewer rows than the page size) means we've reached the
+        # end of the report; an empty page also terminates.
+        if len(page_devices) < limit:
+            break
+    else:
+        # Loop exhausted the page cap without a short page — more flagged
+        # devices may exist beyond what we walked.
+        hit_page_cap = True
 
     data = {
         "group_id": group_id,
-        "device_count": len(curated_devices),
+        "returned_count": len(curated_devices),
         "devices": curated_devices,
     }
 
-    metadata = {
+    pagination = build_pagination_metadata(
+        page_size=limit,
+        has_more=hit_page_cap,
+        extra={
+            "returned_count": len(curated_devices),
+            "pages_walked": pages_walked,
+            # Offset to resume from if the page cap was hit; None when the
+            # report was walked to completion.
+            "next_offset": pages_walked * limit if hit_page_cap else None,
+        },
+    )
+
+    metadata: dict[str, Any] = {
         "deprecated_endpoint": False,
         "org_id": resolved_org_id,
         "group_id": group_id,
         "requested_limit": limit,
+        "pagination": pagination,
         "field_notes": {
             "failing_policies[].severity": (
                 "Per-policy severity from the needs-attention report — present "
@@ -1324,15 +1372,21 @@ async def summarize_device_health(
 
     resolved_org_id = require_org_id(client, org_id)
 
-    effective_limit = 500
+    # `limit` is the documented cap on how many devices are SAMPLED into the
+    # aggregate (1-500), not the upstream page size. Decouple the two: fetch
+    # full pages, then slice the accumulated list to `limit` before tallying,
+    # so the aggregate reflects exactly the documented number of devices.
+    device_cap = 500
     if limit is not None:
-        effective_limit = max(1, min(limit, 500))
+        device_cap = max(1, min(limit, 500))
 
-    params: dict[str, Any] = {"o": resolved_org_id, "limit": effective_limit}
+    # Fetch at the upstream max page size, independent of the sample cap.
+    fetch_page_size = 500
+    params: dict[str, Any] = {"o": resolved_org_id, "limit": fetch_page_size}
     if group_id is not None:
         params["groupId"] = group_id
 
-    # Paginate to collect all devices (up to a safety cap).
+    # Paginate to collect devices (up to a safety cap).
     # #69: parallel-paginate via the shared helper. health is the cleanest
     # case — no client-side filter, no early-break on limit, every page is
     # needed. Concurrency 4 cuts wall-time roughly in half on big fleets.
@@ -1352,10 +1406,14 @@ async def summarize_device_health(
 
     all_devices = await parallel_paginate(
         _fetch_health_page,
-        page_size=effective_limit,
+        page_size=fetch_page_size,
         max_pages=_MAX_HEALTH_PAGES,
     )
-    devices: Sequence[Any] = all_devices
+    fetched_count = len(all_devices)
+    # Honor the documented sample cap: only the first `device_cap` devices
+    # are aggregated.
+    devices: Sequence[Any] = all_devices[:device_cap]
+    sampled_count = len(devices)
 
     totals: Counter[str] = Counter()
     device_status_counts: Counter[str] = Counter()
@@ -1479,8 +1537,13 @@ async def summarize_device_health(
             "group_id": group_id,
             "include_unmanaged": include_unmanaged,
             "requested_limit": limit,
-            "effective_limit": effective_limit,
-            "fetched_device_count": len(devices),
+            # Documented sample cap actually applied to the aggregate.
+            "effective_limit": device_cap,
+            "sampled_device_count": sampled_count,
+            # Total devices pulled from upstream before the sample cap; when
+            # this exceeds sampled_device_count, devices beyond the cap were
+            # not aggregated.
+            "fetched_device_count": fetched_count,
             "max_stale_devices": stale_limit,
             "stale_device_count": len(stale_devices),
             "stale_check_in_threshold_days": _STALE_CHECK_IN_THRESHOLD_DAYS,
@@ -1511,21 +1574,30 @@ async def summarize_device_health(
         response_size = None
 
     if response_size and response_size > _MAX_HEALTH_RESPONSE_BYTES:
-        # Mutating metadata in place updates the same dict already referenced
-        # by `response`, so no rebuild or second serialization is needed. The
-        # reported size is pre-truncation-metadata, which is the figure the
-        # caller cares about (it's what triggered truncation).
-        metadata["response_truncated"] = True
-        _add_followup(
-            metadata,
-            "device_health_summary",
-            "Reduce the limit or group by server group to shrink the response.",
-        )
-        _add_followup(
-            metadata,
-            "search_devices",
-            "Filter by hostname, tag, or pending patches to focus on specific devices.",
-        )
+        # Actually shrink the payload rather than only flagging it: the
+        # per-device stale_devices list is the largest variable-size block and
+        # the one safe to shed, because its fleet-wide count is preserved in
+        # metadata.stale_device_count. Drop it (when present) and re-measure.
+        # Only mark response_truncated when data was genuinely removed.
+        dropped_stale = len(stale_preview)
+        if dropped_stale:
+            data["stale_devices"] = []
+            metadata["response_truncated"] = True
+            metadata["stale_devices_dropped_for_size"] = dropped_stale
+            _add_followup(
+                metadata,
+                "device_health_summary",
+                "Reduce the limit or group by server group to shrink the response.",
+            )
+            _add_followup(
+                metadata,
+                "search_devices",
+                "Filter by hostname, tag, or pending patches to focus on specific devices.",
+            )
+            try:
+                response_size = len(json.dumps(response))
+            except (TypeError, ValueError):
+                response_size = None
 
     if response_size is not None:
         metadata["approx_response_bytes"] = response_size

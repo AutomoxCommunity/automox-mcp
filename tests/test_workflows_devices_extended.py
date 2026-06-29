@@ -1562,7 +1562,7 @@ async def test_list_devices_needing_attention_basic_camelcase() -> None:
     result = await list_devices_needing_attention(cast(AutomoxClient, client), org_id=42)
 
     data = result["data"]
-    assert data["device_count"] == 1
+    assert data["returned_count"] == 1
     device = data["devices"][0]
     assert device["device_id"] == 10
     assert device["device_name"] == "trouble-host"
@@ -1615,8 +1615,10 @@ async def test_list_devices_needing_attention_empty() -> None:
     result = await list_devices_needing_attention(cast(AutomoxClient, client), org_id=42)
 
     data = result["data"]
-    assert data["device_count"] == 0
+    assert data["returned_count"] == 0
     assert data["devices"] == []
+    # An exhausted report is reported as complete (not falsely "more available").
+    assert result["metadata"]["pagination"]["has_more"] is False
 
 
 @pytest.mark.asyncio
@@ -1632,7 +1634,7 @@ async def test_list_devices_needing_attention_multiple_devices() -> None:
     result = await list_devices_needing_attention(cast(AutomoxClient, client), org_id=42)
 
     data = result["data"]
-    assert data["device_count"] == 3
+    assert data["returned_count"] == 3
     ids = [d["device_id"] for d in data["devices"]]
     assert ids == [1, 2, 3]
 

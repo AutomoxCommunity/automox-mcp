@@ -322,8 +322,15 @@ async def search_policy_windows(
     elif isinstance(result, list):
         windows = [_summarize_window(w) for w in result if isinstance(w, Mapping)]
 
+    windows_returned = len(windows)
+
     data: dict[str, Any] = {
-        "total_windows": len(windows),
+        # `windows_returned` is the count on THIS page; the grand total across
+        # all pages is `total_elements` (the upstream Spring Page total). The
+        # earlier `total_windows` named the per-page length as if it were a
+        # total — retained below as a deprecated alias for backwards-compat.
+        "windows_returned": windows_returned,
+        "total_windows": windows_returned,
         "windows": windows,
     }
     # Legacy aliases retained for backwards-compat (#52). Canonical location
@@ -333,18 +340,47 @@ async def search_policy_windows(
     if total_pages is not None:
         data["total_pages"] = total_pages
 
+    # On the default call (page/size unset) the upstream returns the first page;
+    # default to the page/size actually in effect so build_pagination_metadata
+    # can derive has_more from total_elements instead of silently omitting it.
+    effective_page = page if page is not None else 0
+    effective_size = size if size is not None else windows_returned
+
+    pagination = build_pagination_metadata(
+        page=effective_page,
+        page_size=effective_size,
+        total_elements=total_elements,
+        total_pages=total_pages,
+    )
+
+    metadata: dict[str, Any] = {
+        "deprecated_endpoint": False,
+        "field_notes": dict(_WINDOW_FIELD_NOTES),
+        "pagination": pagination,
+    }
+    # When more pages remain, hand the model the exact next invocation rather
+    # than making it infer the next page from raw counters.
+    if pagination.get("has_more"):
+        metadata["suggested_next_call"] = {
+            "tool": "search_policy_windows",
+            "args": {
+                k: v
+                for k, v in {
+                    "group_uuids": group_uuids,
+                    "statuses": statuses,
+                    "recurrences": recurrences,
+                    "page": effective_page + 1,
+                    "size": effective_size,
+                    "sort": sort,
+                    "direction": direction,
+                }.items()
+                if v is not None
+            },
+        }
+
     return {
         "data": data,
-        "metadata": {
-            "deprecated_endpoint": False,
-            "field_notes": dict(_WINDOW_FIELD_NOTES),
-            "pagination": build_pagination_metadata(
-                page=page,
-                page_size=size,
-                total_elements=total_elements,
-                total_pages=total_pages,
-            ),
-        },
+        "metadata": metadata,
     }
 
 

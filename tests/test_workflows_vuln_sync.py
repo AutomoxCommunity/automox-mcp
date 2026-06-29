@@ -185,7 +185,7 @@ async def test_list_action_sets_returns_summaries() -> None:
     client = StubClient(get_responses={"/orgs/42/remediations/action-sets": [_ACTION_SETS]})
     result = await list_remediation_action_sets(cast(AutomoxClient, client), org_id=42)
 
-    assert result["data"]["total_action_sets"] == 2
+    assert result["data"]["action_sets_returned"] == 2
     assert result["data"]["action_sets"][0]["name"] == "Qualys Import Q1"
     assert result["data"]["action_sets"][0]["issue_count"] == 50
 
@@ -194,7 +194,7 @@ async def test_list_action_sets_returns_summaries() -> None:
 async def test_list_action_sets_empty() -> None:
     client = StubClient(get_responses={"/orgs/42/remediations/action-sets": [[]]})
     result = await list_remediation_action_sets(cast(AutomoxClient, client), org_id=42)
-    assert result["data"]["total_action_sets"] == 0
+    assert result["data"]["action_sets_returned"] == 0
 
 
 # ---------------------------------------------------------------------------
@@ -254,7 +254,7 @@ async def test_issues_returns_list() -> None:
         org_id=42,
         action_set_id=1,
     )
-    assert result["data"]["total_issues"] == 2
+    assert result["data"]["issues_returned"] == 2
     assert result["data"]["issues"][0]["cve_id"] == "CVE-2026-0001"
 
 
@@ -273,7 +273,7 @@ async def test_solutions_returns_list() -> None:
         org_id=42,
         action_set_id=1,
     )
-    assert result["data"]["total_solutions"] == 2
+    assert result["data"]["solutions_returned"] == 2
     # The raw solutions payload must pass through UNCHANGED — no severity/status
     # normalization or coercion. Deep-equality against the fixture proves it.
     assert result["data"]["solutions"] == _SOLUTIONS

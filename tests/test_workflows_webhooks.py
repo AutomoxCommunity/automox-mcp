@@ -84,7 +84,9 @@ async def test_list_webhooks_returns_summaries() -> None:
     )
     result = await list_webhooks(cast(AutomoxClient, client), org_uuid=_ORG_UUID)
 
-    assert result["data"]["total_webhooks"] == 2
+    assert result["data"]["webhooks_returned"] == 2
+    # No upstream total in this payload, so no grand-total field is emitted.
+    assert "total_webhooks" not in result["data"]
     names = [w["name"] for w in result["data"]["webhooks"]]
     assert "Deploy Hook" in names
     assert "Alert Hook" in names
@@ -118,7 +120,7 @@ async def test_list_webhooks_handles_flat_list() -> None:
         }
     )
     result = await list_webhooks(cast(AutomoxClient, client), org_uuid=_ORG_UUID)
-    assert result["data"]["total_webhooks"] == 1
+    assert result["data"]["webhooks_returned"] == 1
 
 
 # ---------------------------------------------------------------------------

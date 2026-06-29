@@ -7,6 +7,7 @@ from typing import Any
 from uuid import UUID
 
 from ..client import AutomoxClient
+from ..utils.response import build_pagination_metadata
 
 
 async def invite_user_to_account(
@@ -174,14 +175,31 @@ async def list_organizations(
             continue
         orgs.append({key: item.get(key) for key in _ORG_FIELDS if item.get(key) is not None})
 
+    # /orgs is a bare list with no upstream total: organizations_returned is the
+    # page count, not a grand total across all pages.
+    normalized_page = page if page is None else max(page, 0)
+    has_more = bool(limit is not None and len(orgs) >= limit)
+
+    metadata: dict[str, Any] = {
+        "deprecated_endpoint": False,
+        "pagination": build_pagination_metadata(
+            page=normalized_page,
+            page_size=limit,
+            has_more=has_more,
+        ),
+    }
+    if has_more and normalized_page is not None:
+        metadata["suggested_next_call"] = {
+            "tool": "list_organizations",
+            "args": {"page": normalized_page + 1, "limit": limit},
+        }
+
     return {
         "data": {
-            "total_organizations": len(orgs),
+            "organizations_returned": len(orgs),
             "organizations": orgs,
         },
-        "metadata": {
-            "deprecated_endpoint": False,
-        },
+        "metadata": metadata,
     }
 
 
@@ -314,10 +332,36 @@ async def list_users(
     raw = response if isinstance(response, list) else []
     users = [_project(u, _USER_LIST_FIELDS) for u in raw if isinstance(u, Mapping)]
 
-    return {
-        "data": {"total_users": len(users), "users": users},
-        "metadata": {"deprecated_endpoint": False},
+    # /users is a bare list with no upstream total, so the page count is all we
+    # know: name it users_returned (a per-page count, not a grand total). A full
+    # page implies more may follow; a short page is the last page.
+    normalized_page = page if page is None else max(page, 0)
+    has_more = bool(limit is not None and len(users) >= limit)
+
+    data: dict[str, Any] = {
+        "users_returned": len(users),
+        # Deprecated alias: a typed structured-output model still reads this
+        # key. Retained for backwards-compat; it carries the page count, not a
+        # grand total. Prefer users_returned.
+        "total_users": len(users),
+        "users": users,
     }
+
+    metadata: dict[str, Any] = {
+        "deprecated_endpoint": False,
+        "pagination": build_pagination_metadata(
+            page=normalized_page,
+            page_size=limit,
+            has_more=has_more,
+        ),
+    }
+    if has_more and normalized_page is not None:
+        metadata["suggested_next_call"] = {
+            "tool": "list_users",
+            "args": {"org_id": org_id, "page": normalized_page + 1, "limit": limit},
+        }
+
+    return {"data": data, "metadata": metadata}
 
 
 async def get_user(
@@ -590,14 +634,55 @@ async def list_user_api_keys(
         params["limit"] = limit
     response = await client.get(f"/users/{user_id}/api_keys", params=params)
 
-    raw = response.get("results") if isinstance(response, Mapping) else response
+    # The endpoint returns a {"results": [...], "size": N} envelope. `size` is
+    # the grand total across all pages, so surface it as total_keys (a real
+    # total) while keys_returned reports only this page.
+    size: int | None = None
+    if isinstance(response, Mapping):
+        raw = response.get("results")
+        raw_size = response.get("size")
+        if isinstance(raw_size, int):
+            size = raw_size
+    else:
+        raw = response
     items = raw if isinstance(raw, list) else []
     keys = [_project_key(k) for k in items if isinstance(k, Mapping)]
 
-    return {
-        "data": {"user_id": user_id, "total_keys": len(keys), "api_keys": keys},
-        "metadata": {"deprecated_endpoint": False},
+    normalized_page = page if page is None else max(page, 0)
+    if size is not None and limit is not None and normalized_page is not None:
+        has_more = (normalized_page + 1) * limit < size
+    else:
+        has_more = bool(limit is not None and len(keys) >= limit)
+
+    data: dict[str, Any] = {
+        "user_id": user_id,
+        "keys_returned": len(keys),
+        "api_keys": keys,
     }
+    if size is not None:
+        data["total_keys"] = size
+
+    metadata: dict[str, Any] = {
+        "deprecated_endpoint": False,
+        "pagination": build_pagination_metadata(
+            page=normalized_page,
+            page_size=limit,
+            total_elements=size,
+            has_more=has_more,
+        ),
+    }
+    if has_more and normalized_page is not None:
+        metadata["suggested_next_call"] = {
+            "tool": "list_user_api_keys",
+            "args": {
+                "org_id": org_id,
+                "user_id": user_id,
+                "page": normalized_page + 1,
+                "limit": limit,
+            },
+        }
+
+    return {"data": data, "metadata": metadata}
 
 
 async def get_user_api_key(

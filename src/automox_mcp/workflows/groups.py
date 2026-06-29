@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from ..client import AutomoxClient
+from ..utils.response import build_pagination_metadata
 
 # refresh_interval is the group's agent check-in / scan cadence. The unit is
 # MINUTES (live-verified 2026-06-05: console 24h/4h cadences read back as
@@ -57,15 +58,32 @@ async def list_server_groups(
 
     summary = [_summarize_group(g) for g in groups if isinstance(g, Mapping)]
 
+    # /servergroups is a bare list with no upstream total: groups_returned is
+    # the page count, not a grand total across all pages.
+    normalized_page = page if page is None else max(page, 0)
+    has_more = bool(limit is not None and len(summary) >= limit)
+
+    metadata: dict[str, Any] = {
+        "deprecated_endpoint": False,
+        "field_notes": {"refresh_interval": _REFRESH_INTERVAL_NOTE},
+        "pagination": build_pagination_metadata(
+            page=normalized_page,
+            page_size=limit,
+            has_more=has_more,
+        ),
+    }
+    if has_more and normalized_page is not None:
+        metadata["suggested_next_call"] = {
+            "tool": "list_server_groups",
+            "args": {"org_id": org_id, "page": normalized_page + 1, "limit": limit},
+        }
+
     return {
         "data": {
-            "total_groups": len(summary),
+            "groups_returned": len(summary),
             "groups": summary,
         },
-        "metadata": {
-            "deprecated_endpoint": False,
-            "field_notes": {"refresh_interval": _REFRESH_INTERVAL_NOTE},
-        },
+        "metadata": metadata,
     }
 
 

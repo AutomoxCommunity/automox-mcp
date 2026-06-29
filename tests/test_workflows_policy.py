@@ -1098,7 +1098,12 @@ async def test_summarize_policies_includes_stats_when_requested() -> None:
     )
 
     assert result["data"]["policy_stats"] == stats
-    assert result["data"]["total_policies_available"] == 1
+    # policy_stats is an opt-in compliance payload only; it is NOT a source of
+    # pagination totals. /policystats returns all policies (active + inactive),
+    # so it must not drive `total_policies_available` for the include_inactive-
+    # filtered page. With /policies supplying no cross-page grand total, the
+    # catalog reports no fabricated total.
+    assert "total_policies_available" not in result["data"]
 
 
 @pytest.mark.asyncio

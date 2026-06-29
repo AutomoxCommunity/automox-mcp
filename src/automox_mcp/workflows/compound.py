@@ -37,6 +37,32 @@ def _settle(
     return values, errors
 
 
+def _packages_note(
+    *,
+    returned: int,
+    total: int,
+    truncated: bool,
+    complete: bool,
+) -> str | None:
+    """Build the device-profile packages-section note.
+
+    Distinguishes two states the bare-list upstream conflates: the preview was
+    capped at ``detail_limit`` (``truncated``), and the underlying package walk
+    hit its safety ceiling so ``total`` is a floor rather than an exact count
+    (``not complete``). When incomplete the note says so explicitly so the count
+    is never presented as authoritative.
+    """
+    if not complete:
+        return (
+            f"Showing {returned} packages; the device has at least {total} "
+            "(the full enumeration exceeded the page-walk ceiling) — use "
+            "list_device_packages to page through the complete list."
+        )
+    if truncated:
+        return f"Showing {returned} of {total} packages — use list_device_packages for full list"
+    return None
+
+
 async def get_patch_tuesday_readiness(
     client: AutomoxClient,
     *,
@@ -390,11 +416,15 @@ async def get_device_full_profile(
             org_id=org_id,
             device_id=device_id,
         ),
+        # Omit `limit` so the package walk runs at the full default page size
+        # and returns the exhaustive installed-package set. Passing
+        # `limit=effective_limit` here used to clamp the walk page size, capping
+        # the set at MAX_PAGES * detail_limit and presenting that cap as the
+        # authoritative total. The preview is sliced locally below instead.
         packages.list_device_packages(
             client,
             org_id=org_id,
             device_id=device_id,
-            limit=effective_limit,
         ),
         return_exceptions=True,
     )
@@ -438,11 +468,20 @@ async def get_device_full_profile(
 
     total_inventory_items = inventory_data.get("total_items", 0)
 
-    # Cap packages
+    # Cap packages. The package walk runs at the full default page size, so
+    # `total_packages` is the exhaustive installed-package count UNLESS the walk
+    # hit its safety ceiling — in which case the underlying tool reports
+    # metadata.complete=False and `total_packages` is a floor, not authoritative.
     all_packages = packages_data.get("packages", [])
     total_packages = packages_data.get("total_packages", 0)
     packages_preview = all_packages[:effective_limit]
     packages_truncated = total_packages > len(packages_preview)
+    packages_meta = full_packages.get("metadata") if isinstance(full_packages, Mapping) else None
+    # complete defaults True (a single short page never sets it); only an
+    # explicit False from the underlying walk means the total is a floor.
+    packages_complete = not (
+        isinstance(packages_meta, Mapping) and packages_meta.get("complete") is False
+    )
 
     # Policy assignments
     policy_assignments = device_data.get("policy_assignments", {})
@@ -494,15 +533,18 @@ async def get_device_full_profile(
                 # Legacy shape retained for backwards-compat (#53). Canonical
                 # truncation state now lives in metadata.section_summaries.
                 "total": total_packages,
+                # complete=False means the underlying package walk hit its
+                # ceiling: `total` is a lower bound, not the authoritative count.
+                "total_is_complete": packages_complete,
                 "returned": len(packages_preview),
                 "truncated": packages_truncated,
                 "packages": packages_preview,
-                "note": (
-                    f"Showing {len(packages_preview)} of {total_packages} packages — "
-                    "use list_device_packages for full list"
-                )
-                if packages_truncated
-                else None,
+                "note": _packages_note(
+                    returned=len(packages_preview),
+                    total=total_packages,
+                    truncated=packages_truncated,
+                    complete=packages_complete,
+                ),
             },
         },
         "metadata": metadata,

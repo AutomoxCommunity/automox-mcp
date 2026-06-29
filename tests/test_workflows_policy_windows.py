@@ -78,6 +78,8 @@ async def test_search_windows_returns_summaries() -> None:
     result = await search_policy_windows(cast(AutomoxClient, client), org_uuid=_ORG_UUID)
 
     assert result["data"]["total_windows"] == 2
+    # Canonical per-page count; the grand total lives in total_elements.
+    assert result["data"]["windows_returned"] == 2
     names = [w["window_name"] for w in result["data"]["windows"]]
     assert "Nightly Maintenance" in names
     assert "Weekend Freeze" in names

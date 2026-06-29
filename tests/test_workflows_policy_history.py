@@ -93,6 +93,8 @@ async def test_list_runs_returns_summaries() -> None:
     result = await list_policy_runs_v2(cast(AutomoxClient, client), org_id=42)
 
     assert result["data"]["total_runs"] == 2
+    # Unfiltered single page: returned count and total are the same value.
+    assert result["data"]["runs_returned"] == 2
     assert result["data"]["runs"][0]["policy_uuid"] == "pol-001"
     # Outcome counts are devices-per-outcome, grouped so they can't be
     # misread as run statuses.
@@ -331,6 +333,9 @@ async def test_history_detail_returns_policy_with_runs() -> None:
     assert result["data"]["uuid"] == "pol-001"
     assert result["data"]["last_run_time"] == "2026-03-01T01:00:00Z"
     assert result["data"]["total_runs_returned"] == 2
+    # Canonical fields: the slice count vs. the full fetched count.
+    assert result["data"]["recent_runs_count"] == 2
+    assert result["data"]["total_runs_available"] == 2
     assert len(result["data"]["recent_runs"]) == 2
     assert result["data"]["recent_runs"][0]["policy_uuid"] == "pol-001"
     assert result["data"]["banner_stats"]["policy_success_rate"] == 60.0

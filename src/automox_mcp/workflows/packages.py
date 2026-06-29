@@ -7,6 +7,7 @@ from typing import Any
 
 from ..client import AutomoxClient
 from ..utils.pagination import parallel_paginate
+from ..utils.response import build_pagination_metadata
 
 # `/servers/{id}/packages` returns a bare list with no `total` field and pages
 # 0-indexed by `limit`. A single call therefore silently truncates at the page
@@ -62,33 +63,53 @@ async def list_device_packages(
     """List software packages installed on a specific device.
 
     Default behavior auto-paginates the full installed-package set so callers
-    asking "is X installed?" get a complete, non-truncated answer. Passing an
-    explicit ``page`` returns just that single 0-indexed page (``limit``
-    controls the page size, default 500), for callers that page deliberately.
-    """
-    page_size = _DEFAULT_PACKAGE_PAGE_SIZE
-    if limit is not None:
-        page_size = max(1, min(limit, _DEFAULT_PACKAGE_PAGE_SIZE))
+    asking "is X installed?" get a complete, non-truncated answer. The walk
+    always runs at the full default page size; a small ``limit`` (passed without
+    ``page``) is applied only as a post-walk cap on how many packages are
+    returned — it never shrinks the page size, so the result can no longer
+    silently truncate at ``MAX_PAGES * limit``. When the walk itself hits the
+    safety ceiling, ``metadata.pagination.has_more`` is ``True`` and
+    ``metadata.suggested_next_call`` points at the next explicit page.
 
+    Passing an explicit ``page`` returns just that single 0-indexed page
+    (``limit`` controls the page size, default 500), for callers that page
+    deliberately.
+    """
     packages: list[Any]
-    auto_paginated = page is None
+    walk_hit_ceiling = False
+    # Page size only matters in explicit-page mode; default it here so the
+    # explicit-page metadata branch can reference it unconditionally.
+    page_size = _DEFAULT_PACKAGE_PAGE_SIZE
     if page is not None:
+        # Explicit page: `limit` is the page size for this single page.
+        if limit is not None:
+            page_size = max(1, min(limit, _DEFAULT_PACKAGE_PAGE_SIZE))
         params: dict[str, Any] = {"o": org_id, "page": page, "limit": page_size}
         raw_response = await client.get(f"/servers/{device_id}/packages", params=params)
         packages = _coerce_package_list(raw_response)
     else:
+        # Auto-paginate: always walk at the full default page size so the set is
+        # exhaustive. The caller's `limit` is a post-walk cap (below), never the
+        # walk page size — clamping the walk to a small limit is the truncation
+        # bug this fix removes.
+        walk_page_size = _DEFAULT_PACKAGE_PAGE_SIZE
 
         async def _fetch_page(page_num: int) -> Sequence[Any]:
-            page_params = {"o": org_id, "page": page_num, "limit": page_size}
+            page_params = {"o": org_id, "page": page_num, "limit": walk_page_size}
             return _coerce_package_list(
                 await client.get(f"/servers/{device_id}/packages", params=page_params)
             )
 
-        packages = await parallel_paginate(
+        walked = await parallel_paginate(
             _fetch_page,
-            page_size=page_size,
+            page_size=walk_page_size,
             max_pages=_MAX_PACKAGE_PAGES,
         )
+        # The walk hit the ceiling (more packages may exist) when it filled
+        # every allowed page; that is the only "incomplete" signal upstream gives.
+        walk_hit_ceiling = len(walked) >= _MAX_PACKAGE_PAGES * walk_page_size
+        # Apply the caller's limit as a post-walk cap on what we return.
+        packages = walked[:limit] if limit is not None else walked
 
     total = len(packages)
     summary: list[dict[str, Any]] = []
@@ -114,27 +135,62 @@ async def list_device_packages(
         "deprecated_endpoint": False,
         "field_notes": {"severity": _SEVERITY_FIELD_NOTE},
     }
-    if auto_paginated:
+    data: dict[str, Any] = {"device_id": device_id, "packages": summary}
+
+    # Branch on `page is None` (not the `auto_paginated` alias) so the type
+    # checker narrows `page` to `int` in the explicit-page branch below.
+    if page is None:
         # The auto-paginate path walked every page; the count is exhaustive
-        # unless we hit the safety cap (a host with >10k packages).
-        metadata["complete"] = len(packages) < _MAX_PACKAGE_PAGES * page_size
+        # unless the walk hit the safety ceiling (a host with >10k packages).
+        complete = not walk_hit_ceiling
+        metadata["complete"] = complete
+        data["total_packages"] = total
+        if not complete:
+            # The walk truncated at the ceiling — surface that as has_more plus
+            # a concrete continuation rather than a silently-capped "total".
+            next_page = _MAX_PACKAGE_PAGES
+            metadata["pagination"] = build_pagination_metadata(
+                page=0,
+                page_size=_DEFAULT_PACKAGE_PAGE_SIZE,
+                has_more=True,
+                extra={"next_page": next_page},
+            )
+            metadata["suggested_next_call"] = {
+                "tool": "list_device_packages",
+                "args": {
+                    k: v
+                    for k, v in {
+                        "device_id": device_id,
+                        "page": next_page,
+                        "limit": limit,
+                    }.items()
+                    if v is not None
+                },
+            }
     else:
         # Single explicit page: a full page means more may exist. The upstream
         # returns no total, so this is the only truncation signal available.
-        metadata["pagination"] = {
-            "page": page,
-            "page_size": page_size,
-            "has_more": total >= page_size,
-        }
+        # Report a page-scoped count, never a fleet-wide `total_packages`.
+        data["packages_returned"] = total
+        has_more = total >= page_size
+        explicit_next_page = page + 1 if has_more else None
+        metadata["pagination"] = build_pagination_metadata(
+            page=page,
+            page_size=page_size,
+            has_more=has_more,
+            extra={"next_page": explicit_next_page},
+        )
+        if has_more:
+            metadata["suggested_next_call"] = {
+                "tool": "list_device_packages",
+                "args": {
+                    "device_id": device_id,
+                    "page": explicit_next_page,
+                    "limit": page_size,
+                },
+            }
 
-    return {
-        "data": {
-            "device_id": device_id,
-            "total_packages": total,
-            "packages": summary,
-        },
-        "metadata": metadata,
-    }
+    return {"data": data, "metadata": metadata}
 
 
 async def search_org_packages(
@@ -193,10 +249,12 @@ async def search_org_packages(
         summary.append(entry)
 
     page_count = len(summary)
-    # Effective page size: an explicit `limit`, else however many rows the page
-    # returned (the upstream applies a default when none is sent). A page that
-    # filled to the limit signals more pages may exist.
-    effective_page_size = limit if limit is not None else page_count
+    # Effective page size: an explicit `limit`, else the upstream's own default
+    # page size (the upstream applies that default when no limit is sent). A page
+    # that filled to that size signals more pages may exist. Comparing against
+    # `page_count` itself (the old behavior) was a tautology — every non-empty
+    # page reported has_more, so a complete short page falsely claimed more.
+    effective_page_size = limit if limit is not None else _DEFAULT_PACKAGE_PAGE_SIZE
     has_more = effective_page_size > 0 and page_count >= effective_page_size
 
     return {

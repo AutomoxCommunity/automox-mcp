@@ -154,15 +154,19 @@ async def test_list_empty_envelope_results() -> None:
 async def test_list_handles_non_list_response() -> None:
     client = StubClient(get_responses={"/data-extracts": ["unexpected"]})
     result = await list_data_extracts(cast(AutomoxClient, client), org_id=42)
-    assert result["data"]["total_extracts"] == 0
+    # No envelope `size` -> per-page count under `extracts_returned`, not a
+    # mislabelled grand total.
+    assert result["data"]["extracts_returned"] == 0
 
 
 @pytest.mark.asyncio
 async def test_list_handles_bare_list_fallback() -> None:
     # Resilience: if the API ever returns a bare list, still unwrap per item.
+    # A bare list has no upstream grand total, so the page count is reported
+    # under `extracts_returned` (not `total_extracts`).
     client = StubClient(get_responses={"/data-extracts": [_EXTRACT_LIST["results"]]})
     result = await list_data_extracts(cast(AutomoxClient, client), org_id=42)
-    assert result["data"]["total_extracts"] == 2
+    assert result["data"]["extracts_returned"] == 2
 
 
 # ---------------------------------------------------------------------------

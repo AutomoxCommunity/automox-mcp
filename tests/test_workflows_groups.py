@@ -51,7 +51,7 @@ async def test_list_groups_returns_summaries() -> None:
     client = StubClient(get_responses={"/servergroups": [[_GROUP_A, _GROUP_B]]})
     result = await list_server_groups(cast(AutomoxClient, client), org_id=555)
 
-    assert result["data"]["total_groups"] == 2
+    assert result["data"]["groups_returned"] == 2
     names = [g["name"] for g in result["data"]["groups"]]
     assert "Production" in names
     assert "Staging" in names
@@ -78,7 +78,7 @@ async def test_list_groups_passes_pagination() -> None:
 async def test_list_groups_handles_non_list_response() -> None:
     client = StubClient(get_responses={"/servergroups": ["unexpected"]})
     result = await list_server_groups(cast(AutomoxClient, client), org_id=555)
-    assert result["data"]["total_groups"] == 0
+    assert result["data"]["groups_returned"] == 0
 
 
 @pytest.mark.asyncio

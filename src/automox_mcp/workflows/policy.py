@@ -428,30 +428,28 @@ async def summarize_policies(
             preview_entry["next_remediation"] = next_remediation
         preview.append(preview_entry)
 
+    # `policy_stats` is an opt-in compliance payload only — it is NOT a source
+    # of pagination totals. /policystats returns ALL policies (active AND
+    # inactive), so deriving the page total from it overcounts the returned
+    # population whenever `include_inactive=false`, and the resulting `has_more`
+    # / `total_pages` then mislead (claiming more pages than the filtered set
+    # has). The /policies list endpoint is a bare array with no envelope, so it
+    # supplies no cross-page grand total; we therefore leave `total_available`
+    # None and fall back to the page-fullness heuristic for `has_more`, which is
+    # honest about the filtered population rather than overcounting it.
     stats_data: Any = None
     total_available: int | None = None
     if include_stats:
         stats_data = await client.get("/policystats", params={"o": resolved_org_id})
-        if isinstance(stats_data, Sequence):
-            policy_ids = {
-                item.get("policy_id")
-                for item in stats_data
-                if isinstance(item, Mapping) and item.get("policy_id") is not None
-            }
-            if policy_ids:
-                total_available = len(policy_ids)
-            else:
-                total_available = len([item for item in stats_data if isinstance(item, Mapping)])
 
     returned_count_raw = len(page_results)
     normalized_page = page if page is None else max(page, 0)
 
-    if total_available is not None and limit is not None and normalized_page is not None:
-        has_more = (normalized_page + 1) * limit < total_available
-    else:
-        # Without a stats-derived total, defer to the page itself: a full page
-        # implies there may be more; a short page is the last page.
-        has_more = bool(limit is not None and returned_count_raw >= limit)
+    # Defer to the page itself: a full page implies there may be more; a short
+    # page (fewer raw rows than `limit`) is the last page. This is computed on
+    # the raw, pre-filter page count so the cursor stays aligned with upstream
+    # pages even when `include_inactive=false` drops rows from the projection.
+    has_more = bool(limit is not None and returned_count_raw >= limit)
 
     next_page: int | None = None
     if has_more and normalized_page is not None:
@@ -830,6 +828,11 @@ async def describe_policy_run_result(
     upstream_page = pagination_meta.get("current_page") if pagination_meta else None
     upstream_limit = pagination_meta.get("limit") if pagination_meta else limit
     upstream_total = pagination_meta.get("total_count") if pagination_meta else None
+    pagination_block = build_pagination_metadata(
+        page=upstream_page if isinstance(upstream_page, int) else None,
+        page_size=upstream_limit if isinstance(upstream_limit, int) else None,
+        total_elements=upstream_total if isinstance(upstream_total, int) else None,
+    )
     metadata: dict[str, Any] = {
         "deprecated_endpoint": False,
         "org_uuid": str(org_uuid),
@@ -863,12 +866,30 @@ async def describe_policy_run_result(
         "page": upstream_page if isinstance(upstream_page, int) else None,
         "limit": upstream_limit if isinstance(upstream_limit, int) else None,
         "total_count": upstream_total if isinstance(upstream_total, int) else None,
-        "pagination": build_pagination_metadata(
-            page=upstream_page if isinstance(upstream_page, int) else None,
-            page_size=upstream_limit if isinstance(upstream_limit, int) else None,
-            total_elements=upstream_total if isinstance(upstream_total, int) else None,
-        ),
+        "pagination": pagination_block,
     }
+
+    # When another page is available, hand back the exact next invocation
+    # (next page, same exec token / policy / filters) rather than making the
+    # caller infer args from raw counters — mirroring list_policy_runs_v2.
+    if pagination_block.get("has_more") and isinstance(upstream_page, int):
+        metadata["suggested_next_call"] = {
+            "tool": "policy_run_results",
+            "args": {
+                k: v
+                for k, v in {
+                    "policy_uuid": str(policy_uuid),
+                    "exec_token": str(exec_token),
+                    "sort": sort,
+                    "result_status": result_status,
+                    "device_name": device_name,
+                    "page": upstream_page + 1,
+                    "limit": upstream_limit if isinstance(upstream_limit, int) else limit,
+                    "max_output_length": max_output_length,
+                }.items()
+                if v is not None
+            },
+        }
 
     if requested_status is not None:
         metadata["result_status_filter"] = {
@@ -909,6 +930,7 @@ async def summarize_patch_approvals(
     # zero approvals on every conforming response — the same envelope class
     # as the #132 bugs. Keep a bare-list fallback for defensive parity.
     approvals: Sequence[Any]
+    envelope_size: int | None = None
     if isinstance(response, Mapping):
         results = response.get("results")
         approvals = (
@@ -916,6 +938,12 @@ async def summarize_patch_approvals(
             if isinstance(results, Sequence) and not isinstance(results, (str, bytes))
             else []
         )
+        # The envelope `size` is the grand total across the whole approvals
+        # queue (not the limit-capped page length), so it is the authoritative
+        # total when present. Guard on int — a non-numeric value is not a count.
+        raw_size = response.get("size")
+        if isinstance(raw_size, int) and not isinstance(raw_size, bool):
+            envelope_size = raw_size
     elif isinstance(response, Sequence) and not isinstance(response, (str, bytes)):
         approvals = response
     else:
@@ -992,18 +1020,49 @@ async def summarize_patch_approvals(
 
         pending_items.append(entry)
 
-    data = {
-        "total_approvals_considered": len(approvals),
+    # `approvals_returned` is the limit-capped per-page count (what the status /
+    # severity breakdowns are tallied over). The previous name
+    # `total_approvals_considered` read as a grand total but never was — the
+    # envelope `size` (the queue-wide total) was discarded. Surface the real
+    # grand total only when upstream supplied one.
+    approvals_returned = len(approvals)
+    has_more = bool(envelope_size is not None and envelope_size > approvals_returned)
+
+    data: dict[str, Any] = {
+        "approvals_returned": approvals_returned,
+        # Deprecated alias retained for non-owned consumers (App UI + output
+        # schema) that still read the old name; prefer `approvals_returned`.
+        "total_approvals_considered": approvals_returned,
         "status_breakdown": dict(status_counts),
         "severity_breakdown": dict(severity_counts),
         "approvals": pending_items[:limit],
     }
+    if envelope_size is not None:
+        data["total_approvals_available"] = envelope_size
 
-    metadata = {
+    suggested_next_call: dict[str, Any] | None = None
+    if has_more:
+        suggested_next_call = {
+            "tool": "patch_approvals_summary",
+            "args": {
+                k: v
+                for k, v in {
+                    "status": status or None,
+                    # Advance the window past the rows already returned so the
+                    # next call surfaces the remainder of the queue.
+                    "limit": approvals_returned + limit,
+                }.items()
+                if v is not None
+            },
+        }
+
+    metadata: dict[str, Any] = {
         "deprecated_endpoint": False,
         "org_id": resolved_org_id,
         "status_filter": status_filter or None,
         "requested_limit": limit,
+        "approvals_returned": approvals_returned,
+        "has_more": has_more,
         "field_notes": {
             "manual_approval": (
                 "The decision axis: True=approved, False=rejected, null=awaiting "
@@ -1027,6 +1086,10 @@ async def summarize_patch_approvals(
             ),
         },
     }
+    if envelope_size is not None:
+        metadata["total_approvals_available"] = envelope_size
+    if suggested_next_call:
+        metadata["suggested_next_call"] = suggested_next_call
 
     return {
         "data": data,

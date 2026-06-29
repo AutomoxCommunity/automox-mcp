@@ -256,7 +256,7 @@ async def test_list_organizations_projects_expected_fields():
     result = await list_organizations(cast(AutomoxClient, client))
 
     data = result["data"]
-    assert data["total_organizations"] == 2
+    assert data["organizations_returned"] == 2
 
     # (a) tier forwarded when present in the input item.
     parent = next(o for o in data["organizations"] if o["id"] == 42)
@@ -287,7 +287,7 @@ async def test_list_organizations_forwards_pagination():
 async def test_list_organizations_handles_non_list():
     client = StubClient(get_responses={"/orgs": ["unexpected"]})
     result = await list_organizations(cast(AutomoxClient, client))
-    assert result["data"]["total_organizations"] == 0
+    assert result["data"]["organizations_returned"] == 0
 
 
 # ---------------------------------------------------------------------------
@@ -323,6 +323,8 @@ async def test_list_users_projects_and_redacts_secret():
     client = StubClient(get_responses={"/users": [[_USER_RECORD]]})
     result = await list_users(cast(AutomoxClient, client), org_id=42)
 
+    assert result["data"]["users_returned"] == 1
+    # Deprecated alias retained for the typed structured-output model.
     assert result["data"]["total_users"] == 1
     user = result["data"]["users"][0]
     assert user["email"] == "ada@example.com"
@@ -604,6 +606,8 @@ async def test_list_user_api_keys_projects_metadata():
     }
     client = StubClient(get_responses={"/users/7/api_keys": [payload]})
     result = await list_user_api_keys(cast(AutomoxClient, client), org_id=42, user_id=7)
+    assert result["data"]["keys_returned"] == 1
+    # Envelope `size` is the real grand total, surfaced as total_keys.
     assert result["data"]["total_keys"] == 1
     key = result["data"]["api_keys"][0]
     assert key["name"] == "CI"
@@ -669,7 +673,9 @@ async def test_list_user_api_keys_pagination_and_non_mapping():
     result = await list_user_api_keys(
         cast(AutomoxClient, client), org_id=42, user_id=7, page=1, limit=5
     )
-    assert result["data"]["total_keys"] == 0
+    assert result["data"]["keys_returned"] == 0
+    # No envelope size => no real total surfaced.
+    assert "total_keys" not in result["data"]
     _, _path, params = client.calls[0]
     assert params == {"o": 42, "page": 1, "limit": 5}
 

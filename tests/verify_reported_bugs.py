@@ -506,11 +506,16 @@ async def case_57_1_policy_catalog_pagination(session: ClientSession) -> str:
         status("AMBIGUOUS", "page 0 not a dict", YELLOW)
         return "AMBIGUOUS"
     p0_data = p0.get("data") or {}
-    total_available = p0_data.get("total_policies_available")
-    if not isinstance(total_available, int) or total_available <= 30:
+    p0_meta = p0.get("metadata") or {}
+    p0_returned = p0_data.get("policies_returned") or 0
+    p0_has_more = (p0_meta.get("pagination") or {}).get("has_more")
+    # policy_catalog no longer fabricates a grand total (the /policies endpoint
+    # provides none), so gate on page fullness: a full first page that reports
+    # more results is enough to exercise the cursor-stall on a later page.
+    if p0_returned < 10 or not p0_has_more:
         status(
             "AMBIGUOUS",
-            f"tenant has too few policies to test (total_available={total_available!r})",
+            f"too few policies to test (page0 returned={p0_returned}, has_more={p0_has_more})",
             YELLOW,
         )
         return "AMBIGUOUS"
@@ -530,14 +535,14 @@ async def case_57_1_policy_catalog_pagination(session: ClientSession) -> str:
             "VERIFIED",
             (
                 f"page=3 limit=10 returned 0 policies but has_more=true "
-                f"(total_available={total_available})"
+                f"(page0 returned={p0_returned})"
             ),
             RED,
         )
         return "VERIFIED"
     status(
         "NOT_REPRODUCED",
-        (f"page=3 returned={p3_returned} has_more={p3_has_more} total_available={total_available}"),
+        (f"page=3 returned={p3_returned} has_more={p3_has_more} page0_returned={p0_returned}"),
         GREEN,
     )
     return "NOT_REPRODUCED"

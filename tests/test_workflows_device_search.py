@@ -353,6 +353,7 @@ async def test_assignments_normalizes_spring_page_envelope() -> None:
 
     # Spring fields must NOT leak into data.assignments
     assert result["data"]["total_assignments"] == 2
+    assert result["data"]["assignments_returned"] == 2
     first = result["data"]["assignments"][0]
     assert first["device_uuid"] == "dev-1"
     assert "pageable" not in first
@@ -729,8 +730,11 @@ async def test_run_saved_search_extracts_page_envelope_and_pagination() -> None:
         fields=["hostname"],
     )
     assert result["data"]["total_devices"] == 2
+    assert result["data"]["devices_returned"] == 2
     assert result["data"]["devices"][0]["hostname"] == "host-a"
     assert result["metadata"]["pagination"]["has_more"] is False
+    # Last page -> no continuation hint.
+    assert "suggested_next_call" not in result["metadata"]
     assert "outstanding_patch_severity" in result["metadata"]["field_notes"]
 
     _, _path, params = client.calls[0]

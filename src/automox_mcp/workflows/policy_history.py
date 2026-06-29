@@ -351,15 +351,29 @@ async def list_policy_runs_v2(
             )
 
         summaries = [_summarize_run(r) for r in page_slice]
+        # On the filtered path the page is a slice of a larger filtered set, so
+        # the per-page length is NOT the grand total. `runs_returned` is the
+        # count on this page; `total_runs` is the filtered grand total across
+        # all pages so a reader can't mistake one page's length for the whole.
+        data = {
+            "org_uuid": resolved_uuid,
+            "runs_returned": len(summaries),
+            "total_runs": filtered_total,
+            "runs": summaries,
+        }
     else:
         summaries = [_summarize_run(r) for r in runs]
-
-    return {
-        "data": {
+        # No client-side filter: this is the single fetched page in full, so the
+        # returned count and the total are the same value.
+        data = {
             "org_uuid": resolved_uuid,
+            "runs_returned": len(summaries),
             "total_runs": len(summaries),
             "runs": summaries,
-        },
+        }
+
+    return {
+        "data": data,
         "metadata": metadata,
     }
 
@@ -502,14 +516,27 @@ async def get_policy_history_detail(
             banner_stats = {}
         runs = [_summarize_run(r) for r in raw_runs if isinstance(r, Mapping) and r]
 
-    if recent_runs_limit and recent_runs_limit > 0:
+    # A non-negative limit slices the run list (0 → [] per the documented
+    # "set 0 to omit"). The earlier `if recent_runs_limit and ...` guard treated
+    # 0 as falsy and returned ALL runs, inverting the contract. ``None`` means
+    # "no limit" and returns every fetched run.
+    if recent_runs_limit is not None and recent_runs_limit >= 0:
         recent_runs = runs[:recent_runs_limit]
     else:
         recent_runs = runs
 
+    total_runs_available = len(runs)
+    recent_runs_count = len(recent_runs)
+
     data: dict[str, Any] = dict(detail)
     data["recent_runs"] = recent_runs
-    data["total_runs_returned"] = len(runs)
+    # `recent_runs_count` is how many runs this response carries; the full
+    # fetched set may be larger (`total_runs_available`). The legacy
+    # `total_runs_returned` is retained as a deprecated alias — it historically
+    # carried the FULL fetched count, so it maps to `total_runs_available`.
+    data["recent_runs_count"] = recent_runs_count
+    data["total_runs_available"] = total_runs_available
+    data["total_runs_returned"] = total_runs_available
     if banner_stats:
         data["banner_stats"] = banner_stats
 
@@ -520,6 +547,22 @@ async def get_policy_history_detail(
         metadata["field_notes"] = dict(_BANNER_STATS_FIELD_NOTES)
     if runs_error:
         metadata["runs_fetch_error"] = runs_error
+    # The recent-runs slice is a truncation with no upstream pagination, so emit
+    # an explicit truncation signal plus the exact follow-up call (a higher
+    # limit) rather than letting the slice masquerade as the whole history.
+    if recent_runs_count < total_runs_available:
+        metadata["recent_runs_truncated"] = True
+        metadata["recent_runs_note"] = (
+            f"Showing {recent_runs_count} of {total_runs_available} fetched runs. "
+            "Increase recent_runs_limit to see more."
+        )
+        metadata["suggested_next_call"] = {
+            "tool": "policy_history_detail",
+            "args": {
+                "policy_uuid": policy_uuid,
+                "recent_runs_limit": total_runs_available,
+            },
+        }
 
     return {
         "data": data,

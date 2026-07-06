@@ -243,7 +243,7 @@ The Automox MCP server acts as a stateless proxy between your AI assistant and t
 
 **Data retention:** The server retains no persistent data between sessions. In-memory caches (idempotency keys, rate-limit counters) are cleared when the process exits. Structured logs, when enabled, are written to stderr and are the deployer's responsibility to manage and retain.
 
-See [`PRIVACY.md`](PRIVACY.md) for the full privacy policy.
+See the [Automox MCP Server Privacy Policy](https://www.automox.com/legal/automox-mcp-server-privacy-policy) for the full privacy policy (mirrored in [`PRIVACY.md`](PRIVACY.md)).
 
 ## Alternative Installation
 

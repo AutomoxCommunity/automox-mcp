@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Privacy policy now points at the hosted canonical URL.** The `privacy_policies` array in `mcpb/manifest.json` and the README "full privacy policy" link now reference the published [Automox MCP Server Privacy Policy](https://www.automox.com/legal/automox-mcp-server-privacy-policy) instead of the GitHub-hosted `PRIVACY.md` blob. `PRIVACY.md` is retained as an in-repo mirror and now names the hosted page as canonical. Content is unchanged (same 2026-05-29 revision).
+
 ## [2.2.7] - 2026-06-27
 
 ### Fixed

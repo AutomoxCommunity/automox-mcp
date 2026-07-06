@@ -29,7 +29,7 @@
     "official"
   ],
   "privacy_policies": [
-    "https://github.com/AutomoxCommunity/automox-mcp/blob/main/PRIVACY.md"
+    "https://www.automox.com/legal/automox-mcp-server-privacy-policy"
   ],
   "server": {
     "type": "uv",

@@ -2,6 +2,8 @@
 
 _Last updated: 2026-05-29_
 
+The canonical, hosted version of this policy is published at <https://www.automox.com/legal/automox-mcp-server-privacy-policy>. This file mirrors it for in-repo reference.
+
 The Automox MCP server is an open-source, locally executed Model Context Protocol (MCP) server that lets a user's own AI assistant interact with the Automox API. It runs on the user's machine (typically inside a desktop AI client such as Claude Desktop, packaged as an MCPB Desktop Extension) and acts as a stateless proxy between that assistant and `console.automox.com`.
 
 This document describes how data is handled when the server is run as distributed (PyPI package, Docker image, or MCPB bundle published by Automox). Self-hosted deployments may differ; this policy applies to the upstream artifact only.

@@ -16,10 +16,10 @@ Claude: Here's your readiness summary — 3 devices need patches,
 ```
 
 > [!IMPORTANT]
-> Contributions, bug reports, and feature requests are welcome via [GitHub Issues](https://github.com/AutomoxCommunity/automox-mcp/issues) and the Automox Community.
+> This repository does not accept external contributions. For bug reports or feature requests, use [help.automox.com](https://help.automox.com).
 
 > [!CAUTION]
-> AI assistants can make mistakes. Data produced by the MCP server may be incorrect or incomplete. If you see this happening consistently, please [open an issue](https://github.com/AutomoxCommunity/automox-mcp/issues).
+> AI assistants can make mistakes. Data produced by the MCP server may be incorrect or incomplete. If you see this happening consistently, please let us know via [help.automox.com](https://help.automox.com).
 
 ## Quick Start
 
@@ -276,7 +276,7 @@ pip install --upgrade automox-mcp
 
 > **Note:** `uvx` automatically refreshes its cache roughly every 7 days, so most users will pick up new releases without action. Run `uvx --refresh` to get the latest immediately.
 
-## Contributing
+## Development
 
 ```bash
 git clone https://github.com/AutomoxCommunity/automox-mcp.git
@@ -330,6 +330,6 @@ MIT License. See [LICENSE](LICENSE).
 
 ## Support
 
-The official Automox MCP server. Due to the fast moving nature of this project, support is provided via [GitHub issues](https://github.com/AutomoxCommunity/automox-mcp/issues) and the Automox Community Slack. Please use those avenues for questions, bugs, or feature requests.
+The official Automox MCP server. For questions, bugs, or feature requests use [help.automox.com](https://help.automox.com).
 
 To report a security vulnerability, see [SECURITY.md](SECURITY.md) — please do not open a public issue.

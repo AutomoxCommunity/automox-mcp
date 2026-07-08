@@ -15,11 +15,8 @@ Claude: Here's your readiness summary — 3 devices need patches,
         2 approvals are pending, and your patch policies run tonight at 2 AM...
 ```
 
-> [!IMPORTANT]
-> This repository does not accept external contributions. For bug reports or feature requests, use [help.automox.com](https://help.automox.com).
-
 > [!CAUTION]
-> AI assistants can make mistakes. Data produced by the MCP server may be incorrect or incomplete. If you see this happening consistently, please let us know via [help.automox.com](https://help.automox.com).
+> AI assistants can make mistakes. Data produced by the MCP server may be incorrect or incomplete. If you see this happening consistently, please let us know via [help.automox.com](https://help.automox.com/hc/en-us).
 
 ## Quick Start
 
@@ -330,6 +327,6 @@ MIT License. See [LICENSE](LICENSE).
 
 ## Support
 
-The official Automox MCP server. For questions, bugs, or feature requests use [help.automox.com](https://help.automox.com).
+The official Automox MCP server. For questions, bug reports, or feature requests, use your typical Automox escalation paths — contact [Automox Support](https://help.automox.com/hc/en-us) or reach out to your account team.
 
 To report a security vulnerability, see [SECURITY.md](SECURITY.md) — please do not open a public issue.

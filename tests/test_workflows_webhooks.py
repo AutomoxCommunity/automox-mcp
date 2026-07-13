@@ -145,6 +145,25 @@ async def test_get_webhook_returns_detail() -> None:
     assert result["data"]["enabled"] is True
 
 
+@pytest.mark.asyncio
+async def test_get_webhook_unwraps_data_envelope() -> None:
+    """A single-object get response wrapped in a `data` envelope surfaces fields."""
+    client = StubClient(
+        get_responses={
+            f"/organizations/{_ORG_UUID}/webhooks/wh-001": [{"data": _WEBHOOK_A}],
+        }
+    )
+    result = await get_webhook(
+        cast(AutomoxClient, client),
+        org_uuid=_ORG_UUID,
+        webhook_id="wh-001",
+    )
+
+    assert result["data"]["name"] == "Deploy Hook"
+    assert result["data"]["id"] == "wh-001"
+    assert result["data"]["enabled"] is True
+
+
 # ---------------------------------------------------------------------------
 # list_webhook_deliveries
 # ---------------------------------------------------------------------------
@@ -264,6 +283,50 @@ async def test_create_webhook_returns_secret() -> None:
 
 
 @pytest.mark.asyncio
+async def test_create_webhook_unwraps_data_envelope() -> None:
+    """A single-object create response wrapped in a top-level `data` envelope
+    still surfaces the real fields — including the one-time signing secret."""
+    enveloped = {"data": {**_WEBHOOK_A, "secret": "whsec_live_abc123"}}
+    client = StubClient(
+        post_responses={
+            f"/organizations/{_ORG_UUID}/webhooks": [enveloped],
+        }
+    )
+    result = await create_webhook(
+        cast(AutomoxClient, client),
+        org_uuid=_ORG_UUID,
+        name="Deploy Hook",
+        url="https://example.com/hook",
+        event_types=["device.compliant"],
+    )
+
+    assert result["data"]["secret"] == "whsec_live_abc123"
+    assert result["data"]["id"] == "wh-001"
+    assert result["data"]["name"] == "Deploy Hook"
+
+
+@pytest.mark.asyncio
+async def test_create_webhook_flat_response_still_works() -> None:
+    """A flat (un-enveloped) create response is unchanged — no regression."""
+    created = {**_WEBHOOK_A, "secret": "s3cr3t-key"}
+    client = StubClient(
+        post_responses={
+            f"/organizations/{_ORG_UUID}/webhooks": [created],
+        }
+    )
+    result = await create_webhook(
+        cast(AutomoxClient, client),
+        org_uuid=_ORG_UUID,
+        name="Deploy Hook",
+        url="https://example.com/hook",
+        event_types=["device.compliant"],
+    )
+
+    assert result["data"]["secret"] == "s3cr3t-key"
+    assert result["data"]["id"] == "wh-001"
+
+
+@pytest.mark.asyncio
 async def test_create_webhook_sends_correct_body() -> None:
     client = StubClient(
         post_responses={
@@ -308,6 +371,28 @@ async def test_update_webhook_partial_update() -> None:
     assert result["data"]["enabled"] is False
     body = client.calls[0][2]
     assert body == {"enabled": False}
+
+
+@pytest.mark.asyncio
+async def test_update_webhook_unwraps_data_envelope() -> None:
+    """A single-object update response wrapped in a `data` envelope surfaces fields."""
+    client = StubClient(
+        patch_responses={
+            f"/organizations/{_ORG_UUID}/webhooks/wh-001": [
+                {"data": {**_WEBHOOK_A, "enabled": False}},
+            ],
+        }
+    )
+    result = await update_webhook(
+        cast(AutomoxClient, client),
+        org_uuid=_ORG_UUID,
+        webhook_id="wh-001",
+        enabled=False,
+    )
+
+    assert result["data"]["updated"] is True
+    assert result["data"]["name"] == "Deploy Hook"
+    assert result["data"]["enabled"] is False
 
 
 @pytest.mark.asyncio

@@ -9,8 +9,25 @@ from ..client import AutomoxClient
 from ..utils.response import build_pagination_metadata
 
 
+def _unwrap_data(result: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Unwrap a single-object response from its top-level ``data`` envelope.
+
+    The Automox webhooks API returns single-object responses wrapped as
+    ``{"data": {<fields>}}``. Return the inner object when the envelope is
+    present, otherwise the input unchanged. Only a ``data`` whose value is
+    itself a mapping is unwrapped, so an already-unwrapped record (e.g. a list
+    item, which has no ``data`` key) or a non-enveloped response passes through
+    untouched — the fix stays correct if the API ever stops enveloping.
+    """
+    inner = result.get("data")
+    if isinstance(inner, Mapping):
+        return inner
+    return result
+
+
 def _summarize_webhook(webhook: Mapping[str, Any]) -> dict[str, Any]:
     """Extract key fields from a webhook record."""
+    webhook = _unwrap_data(webhook)
     return {
         "id": webhook.get("id"),
         "name": webhook.get("name"),
@@ -219,14 +236,15 @@ async def create_webhook(
 
     data: dict[str, Any]
     if isinstance(result, Mapping):
+        webhook = _unwrap_data(result)
         data = {
-            "id": result.get("id"),
-            "name": result.get("name"),
-            "url": result.get("url"),
-            "enabled": result.get("enabled"),
-            "eventTypes": result.get("eventTypes"),
-            "secret": result.get("secret"),
-            "createdAt": result.get("createdAt"),
+            "id": webhook.get("id"),
+            "name": webhook.get("name"),
+            "url": webhook.get("url"),
+            "enabled": webhook.get("enabled"),
+            "eventTypes": webhook.get("eventTypes"),
+            "secret": webhook.get("secret"),
+            "createdAt": webhook.get("createdAt"),
             "_important": (
                 "SAVE THE SECRET NOW. The signing secret above is only shown once "
                 "and cannot be retrieved later. Store it securely for signature "

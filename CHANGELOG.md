@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Privacy policy now points at the hosted canonical URL.** The `privacy_policies` array in `mcpb/manifest.json` and the README "full privacy policy" link now reference the published [Automox MCP Server Privacy Policy](https://www.automox.com/legal/automox-mcp-server-privacy-policy) instead of the GitHub-hosted `PRIVACY.md` blob. `PRIVACY.md` is retained as an in-repo mirror and now names the hosted page as canonical. Content is unchanged (same 2026-05-29 revision).
 
+### Fixed
+
+- **`create_webhook`, `get_webhook`, and `update_webhook` now read fields from the response `data` envelope.** The webhooks API returns single-object responses wrapped as `{"data": {...}}`, but these three tools read the fields at the top level and returned `null` for every field — including the one-time signing secret from `create_webhook`, which is shown only on creation and cannot be retrieved afterward. They now unwrap the `data` envelope before reading fields (with a safe fallback for un-enveloped responses). The `list` and `rotate` webhook tools already handled their responses correctly and are unchanged.
+
 ## [2.2.7] - 2026-06-27
 
 ### Fixed

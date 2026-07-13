@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **`create_webhook`, `get_webhook`, and `update_webhook` now read fields from the response `data` envelope.** The webhooks API returns single-object responses wrapped as `{"data": {...}}`, but these three tools read the fields at the top level and returned `null` for every field — including the one-time signing secret from `create_webhook`, which is shown only on creation and cannot be retrieved afterward. They now unwrap the `data` envelope before reading fields (with a safe fallback for un-enveloped responses). The `list` and `rotate` webhook tools already handled their responses correctly and are unchanged.
 
+### Security
+
+- **Floored `click>=8.3.3`** to force the fix for PYSEC-2026-2132 (a command-injection in `click.edit()`). `click` is a transitive dependency (via `typer`/`fastmcp`); the floor pulls in the patched version.
+
 ## [2.2.7] - 2026-06-27
 
 ### Fixed

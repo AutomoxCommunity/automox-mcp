@@ -19,6 +19,7 @@ classifiers = [
   "Topic :: System :: Systems Administration"
 ]
 dependencies = [
+  "click>=8.3.3",  # PYSEC-2026-2132: click.edit() command injection; transitive via typer/fastmcp
   "cryptography>=48.0.1",  # GHSA-537c-gmf6-5ccf: bundled-OpenSSL fix in wheels
   "fastmcp>=3.4.2",
   "httpx>=0.28",

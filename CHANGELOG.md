@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **The MCPB bundle's support link now points to `https://docs.automox.com/`.** The previous target (`https://help.automox.com`) sits behind bot protection that can return HTTP 403 to automated reachability checks and to users behind similar network filtering; the documentation site resolves cleanly without an interstitial.
+
+### Fixed
+
+- **The `.mcpb` Desktop Extension bundle now ships `LICENSE`, `README.md`, `SECURITY.md`, and `PRIVACY.md`.** The manifest declared an MIT license, but the packaged bundle previously carried none of these files — so the shipped artifact did not include the license it declares and could not be evaluated offline. The release workflow now stages the four documents from the repo root into the pack root immediately before `mcpb pack`, and a new verification step fails the release if any required file is absent from the built archive.
+
 ## [2.2.8] - 2026-07-13
 
 ### Changed

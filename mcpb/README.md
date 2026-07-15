@@ -28,8 +28,14 @@ The version in `manifest.json` and `pyproject.toml` is overridden at build time 
 After `mcpb pack`, the `.mcpb` archive contains:
 
 - `manifest.json` — bundle metadata, user_config schema, env-var mapping
-- `icon.png` — 256×256 RGBA Automox logo
+- `icon.png` — 512×512 RGBA Automox triangle mark
 - `pyproject.toml` — declares `automox-mcp>=<version>` as the only dependency
 - `server/main.py` — one-line shim that imports and calls `automox_mcp.main()`
+- `LICENSE`, `README.md`, `SECURITY.md`, `PRIVACY.md` — staged from the repo
+  root by the release workflow so users can evaluate the extension offline
 
-Files matched by `.mcpbignore` are excluded from the archive.
+Files matched by `.mcpbignore` are excluded from the archive. The four docs
+above are copied from the repo root into this directory by the release
+workflow's "Stage bundle docs" step immediately before `mcpb pack`, so the
+repo root remains their single source of truth. A local `mcpb pack .` will
+instead include whatever copies happen to be present in this directory.

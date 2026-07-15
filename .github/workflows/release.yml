@@ -110,8 +110,34 @@ jobs:
           PY
           echo "MCPB bundle version set to $BUNDLE_VERSION"
 
+      # Stage the license and user-facing docs into the pack root so they
+      # ship inside the .mcpb (the MCP Directory review requires the bundle
+      # to carry the LICENSE it declares and a README for offline eval).
+      # Copied from the repo root at build time — root stays the single
+      # source of truth, so these never drift from a committed duplicate.
+      # `.mcpbignore` no longer excludes README.md; the others are not
+      # ignored, so all four are packed once present here.
+      - name: Stage bundle docs (LICENSE, README, SECURITY, PRIVACY)
+        run: cp LICENSE README.md SECURITY.md PRIVACY.md mcpb/
+
       - name: Build MCPB bundle
         run: mcpb pack mcpb "mcpb/automox-mcp-${BUNDLE_VERSION}.mcpb"
+
+      # Fail the release before the irreversible PyPI push if the bundle is
+      # missing any required file — a silent packaging regression is exactly
+      # what the Directory review flagged on v2.2.8.
+      - name: Verify MCPB bundle contents
+        run: |
+          python3 - "mcpb/automox-mcp-${BUNDLE_VERSION}.mcpb" <<'PY'
+          import sys, zipfile
+          bundle = sys.argv[1]
+          names = zipfile.ZipFile(bundle).namelist()
+          required = ["manifest.json", "LICENSE", "README.md", "SECURITY.md", "PRIVACY.md"]
+          missing = [f for f in required if not any(n == f or n.endswith("/" + f) for n in names)]
+          if missing:
+              raise SystemExit(f"Bundle {bundle} missing required files: {missing}\nContents: {names}")
+          print("Bundle contains all required files:", required)
+          PY
 
       - name: Publish to PyPI
         if: steps.pypi_check.outputs.exists != 'true'

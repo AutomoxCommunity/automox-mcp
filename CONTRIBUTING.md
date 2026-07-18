@@ -4,7 +4,7 @@
 
 **This repository does not accept external contributions.** Issues and pull requests from outside Automox will not be reviewed or merged.
 
-- **Bug reports and feature requests:** use [help.automox.com](https://help.automox.com).
+- **Questions, bug reports, and feature requests:** use your typical Automox escalation paths — contact [Automox Support](https://help.automox.com/hc/en-us) or reach out to your account team.
 - **Security vulnerabilities:** see [`SECURITY.md`](SECURITY.md) for the private disclosure path — please do not open a public issue.
 
 ## License

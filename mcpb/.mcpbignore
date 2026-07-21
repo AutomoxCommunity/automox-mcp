@@ -5,6 +5,9 @@
 __pycache__
 *.pyc
 .DS_Store
-README.md
 *.mcpb
 uv.lock
+
+# LICENSE, README.md, SECURITY.md, and PRIVACY.md are staged into this
+# directory from the repo root by the release workflow (single source of
+# truth) so they ship inside the .mcpb. Do NOT ignore them here.

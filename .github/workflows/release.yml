@@ -85,6 +85,8 @@ jobs:
       # TODO(supply chain): pin @anthropic-ai/mcpb once we settle a version.
       # ---------------------------------------------------------------
       - name: Install MCPB CLI
+        # zizmor: ignore[adhoc-packages] — mcpb CLI is a one-off global install with
+        # no lockfile; pinning is tracked by the supply-chain TODO above.
         run: |
           node --version
           npm install -g @anthropic-ai/mcpb

@@ -187,6 +187,8 @@ jobs:
           PY
 
       - name: Install MCPB CLI
+        # zizmor: ignore[adhoc-packages] — mcpb CLI is a one-off global install with
+        # no lockfile; pinning is tracked by the supply-chain TODO in release.yml.
         run: npm install -g @anthropic-ai/mcpb
 
       - name: Validate MCPB manifest schema

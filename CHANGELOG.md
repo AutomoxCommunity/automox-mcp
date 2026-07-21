@@ -7,9 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.9] - 2026-07-21
+
 ### Changed
 
 - **The MCPB bundle's support link now points to `https://docs.automox.com/`.** The previous target (`https://help.automox.com`) sits behind bot protection that can return HTTP 403 to automated reachability checks and to users behind similar network filtering; the documentation site resolves cleanly without an interstitial.
+- **Bumped the resolved `mcp` runtime to 1.28.1** in the lockfile. The declared floor (`mcp>=1.27.2`) is unchanged; this is a lockfile-only refresh of the transitive resolution.
 
 ### Fixed
 

@@ -1388,7 +1388,9 @@ async def run_readonly_tools() -> None:
         # 75–78. Saved-search detail tools (need a saved search to exist)
         resp = await _safe_call(session, "list_saved_searches", {})
         saved = _extract_list(resp.get("data")) if resp else []
-        saved_id = _extract_id(saved[0], "id", "saved_search_id") if saved else None
+        # The saved-search id is a UUID *string*; read it directly (don't use
+        # _extract_id, which coerces to int and would raise on a UUID).
+        saved_id = (saved[0].get("id") or saved[0].get("saved_search_id")) if saved else None
         saved_uuid = None
         if saved:
             saved_uuid = (

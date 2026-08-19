@@ -99,6 +99,8 @@ AUTOMOX_ORG_ID=your-org-id
 
 **Claude Desktop (recommended) — one-click MCPB install:**
 
+> **New:** Automox MCP is now also listed directly in Claude's Connectors Directory. Open Claude Desktop, go to **Settings > Connectors**, and search "Automox" to connect without leaving the app. The manual steps below still work too, nothing about them has changed.
+
 1. Download the latest `automox-mcp-<version>.mcpb` from the [GitHub Releases page](https://github.com/AutomoxCommunity/automox-mcp/releases/latest).
 2. Open Claude Desktop → **Settings → Extensions**.
 3. Drag the `.mcpb` file into the Extensions window.
@@ -127,7 +129,7 @@ That's it. Start asking questions.
 
 ## What Can I Ask?
 
-The server exposes 133 tools across devices, policies, patches, groups, webhooks, worklets, vulnerability sync, maintenance windows, and more. You don't need to know the tool names — just describe what you want:
+The server exposes 130+ tools across devices, policies, patches, groups, webhooks, worklets, vulnerability sync, maintenance windows, and more. You don't need to know the tool names — just describe what you want:
 
 | Ask this | What happens |
 |---|---|
@@ -149,6 +151,8 @@ For the full list of tools, parameters, and MCP resources, see the **[Tool Refer
 ## Configuration
 
 ### Environment Variables
+
+Applies only to self-hosted 2.x servers. Not applicable to the hosted 3.0+ server.
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
@@ -258,7 +262,7 @@ The Automox MCP server is designed for enterprise deployment with defense-in-dep
 - **Security response headers** — `X-Content-Type-Options`, `X-Frame-Options`, `CSP`, `Cache-Control: no-store`, `Strict-Transport-Security` on all HTTP responses
 - **Authentication rate limiting** — blocks IPs after repeated auth failures to mitigate brute-force attacks
 - **Remote bind protection** — non-loopback HTTP/SSE binding requires explicit `--allow-remote-bind` opt-in
-- **MCP Tool Annotations** on all 133 tools — `readOnlyHint`, `destructiveHint`, `idempotentHint`, and `openWorldHint` per the MCP Protocol specification, enabling client-side confirmation dialogs and safety guardrails
+- **MCP Tool Annotations** on all 130+ tools — `readOnlyHint`, `destructiveHint`, `idempotentHint`, and `openWorldHint` per the MCP Protocol specification, enabling client-side confirmation dialogs and safety guardrails
 - **Interactive MCP Apps** (`io.modelcontextprotocol/ui`) — inline review/approval surfaces for consequential flows: compliance triage, patch approval, policy blast-radius, remediation apply, and RBAC access certification. Apps-capable hosts render them inline; other hosts degrade gracefully to the structured tool output. Write-flow Apps drive the **existing gated tools** through the host's confirmation — no new tools, no new gates — and ship under the host's deny-all CSP (self-contained, no external/CDN loads)
 - **61 security hardening items** (V-001 through V-182, S-001 through S-006) documented in CHANGELOG and SECURITY.md
 
@@ -319,6 +323,71 @@ pip install --upgrade automox-mcp
 ```
 
 > **Note:** `uvx` automatically refreshes its cache roughly every 7 days, so most users will pick up new releases without action. Run `uvx --refresh` to get the latest immediately.
+
+## Migrating to the Hosted Server
+
+Automox MCP Server 3.0 (hosted) runs the same tools as this repository, just without a local install to maintain. Migrating is two steps: remove your local server, then connect to the hosted one. There's no in-place upgrade and nothing to convert, no config file to move and no data to port. If you've never run the Automox MCP server before, skip straight to Step 2, there's no package to install.
+
+**Step 1: Remove the local server**
+
+Claude Code:
+
+```bash
+claude mcp remove automox
+```
+
+Cursor or other config-based clients: remove the `automox-mcp` entry from your MCP config file. Claude Desktop extension removal steps are still being finalized and will be added here once confirmed. In the meantime, it's safe to leave the extension installed and running while you set up and test the hosted connection separately.
+
+**Step 2: Connect to the hosted server**
+
+Claude Code:
+
+```bash
+claude mcp add --transport http automox \
+  https://console.automox.com/api/mcp \
+  --header "Authorization: Bearer YOUR_AUTOMOX_API_KEY"
+```
+
+Open a new session and ask something like, "What's our compliance posture?"
+
+MCP Inspector (for evaluation or debugging):
+
+```bash
+npx @modelcontextprotocol/inspector
+```
+
+In the UI: Transport Type = Streamable HTTP, URL = `https://console.automox.com/api/mcp`, Authentication → Bearer Token = your API key (paste the raw key). Click Connect, then Tools → List Tools.
+
+Other MCP clients (Cursor and similar), any client that supports streamable HTTP with custom headers:
+
+```
+URL:      https://console.automox.com/api/mcp
+Header:   Authorization: Bearer YOUR_AUTOMOX_API_KEY
+```
+
+Your permissions in Automox apply exactly as they do in the console and API. The MCP acts as you. Your self-hosted installation will keep working during a transition period — there's no rush to switch.
+
+## Troubleshooting
+
+| Symptom | Cause / fix |
+|---|---|
+| Adding the hosted server fails in Claude Desktop's "custom connector" screen | Claude Desktop's built-in custom connector only supports signing in with OAuth. The hosted service doesn't have OAuth yet, it only accepts an API key, so pasting the hosted URL in there will fail. This is a different thing from the Automox MCP desktop extension: install that instead (one-click `.mcpb` install, also in Claude's Connectors Directory). It runs the server locally on your machine and connects using the same API key you already have, so you still get full functionality in Claude Desktop, just through the extension rather than the custom connector screen. |
+| `401 Unauthorized` | The `Authorization: Bearer` header is missing or the key is wrong. Send the key exactly as `Bearer <key>`. |
+| "OAuth Authentication Failed" or an error about invalid JSON | Your client fell back to OAuth discovery after a `401`. Fix the Bearer header rather than trying a custom header name. |
+| `403 Forbidden` on some tools | Check your key's scope. Use an org-scoped key. Some user-management features require admin scopes. |
+| Answers look off | AI assistants can make mistakes. Verify important results in the Automox Console before acting on them. |
+
+## Frequently Asked Questions
+
+**Does my self-hosted 2.x server stop working?** No. Your existing self-hosted installation continues to work, there's no change to it or to how you get it. The hosted service is simply a new option if you'd like to use it, on your own timeline, with no requirement to switch.
+
+**Do I lose any capabilities by moving to the hosted service?** No. The hosted service runs the same tools you already have access to today.
+
+**Will I need to switch to SSO?** Not yet. The hosted service uses the same API key model you use today. SSO and per-user authentication are planned for a future release, and we'll provide clear migration guidance when that happens.
+
+**I use Claude Desktop. What should I do?** Keep using the Automox MCP desktop extension for now. Claude Desktop's native connector option requires OAuth, which the hosted service doesn't support yet.
+
+Need help? Reach out through [help.automox.com](https://help.automox.com).
 
 ## Development
 

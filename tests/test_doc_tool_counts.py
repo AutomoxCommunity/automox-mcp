@@ -1,11 +1,13 @@
 """Guard against tool-count drift between code and the hand-maintained docs.
 
-The tool counts in ``README.md``, ``mcpb/manifest.json``, and
-``docs/tool-reference.md`` are maintained by hand and have drifted before
-(prompting the 1.2.1 fixup). These tests assert each documented count and the
-documented per-domain breakdown match the *actually registered* tool set, so a
-future tool addition/removal that forgets a doc update fails CI instead of
-shipping a wrong number (#113).
+The tool counts in ``mcpb/manifest.json`` and ``docs/tool-reference.md`` are
+maintained by hand and have drifted before (prompting the 1.2.1 fixup). These
+tests assert each documented count and the documented per-domain breakdown
+match the *actually registered* tool set, so a future tool addition/removal
+that forgets a doc update fails CI instead of shipping a wrong number (#113).
+
+``README.md`` is deliberately **not** guarded: it advertises an approximate
+total ("130+ tools"), which no exact-count assertion can express.
 
 The **"N MCP resources"** count in ``docs/tool-reference.md`` and
 ``mcpb/manifest.json`` is guarded the same way (real-FastMCP resource
@@ -37,7 +39,6 @@ from automox_mcp.resources import register_resources
 from automox_mcp.tools import _get_tool_names, register_tools
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
-_README = _REPO_ROOT / "README.md"
 _MANIFEST = _REPO_ROOT / "mcpb" / "manifest.json"
 _TOOL_REFERENCE = _REPO_ROOT / "docs" / "tool-reference.md"
 
@@ -207,36 +208,6 @@ def test_discover_catalog_matches_registered(monkeypatch: pytest.MonkeyPatch) ->
     missing = (registered - catalog) - _CATALOG_EXCLUDED
     assert registered - catalog == _CATALOG_EXCLUDED, (
         f"registered tools missing from the discover_capabilities catalog: {sorted(missing)}"
-    )
-
-
-# ---------------------------------------------------------------------------
-# README.md
-# ---------------------------------------------------------------------------
-
-
-def test_readme_counts(registered_counts: dict[str, int]) -> None:
-    text = _README.read_text()
-    total, read, write = (
-        registered_counts["total"],
-        registered_counts["read"],
-        registered_counts["write"],
-    )
-
-    # "The server exposes N tools" / "all N tools"
-    totals = {int(n) for n in re.findall(r"(?:exposes|all) (\d+) tools", text)}
-    assert totals == {total}, f"README total-tool mentions {totals}, expected {{{total}}}"
-
-    # "(84 of N tools remain)" — the read/total pair must agree on both numbers.
-    of_pairs = {(int(a), int(b)) for a, b in re.findall(r"(\d+) of (\d+) tools?", text)}
-    assert of_pairs == {(read, total)}, (
-        f"README 'X of Y tools' pairs {of_pairs}, expected {{({read}, {total})}}"
-    )
-
-    # "all N write tools" / "all N write operations"
-    write_mentions = {int(n) for n in re.findall(r"all (\d+) write", text)}
-    assert write_mentions == {write}, (
-        f"README write-tool mentions {write_mentions}, expected {{{write}}}"
     )
 
 

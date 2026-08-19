@@ -16,10 +16,54 @@ Claude: Here's your readiness summary — 3 devices need patches,
 ```
 
 > [!IMPORTANT]
-> This repository does not accept external contributions. For bug reports or feature requests, use [help.automox.com](https://help.automox.com).
+> For bug reports or feature requests, use [help.automox.com](https://help.automox.com) or your typical escalation paths.
 
 > [!CAUTION]
-> AI assistants can make mistakes. Data produced by the MCP server may be incorrect or incomplete. If you see this happening consistently, please let us know via [help.automox.com](https://help.automox.com).
+> AI assistants can make mistakes. Responses produced by the MCP server may be incorrect or incomplete. If you see this happening consistently, please let us know.
+
+## Table of Contents
+
+- [What's New in 3.0](#whats-new-in-30)
+- [Self-Hosted vs. Hosted](#self-hosted-vs-hosted)
+- [Quick Start](#quick-start)
+- [What Can I Ask?](#what-can-i-ask)
+- [Configuration](#configuration)
+- [Security](#security)
+- [Privacy Policy](#privacy-policy)
+- [Alternative Installation](#alternative-installation)
+- [Updating](#updating)
+- [Migrating to the Hosted Server](#migrating-to-the-hosted-server)
+- [Troubleshooting](#troubleshooting)
+- [Frequently Asked Questions](#frequently-asked-questions)
+- [Development](#development)
+- [Versioning](#versioning)
+- [License](#license)
+- [Support](#support)
+
+## What's New in 3.0
+
+**Automox MCP Server 3.0** adds a centrally hosted option to replace the legacy self-hosted solution. The hosted server supports all the functionality you're already using, plus one new capability.
+
+- **Hosted server:** Automox now runs and maintains a version of this same server for you. Nothing to install, connect your AI client to `https://console.automox.com/api/mcp` with your existing API key. See [Self-Hosted vs. Hosted](#self-hosted-vs-hosted) below.
+- **Policy Catalog templates (hosted only):** The hosted service can search Automox's library of best-practice policy templates and create a policy directly from one, so you have a starting point without building a policy from scratch. This is separate from asking about the policies already deployed in your org, this is Automox's own recommended template library.
+- **No capability loss:** The hosted service exposes the same tool coverage you already have through this repository.
+- **No forced migration:** This self-hosted server and the Claude Desktop extension keep working exactly as they do today. Moving to the hosted service is currently optional (but recommended), see [Migrating to the Hosted Server](#migrating-to-the-hosted-server).
+- **Auth is unchanged for now:** Both versions use the same Automox API key. SSO is planned for a future release.
+
+## Self-Hosted vs. Hosted
+
+Both run the same open-source server code. The difference is who installs and runs it, and one capability that's currently hosted-only.
+
+| | **Self-hosted (this repository)** | **Hosted (MCP Server 3.0)** |
+|---|---|---|
+| **Install** | You install and keep it updated (PyPI, `uvx`, the Claude Desktop extension, or via Claude's Connectors Directory) | Nothing to install, Automox runs it |
+| **Where it runs** | Your machine | Automox's multi-tenant service |
+| **Auth** | Your Automox API key | Your Automox API key (same model, for now) |
+| **Claude Desktop** | Works today via the one-click extension, installable from GitHub Releases or Claude's Connectors Directory | Not yet, Claude Desktop's built-in custom connector requires OAuth, which the hosted service doesn't support yet |
+| **Other clients (Claude Code, Cursor, MCP Inspector, etc.)** | Works via your local config | Works today over HTTP with a Bearer token header |
+| **Good fit if** | You want to run your own infrastructure, or you use Claude Desktop today | You want zero maintenance and use a client that supports custom HTTP headers |
+
+For self-hosted setup, see [Quick Start](#quick-start) below. For the hosted server, see [Migrating to the Hosted Server](#migrating-to-the-hosted-server), which also covers connecting fresh with no prior install.
 
 ## Quick Start
 

@@ -110,7 +110,7 @@ async def test_account_tools_use_env_fallback(monkeypatch):
     monkeypatch.setattr(account_tools.workflows, "invite_user_to_account", fake_invite)
 
     server = StubServer()
-    account_tools.register(server, client=FakeClient())
+    account_tools.register(server, client=FakeClient(account_uuid=""))
     tool_fn = server.tools["invite_user_to_account"]
 
     await tool_fn(email="user@example.com", account_rbac_role="global-admin")
@@ -121,7 +121,7 @@ async def test_account_tools_error_when_env_missing(monkeypatch):
     monkeypatch.delenv("AUTOMOX_ACCOUNT_UUID", raising=False)
 
     server = StubServer()
-    account_tools.register(server, client=FakeClient())
+    account_tools.register(server, client=FakeClient(account_uuid=""))
     tool_fn = server.tools["remove_user_from_account"]
 
     with pytest.raises(ToolError):

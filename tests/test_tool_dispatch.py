@@ -1634,12 +1634,40 @@ class TestAccountToolsErrorHandling:
         monkeypatch.delenv("AUTOMOX_ACCOUNT_UUID", raising=False)
 
         server = StubServer()
-        account_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+        account_tools.register(
+            server, read_only=False, client=FakeClient(org_id=42, account_uuid="")
+        )
 
         with pytest.raises(ToolError):
             await server.tools["invite_user_to_account"](
                 email="test@example.com", account_rbac_role="global-admin"
             )
+
+    @pytest.mark.asyncio
+    async def test_account_id_prefers_client_identity_over_env(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from automox_mcp.tools import account_tools
+
+        recorded: dict[str, Any] = {}
+
+        async def fake_invite(client, **kwargs):
+            recorded.update(kwargs)
+            return _success()
+
+        monkeypatch.setattr(account_tools.workflows, "invite_user_to_account", fake_invite)
+        monkeypatch.setenv("AUTOMOX_ACCOUNT_UUID", "cccccccc-cccc-cccc-cccc-cccccccccccc")
+
+        server = StubServer()
+        account_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+
+        await server.tools["invite_user_to_account"](
+            email="test@example.com", account_rbac_role="global-admin"
+        )
+
+        # The client's identity (per-request in embedding deployments) wins over
+        # process env.
+        assert str(recorded.get("account_id")) == "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
 
 
 # ---------------------------------------------------------------------------
@@ -2243,13 +2271,12 @@ class TestAccountWriteToolsDispatch:
 
     @pytest.mark.asyncio
     async def test_create_zone(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setenv("AUTOMOX_ACCOUNT_UUID", _ACCT_UUID)
         recorded = self._wire(monkeypatch, "create_zone")
         server = StubServer()
         account_tools.register(server, read_only=False, client=FakeClient(org_id=42))
         await server.tools["create_zone"](name="EU Zone")
         assert recorded["name"] == "EU Zone"
-        assert str(recorded["account_id"]) == _ACCT_UUID
+        assert str(recorded["account_id"]) == "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
 
     @pytest.mark.asyncio
     async def test_update_user(self, monkeypatch: pytest.MonkeyPatch) -> None:

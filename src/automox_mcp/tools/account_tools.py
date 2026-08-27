@@ -55,6 +55,9 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     def _resolve_account_id(explicit: str | None = None) -> str:
         if explicit:
             return explicit
+        client_value = client.account_uuid
+        if client_value:
+            return client_value
         env_value = os.environ.get("AUTOMOX_ACCOUNT_UUID")
         if not env_value:
             raise ToolError(

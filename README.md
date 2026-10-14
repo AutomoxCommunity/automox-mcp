@@ -336,7 +336,9 @@ Claude Code:
 claude mcp remove automox
 ```
 
-Cursor or other config-based clients: remove the `automox-mcp` entry from your MCP config file. Claude Desktop extension removal steps are still being finalized and will be added here once confirmed. In the meantime, it's safe to leave the extension installed and running while you set up and test the hosted connection separately.
+Cursor or other config-based clients: remove the `automox-mcp` entry from your MCP config file.
+
+Claude Desktop / the MCPB extension: open Claude Desktop and go to **Settings → Extensions**. Find **Automox** and either toggle it off (you can turn it back on later) or choose **Uninstall** to remove it completely. Restart Claude Desktop afterward so the old tools no longer appear. Before you remove it, note that the hosted service can't be used from Claude Desktop yet. Claude Desktop's custom connector requires OAuth, which the hosted service doesn't support yet. If Claude Desktop is where you use Automox, keep the extension installed and only remove it when you're moving to a client that can connect to the hosted server, such as Claude Code or Cursor.
 
 **Step 2: Connect to the hosted server**
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from typing import Any
 
@@ -21,8 +22,12 @@ _REFRESH_INTERVAL_NOTE = (
     "creating or updating its groups."
 )
 
-# The API accepts longer notes on create than on update.
+# Update rules a stored value must still meet to be sent back; the API accepts
+# longer notes on create than on update.
 _UPDATE_NOTES_MAX_LENGTH = 500
+_UPDATE_WSUS_SERVER_MAX_LENGTH = 100
+_UPDATE_REFRESH_INTERVAL_RANGE = range(240, 1441)
+_UI_COLOR_PATTERN = re.compile(r"#[0-9a-fA-F]{6}")
 
 
 def _summarize_group(group: Mapping[str, Any]) -> dict[str, Any]:
@@ -57,12 +62,28 @@ def _preserved_group_fields(group: Mapping[str, Any]) -> dict[str, Any]:
     if isinstance(wsus, Mapping) and wsus.get("is_managed") is not None:
         server_url = wsus.get("server_url")
         server = server_url.strip() if isinstance(server_url, str) else ""
-        # WSUS on without a server is rejected, so such a row is left to reset.
+        if len(server) > _UPDATE_WSUS_SERVER_MAX_LENGTH:
+            server = ""
+        # WSUS on without a usable server is rejected, so such a row is left to reset.
         if server or wsus["is_managed"] is False:
             preserved["enable_wsus"] = wsus["is_managed"]
             if server:
                 preserved["wsus_server"] = server
     return preserved
+
+
+def _rejected_on_update(preserved: Mapping[str, Any]) -> list[str]:
+    """Name the kept fields whose stored value the update rules reject."""
+    rejected: list[str] = []
+    interval = preserved.get("refresh_interval")
+    if interval is not None and interval not in _UPDATE_REFRESH_INTERVAL_RANGE:
+        rejected.append("refresh_interval")
+    color = preserved.get("ui_color")
+    if color is not None and not (isinstance(color, str) and _UI_COLOR_PATTERN.fullmatch(color)):
+        rejected.append("ui_color")
+    if len(preserved.get("notes", "")) > _UPDATE_NOTES_MAX_LENGTH:
+        rejected.append("notes")
+    return rejected
 
 
 async def list_server_groups(
@@ -208,11 +229,18 @@ async def update_server_group(
             "the group was not updated."
         )
     body = _preserved_group_fields(current)
-    if notes is None and len(body.get("notes", "")) > _UPDATE_NOTES_MAX_LENGTH:
+    caller_set = {
+        "refresh_interval": refresh_interval,
+        "ui_color": ui_color,
+        "notes": notes,
+    }
+    rejected = [f for f in _rejected_on_update(body) if caller_set[f] is None]
+    if rejected:
         raise ValueError(
-            f"Server group {group_id} has notes longer than the "
-            f"{_UPDATE_NOTES_MAX_LENGTH} characters an update accepts; pass notes "
-            "explicitly (shortened, or an empty string to clear them)."
+            f"Server group {group_id} holds a value an update does not accept for "
+            f"{', '.join(rejected)}; pass {'it' if len(rejected) == 1 else 'them'} "
+            "explicitly (refresh_interval 240-1440, ui_color #RRGGBB or an empty "
+            f"string to clear, notes at most {_UPDATE_NOTES_MAX_LENGTH} characters)."
         )
 
     body["name"] = name
@@ -221,7 +249,7 @@ async def update_server_group(
     if parent_server_group_id is not None:
         body["parent_server_group_id"] = parent_server_group_id
     if ui_color is not None:
-        body["ui_color"] = ui_color
+        body["ui_color"] = ui_color or None
     if notes is not None:
         body["notes"] = notes
     if policies is not None:
@@ -229,12 +257,10 @@ async def update_server_group(
 
     result = await client.put(f"/servergroups/{group_id}", json_data=body, params=params)
 
-    data: dict[str, Any]
-    if isinstance(result, Mapping):
-        data = _summarize_group(result)
-        data["updated"] = True
-    else:
-        data = {"group_id": group_id, "updated": True, "raw": result}
+    # The API answers an update with 204, so report the state that was sent.
+    updated = result if isinstance(result, Mapping) and result.get("id") is not None else None
+    data = _summarize_group(updated or {**current, **body, "id": group_id})
+    data["updated"] = True
 
     return {
         "data": data,

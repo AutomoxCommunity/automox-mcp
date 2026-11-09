@@ -701,8 +701,8 @@ class UpdateServerGroupParams(ForbidExtraModel):
     parent_server_group_id: int = Field(description="Parent group ID (required by API)")
     ui_color: str | None = Field(
         None,
-        description="UI color for group",
-        pattern=r"^#[0-9a-fA-F]{6}$",
+        description="UI color for group; an empty string clears it",
+        pattern=r"^(#[0-9a-fA-F]{6})?$",
     )
     notes: str | None = Field(None, description="Group notes", max_length=500)
     policies: list[int] | None = Field(None, description="Policy IDs to assign")

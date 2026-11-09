@@ -1440,6 +1440,35 @@ class TestGroupToolsErrorHandling:
         assert recorded.get("refresh_interval") is None
 
     @pytest.mark.asyncio
+    async def test_update_server_group_rejects_notes_over_limit(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from fastmcp.exceptions import ToolError
+
+        recorded: list[dict[str, Any]] = []
+
+        async def fake_update(client, **kwargs):
+            recorded.append(kwargs)
+            return _success()
+
+        monkeypatch.setattr(group_tools.workflows, "update_server_group", fake_update)
+
+        server = StubServer()
+        group_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+
+        with pytest.raises(ToolError, match="notes"):
+            await server.tools["update_server_group"](
+                group_id=10, name="Prod", parent_server_group_id=1, notes="n" * 501
+            )
+        assert recorded == []
+
+        await server.tools["update_server_group"](
+            group_id=10, name="Prod", parent_server_group_id=1, notes="n" * 500, ui_color=""
+        )
+        assert recorded[0]["notes"] == "n" * 500
+        assert recorded[0]["ui_color"] == ""
+
+    @pytest.mark.asyncio
     async def test_update_server_group_device_owned_refusal_reaches_caller(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

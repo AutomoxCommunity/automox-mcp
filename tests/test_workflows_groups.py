@@ -6,6 +6,7 @@ import pytest
 from conftest import StubClient
 
 from automox_mcp.client import AutomoxAPIError, AutomoxClient
+from automox_mcp.utils.group_rules import UPDATE_WSUS_SERVER_MAX_LENGTH
 from automox_mcp.workflows.groups import (
     create_server_group,
     delete_server_group,
@@ -410,6 +411,24 @@ async def test_update_group_wsus_unset_keeps_stored_server() -> None:
     body = client.calls[1][2]
     assert "enable_wsus" not in body
     assert body["wsus_server"] == "https://wsus.example.com:8531"
+    assert "warnings" not in result["metadata"]
+
+
+@pytest.mark.asyncio
+async def test_update_group_wsus_server_at_limit_is_kept() -> None:
+    server = "h" * UPDATE_WSUS_SERVER_MAX_LENGTH
+    group = {
+        **_GROUP_OWNED_LIVE,
+        "wsus_config": {**_GROUP_OWNED_LIVE["wsus_config"], "server_url": server},
+    }
+    client = StubClient(get_responses={"/servergroups/30": [group]})
+    result = await update_server_group(
+        cast(AutomoxClient, client), org_id=555, group_id=30, name="Workstations"
+    )
+
+    body = client.calls[1][2]
+    assert body["enable_wsus"] is True
+    assert body["wsus_server"] == server
     assert "warnings" not in result["metadata"]
 
 

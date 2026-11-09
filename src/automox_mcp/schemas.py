@@ -669,7 +669,14 @@ class DeletePolicyToolParams(OrgIdContextMixin, ForbidExtraModel):
 
 class CreateServerGroupParams(ForbidExtraModel):
     name: str = Field(description="Group name")
-    refresh_interval: int = Field(description="Refresh interval in minutes", ge=1, le=525600)
+    refresh_interval: int | None = Field(
+        None,
+        description=(
+            "Refresh interval in minutes. Omit in an organization whose devices own their settings."
+        ),
+        ge=1,
+        le=525600,
+    )
     parent_server_group_id: int = Field(description="Parent group ID (required by API)")
     ui_color: str | None = Field(
         None,
@@ -683,7 +690,14 @@ class CreateServerGroupParams(ForbidExtraModel):
 class UpdateServerGroupParams(ForbidExtraModel):
     group_id: int = Field(description="Server group ID")
     name: str = Field(description="Group name")
-    refresh_interval: int = Field(description="Refresh interval in minutes", ge=1, le=525600)
+    refresh_interval: int | None = Field(
+        None,
+        description=(
+            "Refresh interval in minutes. Omit in an organization whose devices own their settings."
+        ),
+        ge=1,
+        le=525600,
+    )
     parent_server_group_id: int = Field(description="Parent group ID (required by API)")
     ui_color: str | None = Field(
         None,

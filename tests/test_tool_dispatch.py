@@ -1400,6 +1400,82 @@ class TestGroupToolsErrorHandling:
             await server.tools["list_server_groups"]()
 
     @pytest.mark.asyncio
+    async def test_update_server_group_without_refresh_interval(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        recorded: dict[str, Any] = {}
+
+        async def fake_update(client, **kwargs):
+            recorded.update(kwargs)
+            return _success()
+
+        monkeypatch.setattr(group_tools.workflows, "update_server_group", fake_update)
+
+        server = StubServer()
+        group_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+
+        await server.tools["update_server_group"](
+            group_id=10, name="Prod-v2", parent_server_group_id=1
+        )
+
+        assert recorded.get("refresh_interval") is None
+
+    @pytest.mark.asyncio
+    async def test_create_server_group_without_refresh_interval(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        recorded: dict[str, Any] = {}
+
+        async def fake_create(client, **kwargs):
+            recorded.update(kwargs)
+            return _success()
+
+        monkeypatch.setattr(group_tools.workflows, "create_server_group", fake_create)
+
+        server = StubServer()
+        group_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+
+        await server.tools["create_server_group"](name="Kiosks", parent_server_group_id=1)
+
+        assert recorded.get("refresh_interval") is None
+
+    @pytest.mark.asyncio
+    async def test_update_server_group_device_owned_refusal_reaches_caller(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from fastmcp.exceptions import ToolError
+
+        from automox_mcp.client import AutomoxAPIError
+
+        # 422 body as the API returns it.
+        refusal = (
+            "This organization's devices own their settings, so a group save cannot "
+            "set them: refresh_interval. Use the Device Settings API instead."
+        )
+
+        async def fake_update(client, **kwargs):
+            raise AutomoxAPIError(
+                "automox API error",
+                status_code=422,
+                payload={"errors": [refusal], "code": "DEVICE_OWNED_SETTINGS"},
+            )
+
+        monkeypatch.setattr(group_tools.workflows, "update_server_group", fake_update)
+
+        server = StubServer()
+        group_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+
+        with pytest.raises(ToolError) as excinfo:
+            await server.tools["update_server_group"](
+                group_id=10, name="Prod", refresh_interval=720, parent_server_group_id=1
+            )
+
+        message = str(excinfo.value)
+        assert "status=422" in message
+        assert "DEVICE_OWNED_SETTINGS" in message
+        assert "Use the Device Settings API instead." in message
+
+    @pytest.mark.asyncio
     async def test_delete_server_group_mixin_org_id_injected(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

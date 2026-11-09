@@ -37,6 +37,25 @@ def _summarize_group(group: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def _preserved_group_fields(group: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the group's current settable fields that a full-replace PUT would clear.
+
+    A null value is left out: in an organization whose devices own their
+    settings the API reads these back as null and rejects a save that sets them.
+    """
+    preserved: dict[str, Any] = {}
+    for field in ("refresh_interval", "enable_os_auto_update", "ui_color", "notes"):
+        value = group.get(field)
+        if value is not None:
+            preserved[field] = value
+    wsus = group.get("wsus_config")
+    if isinstance(wsus, Mapping) and wsus.get("is_managed") is not None:
+        preserved["enable_wsus"] = wsus["is_managed"]
+        if isinstance(wsus.get("server_url"), str):
+            preserved["wsus_server"] = wsus["server_url"]
+    return preserved
+
+
 async def list_server_groups(
     client: AutomoxClient,
     *,
@@ -117,17 +136,16 @@ async def create_server_group(
     *,
     org_id: int,
     name: str,
-    refresh_interval: int,
+    refresh_interval: int | None = None,
     parent_server_group_id: int | None = None,
     ui_color: str | None = None,
     notes: str | None = None,
     policies: list | None = None,
 ) -> dict[str, Any]:
     """Create a new server group."""
-    body: dict[str, Any] = {
-        "name": name,
-        "refresh_interval": refresh_interval,
-    }
+    body: dict[str, Any] = {"name": name}
+    if refresh_interval is not None:
+        body["refresh_interval"] = refresh_interval
     if parent_server_group_id is not None:
         body["parent_server_group_id"] = parent_server_group_id
     if ui_color is not None:
@@ -162,17 +180,24 @@ async def update_server_group(
     org_id: int,
     group_id: int,
     name: str,
-    refresh_interval: int,
+    refresh_interval: int | None = None,
     parent_server_group_id: int | None = None,
     ui_color: str | None = None,
     notes: str | None = None,
     policies: list | None = None,
 ) -> dict[str, Any]:
-    """Update an existing server group."""
-    body: dict[str, Any] = {
-        "name": name,
-        "refresh_interval": refresh_interval,
-    }
+    """Update an existing server group.
+
+    The API replaces the whole group, so fields the caller leaves unset are
+    filled from the group's current values instead of being cleared.
+    """
+    params: dict[str, Any] = {"o": org_id}
+    current = await client.get(f"/servergroups/{group_id}", params=params)
+    body = _preserved_group_fields(current) if isinstance(current, Mapping) else {}
+
+    body["name"] = name
+    if refresh_interval is not None:
+        body["refresh_interval"] = refresh_interval
     if parent_server_group_id is not None:
         body["parent_server_group_id"] = parent_server_group_id
     if ui_color is not None:
@@ -182,7 +207,6 @@ async def update_server_group(
     if policies is not None:
         body["policies"] = policies
 
-    params: dict[str, Any] = {"o": org_id}
     result = await client.put(f"/servergroups/{group_id}", json_data=body, params=params)
 
     data: dict[str, Any]

@@ -209,12 +209,192 @@ async def test_update_group_sends_body_to_correct_path() -> None:
         refresh_interval=240,
     )
 
-    assert client.calls[0][0] == "PUT"
-    assert client.calls[0][1] == "/servergroups/10"
-    body = client.calls[0][2]
+    assert client.calls[1][0] == "PUT"
+    assert client.calls[1][1] == "/servergroups/10"
+    body = client.calls[1][2]
     # refresh_interval round-trips unchanged (no unit transformation introduced).
     assert body["refresh_interval"] == 240
     assert "minute" in result["metadata"]["field_notes"]["refresh_interval"].lower()
+
+
+# GET /servergroups/{id} shapes captured from the live API (identifiers and
+# text replaced). In a group-owned organization the group carries its settings;
+# where devices own their settings the API reads them back as null.
+_GROUP_OWNED_LIVE: dict[str, Any] = {
+    "id": 30,
+    "uuid": "00000000-0000-0000-0000-000000000030",
+    "name": "Workstations",
+    "organization_id": 555,
+    "parent_server_group_id": 1,
+    "server_count": 3,
+    "policies": [301, 302],
+    "ui_color": "#CC0000",
+    "notes": "Office laptops",
+    "refresh_interval": 240,
+    "enable_os_auto_update": True,
+    "wsus_config": {
+        "id": 70,
+        "server_group_id": 30,
+        "is_managed": True,
+        "server_url": "https://wsus.example.com:8531",
+        "created_at": "2025-12-09T01:01:53+0000",
+        "updated_at": "2025-12-09T01:01:53+0000",
+    },
+}
+
+_DEVICE_OWNED_LIVE: dict[str, Any] = {
+    "id": 40,
+    "uuid": "00000000-0000-0000-0000-000000000040",
+    "name": "Default Group",
+    "organization_id": 555,
+    "parent_server_group_id": 40,
+    "server_count": 10,
+    "policies": [301],
+    "ui_color": "#059F1D",
+    "notes": "",
+    "refresh_interval": None,
+    "enable_os_auto_update": None,
+    "wsus_config": None,
+}
+
+
+@pytest.mark.asyncio
+async def test_update_group_preserves_unset_fields() -> None:
+    client = StubClient(get_responses={"/servergroups/30": [_GROUP_OWNED_LIVE]})
+    await update_server_group(
+        cast(AutomoxClient, client),
+        org_id=555,
+        group_id=30,
+        name="Laptops",
+        parent_server_group_id=1,
+    )
+
+    assert client.calls[0] == ("GET", "/servergroups/30", {"o": 555})
+    method, path, body = client.calls[1]
+    assert (method, path) == ("PUT", "/servergroups/30")
+    assert body == {
+        "name": "Laptops",
+        "parent_server_group_id": 1,
+        "refresh_interval": 240,
+        "ui_color": "#CC0000",
+        "notes": "Office laptops",
+        "enable_os_auto_update": True,
+        "enable_wsus": True,
+        "wsus_server": "https://wsus.example.com:8531",
+    }
+
+
+@pytest.mark.asyncio
+async def test_update_group_caller_values_override_current() -> None:
+    client = StubClient(get_responses={"/servergroups/30": [_GROUP_OWNED_LIVE]})
+    await update_server_group(
+        cast(AutomoxClient, client),
+        org_id=555,
+        group_id=30,
+        name="Workstations",
+        refresh_interval=1440,
+        parent_server_group_id=1,
+        ui_color="#00FF00",
+        notes="",
+        policies=[301],
+    )
+
+    body = client.calls[1][2]
+    assert body["refresh_interval"] == 1440
+    assert body["ui_color"] == "#00FF00"
+    assert body["notes"] == ""
+    assert body["policies"] == [301]
+    assert body["enable_wsus"] is True
+
+
+@pytest.mark.asyncio
+async def test_update_group_device_owned_sends_no_settings() -> None:
+    client = StubClient(get_responses={"/servergroups/40": [_DEVICE_OWNED_LIVE]})
+    await update_server_group(
+        cast(AutomoxClient, client),
+        org_id=555,
+        group_id=40,
+        name="Default Group",
+        parent_server_group_id=40,
+        policies=[301, 302],
+    )
+
+    body = client.calls[1][2]
+    assert body == {
+        "name": "Default Group",
+        "parent_server_group_id": 40,
+        "ui_color": "#059F1D",
+        "notes": "",
+        "policies": [301, 302],
+    }
+
+
+@pytest.mark.asyncio
+async def test_update_group_wsus_row_without_setting_is_not_sent() -> None:
+    group = {
+        **_GROUP_OWNED_LIVE,
+        "wsus_config": {**_GROUP_OWNED_LIVE["wsus_config"], "is_managed": None, "server_url": None},
+    }
+    client = StubClient(get_responses={"/servergroups/30": [group]})
+    await update_server_group(
+        cast(AutomoxClient, client), org_id=555, group_id=30, name="Workstations"
+    )
+
+    body = client.calls[1][2]
+    assert "enable_wsus" not in body
+    assert "wsus_server" not in body
+
+
+@pytest.mark.asyncio
+async def test_update_group_wsus_off_keeps_server_without_url() -> None:
+    group = {
+        **_GROUP_OWNED_LIVE,
+        "wsus_config": {
+            **_GROUP_OWNED_LIVE["wsus_config"],
+            "is_managed": False,
+            "server_url": None,
+        },
+    }
+    client = StubClient(get_responses={"/servergroups/30": [group]})
+    await update_server_group(
+        cast(AutomoxClient, client), org_id=555, group_id=30, name="Workstations"
+    )
+
+    body = client.calls[1][2]
+    assert body["enable_wsus"] is False
+    assert "wsus_server" not in body
+
+
+@pytest.mark.asyncio
+async def test_update_group_put_error_after_fetch_propagates() -> None:
+    client = StubClient(get_responses={"/servergroups/40": [_DEVICE_OWNED_LIVE]})
+
+    async def _raise(*a: Any, **kw: Any) -> Any:
+        raise AutomoxAPIError("automox API error", status_code=422)
+
+    client.put = _raise  # type: ignore[assignment]
+    with pytest.raises(AutomoxAPIError):
+        await update_server_group(
+            cast(AutomoxClient, client),
+            org_id=555,
+            group_id=40,
+            name="Default Group",
+            refresh_interval=720,
+        )
+
+
+@pytest.mark.asyncio
+async def test_create_group_without_refresh_interval_omits_it() -> None:
+    client = StubClient(post_responses={"/servergroups": [_DEVICE_OWNED_LIVE]})
+    await create_server_group(
+        cast(AutomoxClient, client),
+        org_id=555,
+        name="Kiosks",
+        parent_server_group_id=40,
+    )
+
+    body = client.calls[0][2]
+    assert body == {"name": "Kiosks", "parent_server_group_id": 40}
 
 
 # ---------------------------------------------------------------------------
@@ -337,7 +517,7 @@ async def test_update_server_group_with_optional_fields() -> None:
         notes="updated",
         policies=[],
     )
-    body = client.calls[0][2]
+    body = client.calls[1][2]
     assert body["ui_color"] == "#00FF00"
     assert body["notes"] == "updated"
     assert result["data"]["updated"] is True

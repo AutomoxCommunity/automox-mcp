@@ -98,8 +98,9 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "Create a new Automox server group. refresh_interval is the agent "
                 "check-in/scan cadence in minutes (live-verified; spec range 240-1440). "
                 "In an organization whose devices own their settings, omit "
-                "refresh_interval: the API rejects a group save that sets a "
-                "device-owned setting (code DEVICE_OWNED_SETTINGS)."
+                "refresh_interval: the API rejects a group save that changes a "
+                "device-owned setting, on create anything but the 1440 default "
+                "(code DEVICE_OWNED_SETTINGS)."
             ),
             annotations={
                 "readOnlyHint": False,

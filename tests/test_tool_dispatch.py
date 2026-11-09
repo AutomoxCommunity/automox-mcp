@@ -1488,6 +1488,35 @@ class TestGroupToolsErrorHandling:
         assert f"longer than {UPDATE_WSUS_SERVER_MAX_LENGTH} characters" in description
         assert "on with a blank stored server" in description
 
+    @pytest.mark.asyncio
+    async def test_update_server_group_kept_value_refusal_reaches_caller(self) -> None:
+        from conftest import StubClient
+        from fastmcp.exceptions import ToolError
+
+        group = {
+            "id": 30,
+            "name": "Workstations",
+            "parent_server_group_id": 1,
+            "refresh_interval": 240,
+            "ui_color": "#FFF",
+            "notes": "",
+            "enable_os_auto_update": None,
+            "wsus_config": None,
+        }
+        client = StubClient(get_responses={"/servergroups/30": [group]})
+        server = StubServer()
+        group_tools.register(server, read_only=False, client=client)
+
+        with pytest.raises(ToolError) as excinfo:
+            await server.tools["update_server_group"](
+                group_id=30, name="Laptops", parent_server_group_id=1
+            )
+
+        message = str(excinfo.value)
+        assert "for ui_color; pass it" in message
+        assert "internal error" not in message
+        assert [c[0] for c in client.calls] == ["GET"]
+
     @pytest.mark.parametrize("color", ["#FFF", "red", ""])
     @pytest.mark.asyncio
     async def test_create_server_group_rejects_invalid_color(

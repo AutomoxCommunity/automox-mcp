@@ -50,8 +50,8 @@ def _summarize_group(group: Mapping[str, Any]) -> dict[str, Any]:
 def _preserved_group_fields(group: Mapping[str, Any]) -> dict[str, Any]:
     """Return the group's current settable fields that a full-replace PUT would clear.
 
-    A null value is left out: in an organization whose devices own their
-    settings the API reads these back as null and rejects a save that sets them.
+    A null value is left out: the GET reports device-owned settings as null, so
+    null is not a stored value to keep.
     """
     preserved: dict[str, Any] = {}
     for field in ("refresh_interval", "enable_os_auto_update", "notes"):

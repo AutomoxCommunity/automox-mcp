@@ -161,7 +161,8 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "Fields left unset keep the group's current values (refresh_interval, "
                 "color, notes, OS auto update, WSUS), read just before the write. "
                 "If a kept color or notes value fails the update rules (#RRGGBB, at "
-                'most 500 characters), the tool asks you to pass it; ui_color "" '
+                "most 500 characters), the tool asks you to pass "
+                'it; ui_color "" '
                 "clears the color. A stored WSUS server an update rejects is reset "
                 "with a warning. In an organization whose devices "
                 "own their settings, omit refresh_interval: the API rejects a group "

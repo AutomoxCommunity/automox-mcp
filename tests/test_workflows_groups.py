@@ -566,6 +566,28 @@ async def test_update_group_names_every_stored_value_update_rejects() -> None:
     assert [c[0] for c in client.calls] == ["GET"]
 
 
+@pytest.mark.parametrize(
+    ("caller", "still_rejected"),
+    [({"ui_color": "#00FF00"}, "notes"), ({"notes": "ok"}, "ui_color")],
+)
+@pytest.mark.asyncio
+async def test_update_group_names_only_stored_values_caller_left_unset(
+    caller: dict[str, Any], still_rejected: str
+) -> None:
+    group = {**_GROUP_OWNED_LIVE, "ui_color": "#FFF", "notes": "n" * 501}
+    client = StubClient(get_responses={"/servergroups/30": [group]})
+    with pytest.raises(ValueError, match=f"for {still_rejected}; pass it"):
+        await update_server_group(
+            cast(AutomoxClient, client),
+            org_id=555,
+            group_id=30,
+            name="Workstations",
+            **caller,
+        )
+
+    assert [c[0] for c in client.calls] == ["GET"]
+
+
 @pytest.mark.parametrize("interval", [60, 10080])
 @pytest.mark.asyncio
 async def test_update_group_stored_interval_goes_back_unchanged(interval: int) -> None:

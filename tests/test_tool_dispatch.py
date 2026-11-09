@@ -1468,6 +1468,44 @@ class TestGroupToolsErrorHandling:
         assert recorded[0]["notes"] == "n" * 500
         assert recorded[0]["ui_color"] == ""
 
+    def test_update_server_group_description_states_notes_limit(self) -> None:
+        from automox_mcp.utils.group_rules import UPDATE_NOTES_MAX_LENGTH
+
+        descriptions: dict[str, str] = {}
+
+        class DescribingServer(StubServer):
+            def tool(self, name: str, description: str = "", **kwargs: Any):
+                descriptions[name] = description
+                return super().tool(name, description, **kwargs)
+
+        group_tools.register(DescribingServer(), read_only=False, client=FakeClient(org_id=42))
+
+        assert f"most {UPDATE_NOTES_MAX_LENGTH} characters" in descriptions["update_server_group"]
+
+    @pytest.mark.parametrize("color", ["#FFF", "red", "#00FF00x"])
+    @pytest.mark.asyncio
+    async def test_update_server_group_rejects_invalid_color(
+        self, monkeypatch: pytest.MonkeyPatch, color: str
+    ) -> None:
+        from fastmcp.exceptions import ToolError
+
+        recorded: list[dict[str, Any]] = []
+
+        async def fake_update(client, **kwargs):
+            recorded.append(kwargs)
+            return _success()
+
+        monkeypatch.setattr(group_tools.workflows, "update_server_group", fake_update)
+
+        server = StubServer()
+        group_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+
+        with pytest.raises(ToolError, match="ui_color"):
+            await server.tools["update_server_group"](
+                group_id=10, name="Prod", parent_server_group_id=1, ui_color=color
+            )
+        assert recorded == []
+
     @pytest.mark.asyncio
     async def test_update_server_group_device_owned_refusal_reaches_caller(
         self, monkeypatch: pytest.MonkeyPatch

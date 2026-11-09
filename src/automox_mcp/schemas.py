@@ -667,6 +667,9 @@ class DeletePolicyToolParams(OrgIdContextMixin, ForbidExtraModel):
     policy_id: int = Field(description="Policy ID to delete", ge=1)
 
 
+UI_COLOR_HEX = "#[0-9a-fA-F]{6}"
+
+
 class CreateServerGroupParams(ForbidExtraModel):
     name: str = Field(description="Group name")
     refresh_interval: int | None = Field(
@@ -681,7 +684,7 @@ class CreateServerGroupParams(ForbidExtraModel):
     ui_color: str | None = Field(
         None,
         description="UI color for group",
-        pattern=r"^#[0-9a-fA-F]{6}$",
+        pattern=f"^{UI_COLOR_HEX}$",
     )
     notes: str | None = Field(None, description="Group notes")
     policies: list[int] | None = Field(None, description="Policy IDs to assign")
@@ -702,7 +705,7 @@ class UpdateServerGroupParams(ForbidExtraModel):
     ui_color: str | None = Field(
         None,
         description="UI color for group; an empty string clears it",
-        pattern=r"^(#[0-9a-fA-F]{6})?$",
+        pattern=f"^({UI_COLOR_HEX})?$",
     )
     notes: str | None = Field(None, description="Group notes", max_length=500)
     policies: list[int] | None = Field(None, description="Policy IDs to assign")

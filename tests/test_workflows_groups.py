@@ -272,13 +272,15 @@ _DEVICE_OWNED_LIVE: dict[str, Any] = {
 @pytest.mark.asyncio
 async def test_update_group_preserves_unset_fields() -> None:
     client = StubClient(get_responses={"/servergroups/30": [_GROUP_OWNED_LIVE]})
-    await update_server_group(
+    result = await update_server_group(
         cast(AutomoxClient, client),
         org_id=555,
         group_id=30,
         name="Laptops",
         parent_server_group_id=1,
     )
+
+    assert "warnings" not in result["metadata"]
 
     assert client.calls[0] == ("GET", "/servergroups/30", {"o": 555})
     method, path, body = client.calls[1]
@@ -375,6 +377,34 @@ async def test_update_group_wsus_off_keeps_server_without_url() -> None:
     assert body["enable_wsus"] is False
     assert "wsus_server" not in body
     assert "warnings" not in result["metadata"]
+
+
+@pytest.mark.asyncio
+async def test_update_group_wsus_off_keeps_stored_server() -> None:
+    group = {
+        **_GROUP_OWNED_LIVE,
+        "wsus_config": {**_GROUP_OWNED_LIVE["wsus_config"], "is_managed": False},
+    }
+    client = StubClient(get_responses={"/servergroups/30": [group]})
+    result = await update_server_group(
+        cast(AutomoxClient, client), org_id=555, group_id=30, name="Workstations"
+    )
+
+    body = client.calls[1][2]
+    assert body["enable_wsus"] is False
+    assert body["wsus_server"] == "https://wsus.example.com:8531"
+    assert "warnings" not in result["metadata"]
+
+
+@pytest.mark.asyncio
+async def test_update_group_keeps_stored_false_os_auto_update() -> None:
+    group = {**_GROUP_OWNED_LIVE, "enable_os_auto_update": False}
+    client = StubClient(get_responses={"/servergroups/30": [group]})
+    await update_server_group(
+        cast(AutomoxClient, client), org_id=555, group_id=30, name="Workstations"
+    )
+
+    assert client.calls[1][2]["enable_os_auto_update"] is False
 
 
 @pytest.mark.asyncio
@@ -564,7 +594,7 @@ async def test_update_group_wsus_server_over_limit_is_not_sent() -> None:
     body = client.calls[1][2]
     assert "enable_wsus" not in body
     assert "wsus_server" not in body
-    assert "WSUS was turned off" in result["metadata"]["warnings"][0]
+    assert "WSUS is turned off" in result["metadata"]["warnings"][0]
 
 
 @pytest.mark.asyncio
@@ -595,7 +625,7 @@ async def test_update_group_wsus_on_without_server_is_not_sent() -> None:
     body = client.calls[1][2]
     assert "enable_wsus" not in body
     assert "wsus_server" not in body
-    assert "WSUS was turned off" in result["metadata"]["warnings"][0]
+    assert "WSUS is turned off" in result["metadata"]["warnings"][0]
 
 
 @pytest.mark.asyncio

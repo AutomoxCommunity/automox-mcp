@@ -7,6 +7,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from ..client import AutomoxClient
+from ..schemas import UI_COLOR_HEX
 from ..utils.response import build_pagination_metadata
 
 # refresh_interval is the group's agent check-in / scan cadence. The unit is
@@ -26,7 +27,7 @@ _REFRESH_INTERVAL_NOTE = (
 # longer notes on create than on update.
 _UPDATE_NOTES_MAX_LENGTH = 500
 _UPDATE_WSUS_SERVER_MAX_LENGTH = 100
-_UI_COLOR_PATTERN = re.compile(r"#[0-9a-fA-F]{6}")
+_UI_COLOR_PATTERN = re.compile(UI_COLOR_HEX)
 
 
 def _summarize_group(group: Mapping[str, Any]) -> dict[str, Any]:
@@ -76,8 +77,9 @@ def _preserved_group_fields(group: Mapping[str, Any]) -> dict[str, Any]:
 def _rejected_on_update(preserved: Mapping[str, Any]) -> list[str]:
     """Name the kept fields whose stored value the update rules reject.
 
-    refresh_interval is left to the API: where devices own their settings it is
-    not validated, so any stored value goes back unchanged.
+    refresh_interval is left to the API, whose range error names it so the caller
+    can pass one: an organization can have devices own their settings while still
+    reading back stored intervals, and there the API ignores the value.
     """
     rejected: list[str] = []
     color = preserved.get("ui_color")
@@ -269,8 +271,9 @@ async def update_server_group(
     }
     if wsus_reset:
         metadata["warnings"] = [
-            "WSUS was turned off for this group: its stored WSUS server is not one an "
-            "update accepts (1-100 characters), and this tool cannot set WSUS."
+            "WSUS is turned off for this group unless its organization's devices own "
+            "their settings: its stored WSUS server is not one an update accepts "
+            "(1-100 characters), and this tool cannot set WSUS."
         ]
     return {"data": data, "metadata": metadata}
 

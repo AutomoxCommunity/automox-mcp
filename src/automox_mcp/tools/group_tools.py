@@ -158,7 +158,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             description=(
                 "Update an existing Automox server group. refresh_interval is the agent "
                 "check-in/scan cadence in minutes (live-verified; spec range 240-1440). "
-                "Fields left unset keep the group's current values (scan interval, "
+                "Fields left unset keep the group's current values (refresh_interval, "
                 "color, notes, OS auto update, WSUS), read just before the write. "
                 'Notes are limited to 500 characters on update; ui_color "" clears '
                 "the color; a stored WSUS server an update rejects is reset with a "

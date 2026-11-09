@@ -61,26 +61,38 @@ def _preserved_group_fields(group: Mapping[str, Any]) -> dict[str, Any]:
     if group.get("ui_color"):
         preserved["ui_color"] = group["ui_color"]
     wsus = group.get("wsus_config")
-    if isinstance(wsus, Mapping) and wsus.get("is_managed") is not None:
-        server_url = wsus.get("server_url")
-        server = server_url.strip() if isinstance(server_url, str) else ""
-        if len(server) > _UPDATE_WSUS_SERVER_MAX_LENGTH:
-            server = ""
+    if isinstance(wsus, Mapping):
+        managed = wsus.get("is_managed")
+        server = _usable_wsus_server(wsus)
+        if server:
+            preserved["wsus_server"] = server
         # WSUS on without a usable server is rejected, so such a row is left to reset.
-        if server or wsus["is_managed"] is False:
-            preserved["enable_wsus"] = wsus["is_managed"]
-            if server:
-                preserved["wsus_server"] = server
+        if managed is False or (managed is True and server):
+            preserved["enable_wsus"] = managed
     return preserved
 
 
-def _rejected_on_update(preserved: Mapping[str, Any]) -> list[str]:
-    """Name the kept fields whose stored value the update rules reject.
+def _usable_wsus_server(wsus: Mapping[str, Any]) -> str:
+    """Return the stored WSUS server if an update accepts it, else an empty string."""
+    server_url = wsus.get("server_url")
+    server = server_url.strip() if isinstance(server_url, str) else ""
+    return server if len(server) <= _UPDATE_WSUS_SERVER_MAX_LENGTH else ""
 
-    refresh_interval is left to the API, whose range error names it so the caller
-    can pass one: an organization can have devices own their settings while still
-    reading back stored intervals, and there the API ignores the value.
-    """
+
+def _wsus_dropped(group: Mapping[str, Any], preserved: Mapping[str, Any]) -> bool:
+    """Whether the update resets a stored WSUS setting the caller cannot keep."""
+    wsus = group.get("wsus_config")
+    if not isinstance(wsus, Mapping):
+        return False
+    server_url = wsus.get("server_url")
+    lost_server = isinstance(server_url, str) and bool(server_url.strip())
+    return (wsus.get("is_managed") is True and "enable_wsus" not in preserved) or (
+        lost_server and "wsus_server" not in preserved
+    )
+
+
+def _rejected_on_update(preserved: Mapping[str, Any]) -> list[str]:
+    """Name the kept ui_color/notes values the update rules reject (not refresh_interval)."""
     rejected: list[str] = []
     color = preserved.get("ui_color")
     if color is not None and not (isinstance(color, str) and _UI_COLOR_PATTERN.fullmatch(color)):
@@ -242,10 +254,7 @@ async def update_server_group(
             "explicitly (ui_color #RRGGBB or an empty string to clear, notes at "
             f"most {_UPDATE_NOTES_MAX_LENGTH} characters)."
         )
-    wsus = current.get("wsus_config")
-    wsus_reset = (
-        isinstance(wsus, Mapping) and wsus.get("is_managed") is True and "enable_wsus" not in body
-    )
+    wsus_reset = _wsus_dropped(current, body)
 
     body["name"] = name
     if refresh_interval is not None:
@@ -271,9 +280,9 @@ async def update_server_group(
     }
     if wsus_reset:
         metadata["warnings"] = [
-            "WSUS is turned off for this group unless its organization's devices own "
-            "their settings: its stored WSUS server is not one an update accepts "
-            "(1-100 characters), and this tool cannot set WSUS."
+            "This group's WSUS setting is reset unless its organization's devices own "
+            "their settings: its stored WSUS server is blank or longer than the 100 "
+            "characters an update accepts, and this tool cannot set WSUS."
         ]
     return {"data": data, "metadata": metadata}
 

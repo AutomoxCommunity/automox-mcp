@@ -160,9 +160,10 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "check-in/scan cadence in minutes (live-verified; spec range 240-1440). "
                 "Fields left unset keep the group's current values (refresh_interval, "
                 "color, notes, OS auto update, WSUS), read just before the write. "
-                'Notes are limited to 500 characters on update; ui_color "" clears '
-                "the color; a stored WSUS server an update rejects is reset with a "
-                "warning. In an organization whose devices "
+                "If a kept color or notes value fails the update rules (#RRGGBB, at "
+                'most 500 characters), the tool asks you to pass it; ui_color "" '
+                "clears the color. A stored WSUS server an update rejects is reset "
+                "with a warning. In an organization whose devices "
                 "own their settings, omit refresh_interval: the API rejects a group "
                 "save that changes a device-owned setting (code DEVICE_OWNED_SETTINGS)."
             ),

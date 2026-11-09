@@ -9,6 +9,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
+from .utils.group_rules import UI_COLOR_HEX, UPDATE_NOTES_MAX_LENGTH
+
 
 class ForbidExtraModel(BaseModel):
     """Base model that disallows unexpected parameters."""
@@ -667,9 +669,6 @@ class DeletePolicyToolParams(OrgIdContextMixin, ForbidExtraModel):
     policy_id: int = Field(description="Policy ID to delete", ge=1)
 
 
-UI_COLOR_HEX = "#[0-9a-fA-F]{6}"
-
-
 class CreateServerGroupParams(ForbidExtraModel):
     name: str = Field(description="Group name")
     refresh_interval: int | None = Field(
@@ -707,7 +706,7 @@ class UpdateServerGroupParams(ForbidExtraModel):
         description="UI color for group; an empty string clears it",
         pattern=f"^({UI_COLOR_HEX})?$",
     )
-    notes: str | None = Field(None, description="Group notes", max_length=500)
+    notes: str | None = Field(None, description="Group notes", max_length=UPDATE_NOTES_MAX_LENGTH)
     policies: list[int] | None = Field(None, description="Policy IDs to assign")
 
 

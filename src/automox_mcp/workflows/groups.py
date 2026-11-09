@@ -7,7 +7,11 @@ from collections.abc import Mapping
 from typing import Any
 
 from ..client import AutomoxClient
-from ..schemas import UI_COLOR_HEX
+from ..utils.group_rules import (
+    UI_COLOR_HEX,
+    UPDATE_NOTES_MAX_LENGTH,
+    UPDATE_WSUS_SERVER_MAX_LENGTH,
+)
 from ..utils.response import build_pagination_metadata
 
 # refresh_interval is the group's agent check-in / scan cadence. The unit is
@@ -23,10 +27,6 @@ _REFRESH_INTERVAL_NOTE = (
     "creating or updating its groups."
 )
 
-# Update rules a stored value must still meet to be sent back; the API accepts
-# longer notes on create than on update.
-_UPDATE_NOTES_MAX_LENGTH = 500
-_UPDATE_WSUS_SERVER_MAX_LENGTH = 100
 _UI_COLOR_PATTERN = re.compile(UI_COLOR_HEX)
 
 
@@ -76,7 +76,7 @@ def _usable_wsus_server(wsus: Mapping[str, Any]) -> str:
     """Return the stored WSUS server if an update accepts it, else an empty string."""
     server_url = wsus.get("server_url")
     server = server_url.strip() if isinstance(server_url, str) else ""
-    return server if len(server) <= _UPDATE_WSUS_SERVER_MAX_LENGTH else ""
+    return server if len(server) <= UPDATE_WSUS_SERVER_MAX_LENGTH else ""
 
 
 def _wsus_dropped(group: Mapping[str, Any], preserved: Mapping[str, Any]) -> bool:
@@ -97,7 +97,7 @@ def _rejected_on_update(preserved: Mapping[str, Any]) -> list[str]:
     color = preserved.get("ui_color")
     if color is not None and not (isinstance(color, str) and _UI_COLOR_PATTERN.fullmatch(color)):
         rejected.append("ui_color")
-    if len(preserved.get("notes", "")) > _UPDATE_NOTES_MAX_LENGTH:
+    if len(preserved.get("notes", "")) > UPDATE_NOTES_MAX_LENGTH:
         rejected.append("notes")
     return rejected
 
@@ -252,7 +252,7 @@ async def update_server_group(
             f"Server group {group_id} holds a value an update does not accept for "
             f"{', '.join(rejected)}; pass {'it' if len(rejected) == 1 else 'them'} "
             "explicitly (ui_color #RRGGBB or an empty string to clear, notes at "
-            f"most {_UPDATE_NOTES_MAX_LENGTH} characters)."
+            f"most {UPDATE_NOTES_MAX_LENGTH} characters)."
         )
     wsus_reset = _wsus_dropped(current, body)
 
@@ -270,8 +270,12 @@ async def update_server_group(
 
     await client.put(f"/servergroups/{group_id}", json_data=body, params=params)
 
-    # The API answers an update with 204, so report the state that was sent.
-    data = _summarize_group({**current, **body, "id": group_id})
+    # The API answers an update with 204, so report the state that was sent; a
+    # setting read back as null is device-owned and the API ignores it.
+    sent = {**current, **body, "id": group_id}
+    if current.get("refresh_interval") is None:
+        sent["refresh_interval"] = None
+    data = _summarize_group(sent)
     data["updated"] = True
 
     metadata: dict[str, Any] = {
@@ -280,9 +284,10 @@ async def update_server_group(
     }
     if wsus_reset:
         metadata["warnings"] = [
-            "This group's WSUS setting is reset unless its organization's devices own "
-            "their settings: its stored WSUS server is blank or longer than the 100 "
-            "characters an update accepts, and this tool cannot set WSUS."
+            "This group's WSUS setting was reset (unless its organization's devices "
+            "own their settings): its stored WSUS server is blank while WSUS is on, or "
+            f"longer than the {UPDATE_WSUS_SERVER_MAX_LENGTH} characters a group save "
+            "accepts, and this tool cannot change WSUS."
         ]
     return {"data": data, "metadata": metadata}
 

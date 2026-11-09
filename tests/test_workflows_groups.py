@@ -431,7 +431,7 @@ async def test_update_group_wsus_off_server_over_limit_warns() -> None:
     body = client.calls[1][2]
     assert body["enable_wsus"] is False
     assert "wsus_server" not in body
-    assert "WSUS setting is reset" in result["metadata"]["warnings"][0]
+    assert "WSUS setting was reset" in result["metadata"]["warnings"][0]
 
 
 @pytest.mark.asyncio
@@ -632,7 +632,7 @@ async def test_update_group_wsus_server_over_limit_is_not_sent() -> None:
     body = client.calls[1][2]
     assert "enable_wsus" not in body
     assert "wsus_server" not in body
-    assert "WSUS setting is reset" in result["metadata"]["warnings"][0]
+    assert "WSUS setting was reset" in result["metadata"]["warnings"][0]
 
 
 @pytest.mark.asyncio
@@ -650,6 +650,24 @@ async def test_update_group_device_owned_result_reads_settings_as_null() -> None
 
 
 @pytest.mark.asyncio
+async def test_update_group_device_owned_result_ignores_sent_interval() -> None:
+    client = StubClient(
+        get_responses={"/servergroups/40": [_DEVICE_OWNED_LIVE]},
+        put_responses={"/servergroups/40": [{}]},
+    )
+    result = await update_server_group(
+        cast(AutomoxClient, client),
+        org_id=555,
+        group_id=40,
+        name="All Devices",
+        refresh_interval=1440,
+    )
+
+    assert client.calls[1][2]["refresh_interval"] == 1440
+    assert result["data"]["refresh_interval"] is None
+
+
+@pytest.mark.asyncio
 async def test_update_group_wsus_on_without_server_is_not_sent() -> None:
     group = {
         **_GROUP_OWNED_LIVE,
@@ -663,7 +681,7 @@ async def test_update_group_wsus_on_without_server_is_not_sent() -> None:
     body = client.calls[1][2]
     assert "enable_wsus" not in body
     assert "wsus_server" not in body
-    assert "WSUS setting is reset" in result["metadata"]["warnings"][0]
+    assert "WSUS setting was reset" in result["metadata"]["warnings"][0]
 
 
 @pytest.mark.asyncio

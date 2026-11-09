@@ -123,7 +123,7 @@ Richer policy execution reporting via the `/policy-history` API with UUID-based 
 - **`list_server_groups`** - List all server groups with device counts, assigned policies, and group `uuid` (needed by policy windows tools). `refresh_interval` is the agent check-in/scan cadence in minutes (live-verified; spec range 240-1440).
 - **`get_server_group`** - Get detailed information about a specific server group.
 - **`create_server_group`** - Create a new server group with name, parent group, refresh interval, and optional policies and notes. The refresh interval is required unless the organization's devices own their settings; omit it there.
-- **`update_server_group`** - Update an existing server group. Fields left unset keep the group's current values (refresh interval, color, notes, OS auto update, WSUS) instead of being cleared. Notes are limited to 500 characters on update.
+- **`update_server_group`** - Update an existing server group. Fields left unset keep the group's current values (refresh interval, color, notes, OS auto update, WSUS) instead of being cleared. Notes are limited to 500 characters on update; pass `ui_color` `""` to clear the color. A stored WSUS server the update rules reject is reset, with a warning in the result.
 - **`delete_server_group`** - Delete a server group permanently.
 
 ## Webhook Management (9 tools)

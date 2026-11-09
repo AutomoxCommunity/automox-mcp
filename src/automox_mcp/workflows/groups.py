@@ -26,7 +26,6 @@ _REFRESH_INTERVAL_NOTE = (
 # longer notes on create than on update.
 _UPDATE_NOTES_MAX_LENGTH = 500
 _UPDATE_WSUS_SERVER_MAX_LENGTH = 100
-_UPDATE_REFRESH_INTERVAL_RANGE = range(240, 1441)
 _UI_COLOR_PATTERN = re.compile(r"#[0-9a-fA-F]{6}")
 
 
@@ -54,10 +53,12 @@ def _preserved_group_fields(group: Mapping[str, Any]) -> dict[str, Any]:
     settings the API reads these back as null and rejects a save that sets them.
     """
     preserved: dict[str, Any] = {}
-    for field in ("refresh_interval", "enable_os_auto_update", "ui_color", "notes"):
+    for field in ("refresh_interval", "enable_os_auto_update", "notes"):
         value = group.get(field)
         if value is not None:
             preserved[field] = value
+    if group.get("ui_color"):
+        preserved["ui_color"] = group["ui_color"]
     wsus = group.get("wsus_config")
     if isinstance(wsus, Mapping) and wsus.get("is_managed") is not None:
         server_url = wsus.get("server_url")
@@ -73,11 +74,12 @@ def _preserved_group_fields(group: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _rejected_on_update(preserved: Mapping[str, Any]) -> list[str]:
-    """Name the kept fields whose stored value the update rules reject."""
+    """Name the kept fields whose stored value the update rules reject.
+
+    refresh_interval is left to the API: where devices own their settings it is
+    not validated, so any stored value goes back unchanged.
+    """
     rejected: list[str] = []
-    interval = preserved.get("refresh_interval")
-    if interval is not None and interval not in _UPDATE_REFRESH_INTERVAL_RANGE:
-        rejected.append("refresh_interval")
     color = preserved.get("ui_color")
     if color is not None and not (isinstance(color, str) and _UI_COLOR_PATTERN.fullmatch(color)):
         rejected.append("ui_color")
@@ -229,19 +231,19 @@ async def update_server_group(
             "the group was not updated."
         )
     body = _preserved_group_fields(current)
-    caller_set = {
-        "refresh_interval": refresh_interval,
-        "ui_color": ui_color,
-        "notes": notes,
-    }
-    rejected = [f for f in _rejected_on_update(body) if caller_set[f] is None]
+    caller_set = {"ui_color": ui_color, "notes": notes}
+    rejected = [f for f in _rejected_on_update(body) if caller_set.get(f) is None]
     if rejected:
         raise ValueError(
             f"Server group {group_id} holds a value an update does not accept for "
             f"{', '.join(rejected)}; pass {'it' if len(rejected) == 1 else 'them'} "
-            "explicitly (refresh_interval 240-1440, ui_color #RRGGBB or an empty "
-            f"string to clear, notes at most {_UPDATE_NOTES_MAX_LENGTH} characters)."
+            "explicitly (ui_color #RRGGBB or an empty string to clear, notes at "
+            f"most {_UPDATE_NOTES_MAX_LENGTH} characters)."
         )
+    wsus = current.get("wsus_config")
+    wsus_reset = (
+        isinstance(wsus, Mapping) and wsus.get("is_managed") is True and "enable_wsus" not in body
+    )
 
     body["name"] = name
     if refresh_interval is not None:
@@ -255,20 +257,22 @@ async def update_server_group(
     if policies is not None:
         body["policies"] = policies
 
-    result = await client.put(f"/servergroups/{group_id}", json_data=body, params=params)
+    await client.put(f"/servergroups/{group_id}", json_data=body, params=params)
 
     # The API answers an update with 204, so report the state that was sent.
-    updated = result if isinstance(result, Mapping) and result.get("id") is not None else None
-    data = _summarize_group(updated or {**current, **body, "id": group_id})
+    data = _summarize_group({**current, **body, "id": group_id})
     data["updated"] = True
 
-    return {
-        "data": data,
-        "metadata": {
-            "deprecated_endpoint": False,
-            "field_notes": {"refresh_interval": _REFRESH_INTERVAL_NOTE},
-        },
+    metadata: dict[str, Any] = {
+        "deprecated_endpoint": False,
+        "field_notes": {"refresh_interval": _REFRESH_INTERVAL_NOTE},
     }
+    if wsus_reset:
+        metadata["warnings"] = [
+            "WSUS was turned off for this group: its stored WSUS server is not one an "
+            "update accepts (1-100 characters), and this tool cannot set WSUS."
+        ]
+    return {"data": data, "metadata": metadata}
 
 
 async def delete_server_group(

@@ -367,13 +367,14 @@ async def test_update_group_wsus_off_keeps_server_without_url() -> None:
         },
     }
     client = StubClient(get_responses={"/servergroups/30": [group]})
-    await update_server_group(
+    result = await update_server_group(
         cast(AutomoxClient, client), org_id=555, group_id=30, name="Workstations"
     )
 
     body = client.calls[1][2]
     assert body["enable_wsus"] is False
     assert "wsus_server" not in body
+    assert "warnings" not in result["metadata"]
 
 
 @pytest.mark.asyncio
@@ -472,20 +473,12 @@ async def test_update_group_stored_notes_at_limit_are_kept() -> None:
     assert client.calls[1][2]["notes"] == "n" * 500
 
 
-@pytest.mark.parametrize(
-    ("stored", "field"),
-    [
-        ({"refresh_interval": 60}, "refresh_interval"),
-        ({"refresh_interval": 10080}, "refresh_interval"),
-        ({"ui_color": "#FFF"}, "ui_color"),
-    ],
-)
 @pytest.mark.asyncio
-async def test_update_group_stored_value_update_rejects_needs_caller_value(
-    stored: dict[str, Any], field: str
-) -> None:
-    client = StubClient(get_responses={"/servergroups/30": [{**_GROUP_OWNED_LIVE, **stored}]})
-    with pytest.raises(ValueError, match=f"for {field}; pass it"):
+async def test_update_group_stored_color_update_rejects_needs_caller_value() -> None:
+    client = StubClient(
+        get_responses={"/servergroups/30": [{**_GROUP_OWNED_LIVE, "ui_color": "#FFF"}]}
+    )
+    with pytest.raises(ValueError, match="for ui_color; pass it"):
         await update_server_group(
             cast(AutomoxClient, client), org_id=555, group_id=30, name="Workstations"
         )
@@ -494,21 +487,56 @@ async def test_update_group_stored_value_update_rejects_needs_caller_value(
 
 
 @pytest.mark.asyncio
+async def test_update_group_names_every_stored_value_update_rejects() -> None:
+    group = {**_GROUP_OWNED_LIVE, "ui_color": "#FFF", "notes": "n" * 501}
+    client = StubClient(get_responses={"/servergroups/30": [group]})
+    with pytest.raises(ValueError, match="for ui_color, notes; pass them"):
+        await update_server_group(
+            cast(AutomoxClient, client), org_id=555, group_id=30, name="Workstations"
+        )
+
+    assert [c[0] for c in client.calls] == ["GET"]
+
+
+@pytest.mark.parametrize("interval", [60, 10080])
+@pytest.mark.asyncio
+async def test_update_group_stored_interval_goes_back_unchanged(interval: int) -> None:
+    group = {**_GROUP_OWNED_LIVE, "refresh_interval": interval}
+    client = StubClient(get_responses={"/servergroups/30": [group]})
+    await update_server_group(
+        cast(AutomoxClient, client), org_id=555, group_id=30, name="Workstations"
+    )
+
+    assert client.calls[1][2]["refresh_interval"] == interval
+
+
+@pytest.mark.asyncio
+async def test_update_group_stored_empty_color_is_not_sent() -> None:
+    group = {**_GROUP_OWNED_LIVE, "ui_color": ""}
+    client = StubClient(get_responses={"/servergroups/30": [group]})
+    await update_server_group(
+        cast(AutomoxClient, client), org_id=555, group_id=30, name="Workstations"
+    )
+
+    assert "ui_color" not in client.calls[1][2]
+
+
+@pytest.mark.asyncio
 async def test_update_group_caller_replaces_stored_values_update_rejects() -> None:
-    group = {**_GROUP_OWNED_LIVE, "refresh_interval": 60, "ui_color": "#FFF"}
+    group = {**_GROUP_OWNED_LIVE, "ui_color": "#FFF", "notes": "n" * 501}
     client = StubClient(get_responses={"/servergroups/30": [group]})
     await update_server_group(
         cast(AutomoxClient, client),
         org_id=555,
         group_id=30,
         name="Workstations",
-        refresh_interval=240,
         ui_color="",
+        notes="",
     )
 
     body = client.calls[1][2]
-    assert body["refresh_interval"] == 240
     assert body["ui_color"] is None
+    assert body["notes"] == ""
 
 
 @pytest.mark.asyncio
@@ -529,13 +557,14 @@ async def test_update_group_wsus_server_over_limit_is_not_sent() -> None:
         "wsus_config": {**_GROUP_OWNED_LIVE["wsus_config"], "server_url": "h" * 101},
     }
     client = StubClient(get_responses={"/servergroups/30": [group]})
-    await update_server_group(
+    result = await update_server_group(
         cast(AutomoxClient, client), org_id=555, group_id=30, name="Workstations"
     )
 
     body = client.calls[1][2]
     assert "enable_wsus" not in body
     assert "wsus_server" not in body
+    assert "WSUS was turned off" in result["metadata"]["warnings"][0]
 
 
 @pytest.mark.asyncio
@@ -559,13 +588,14 @@ async def test_update_group_wsus_on_without_server_is_not_sent() -> None:
         "wsus_config": {**_GROUP_OWNED_LIVE["wsus_config"], "server_url": "  "},
     }
     client = StubClient(get_responses={"/servergroups/30": [group]})
-    await update_server_group(
+    result = await update_server_group(
         cast(AutomoxClient, client), org_id=555, group_id=30, name="Workstations"
     )
 
     body = client.calls[1][2]
     assert "enable_wsus" not in body
     assert "wsus_server" not in body
+    assert "WSUS was turned off" in result["metadata"]["warnings"][0]
 
 
 @pytest.mark.asyncio
@@ -586,7 +616,8 @@ async def test_update_group_wsus_off_with_blank_server_sends_off_only() -> None:
 
 @pytest.mark.asyncio
 async def test_create_group_without_refresh_interval_omits_it() -> None:
-    client = StubClient(post_responses={"/servergroups": [_DEVICE_OWNED_LIVE]})
+    # Only the request body is under test.
+    client = StubClient(post_responses={"/servergroups": [{}]})
     await create_server_group(
         cast(AutomoxClient, client),
         org_id=555,

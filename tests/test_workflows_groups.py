@@ -184,8 +184,11 @@ async def test_create_group_omits_none_optionals() -> None:
 
 @pytest.mark.asyncio
 async def test_update_group_returns_updated_flag() -> None:
-    updated = {**_GROUP_A, "name": "Production-v2"}
-    client = StubClient(put_responses={"/servergroups/10": [updated]})
+    # PUT returns 204, which the client reads as an empty dict.
+    client = StubClient(
+        get_responses={"/servergroups/10": [_GROUP_A]},
+        put_responses={"/servergroups/10": [{}]},
+    )
     result = await update_server_group(
         cast(AutomoxClient, client),
         org_id=555,
@@ -195,12 +198,15 @@ async def test_update_group_returns_updated_flag() -> None:
     )
 
     assert result["data"]["updated"] is True
-    assert result["data"]["name"] == "Production-v2"
+    assert client.calls[1][2]["name"] == "Production-v2"
 
 
 @pytest.mark.asyncio
 async def test_update_group_sends_body_to_correct_path() -> None:
-    client = StubClient(put_responses={"/servergroups/10": [_GROUP_A]})
+    client = StubClient(
+        get_responses={"/servergroups/10": [_GROUP_A]},
+        put_responses={"/servergroups/10": [{}]},
+    )
     result = await update_server_group(
         cast(AutomoxClient, client),
         org_id=555,
@@ -217,9 +223,9 @@ async def test_update_group_sends_body_to_correct_path() -> None:
     assert "minute" in result["metadata"]["field_notes"]["refresh_interval"].lower()
 
 
-# GET /servergroups/{id} shapes captured from the live API (identifiers and
-# text replaced). In a group-owned organization the group carries its settings;
-# where devices own their settings the API reads them back as null.
+# GET /servergroups/{id} shapes captured from the live API, with identifiers,
+# text and setting values replaced. In a group-owned organization the group
+# carries its settings; where devices own their settings they read back as null.
 _GROUP_OWNED_LIVE: dict[str, Any] = {
     "id": 30,
     "uuid": "00000000-0000-0000-0000-000000000030",
@@ -366,14 +372,21 @@ async def test_update_group_wsus_off_keeps_server_without_url() -> None:
 
 
 @pytest.mark.asyncio
-async def test_update_group_put_error_after_fetch_propagates() -> None:
+async def test_update_group_device_owned_refusal_propagates() -> None:
     client = StubClient(get_responses={"/servergroups/40": [_DEVICE_OWNED_LIVE]})
+    refusal = {
+        "errors": [
+            "This organization's devices own their settings, so a group save cannot "
+            "set them: refresh_interval. Use the Device Settings API instead."
+        ],
+        "code": "DEVICE_OWNED_SETTINGS",
+    }
 
     async def _raise(*a: Any, **kw: Any) -> Any:
-        raise AutomoxAPIError("automox API error", status_code=422)
+        raise AutomoxAPIError("automox API error", status_code=422, payload=refusal)
 
     client.put = _raise  # type: ignore[assignment]
-    with pytest.raises(AutomoxAPIError):
+    with pytest.raises(AutomoxAPIError) as excinfo:
         await update_server_group(
             cast(AutomoxClient, client),
             org_id=555,
@@ -381,6 +394,96 @@ async def test_update_group_put_error_after_fetch_propagates() -> None:
             name="Default Group",
             refresh_interval=720,
         )
+
+    assert excinfo.value.payload["code"] == "DEVICE_OWNED_SETTINGS"
+    assert [c[0] for c in client.calls] == ["GET"]
+
+
+@pytest.mark.asyncio
+async def test_update_group_read_failure_sends_no_put() -> None:
+    client = StubClient()
+
+    async def _raise(*a: Any, **kw: Any) -> Any:
+        raise AutomoxAPIError("not found", status_code=404)
+
+    client.get = _raise  # type: ignore[assignment]
+    with pytest.raises(AutomoxAPIError, match="not found"):
+        await update_server_group(
+            cast(AutomoxClient, client), org_id=555, group_id=30, name="Workstations"
+        )
+
+    assert client.calls == []
+
+
+@pytest.mark.parametrize("current", [{}, [], None])
+@pytest.mark.asyncio
+async def test_update_group_unreadable_group_sends_no_put(current: Any) -> None:
+    client = StubClient(get_responses={"/servergroups/30": [current]})
+    with pytest.raises(ValueError, match="was not updated"):
+        await update_server_group(
+            cast(AutomoxClient, client), org_id=555, group_id=30, name="Workstations"
+        )
+
+    assert [c[0] for c in client.calls] == ["GET"]
+
+
+@pytest.mark.asyncio
+async def test_update_group_long_stored_notes_need_explicit_notes() -> None:
+    group = {**_GROUP_OWNED_LIVE, "notes": "n" * 501}
+    client = StubClient(get_responses={"/servergroups/30": [group]})
+    with pytest.raises(ValueError, match="pass notes"):
+        await update_server_group(
+            cast(AutomoxClient, client), org_id=555, group_id=30, name="Workstations"
+        )
+
+    assert [c[0] for c in client.calls] == ["GET"]
+
+
+@pytest.mark.asyncio
+async def test_update_group_long_stored_notes_replaced_by_caller() -> None:
+    group = {**_GROUP_OWNED_LIVE, "notes": "n" * 501}
+    client = StubClient(get_responses={"/servergroups/30": [group]})
+    await update_server_group(
+        cast(AutomoxClient, client),
+        org_id=555,
+        group_id=30,
+        name="Workstations",
+        notes="short",
+    )
+
+    assert client.calls[1][2]["notes"] == "short"
+
+
+@pytest.mark.asyncio
+async def test_update_group_wsus_on_without_server_is_not_sent() -> None:
+    group = {
+        **_GROUP_OWNED_LIVE,
+        "wsus_config": {**_GROUP_OWNED_LIVE["wsus_config"], "server_url": "  "},
+    }
+    client = StubClient(get_responses={"/servergroups/30": [group]})
+    await update_server_group(
+        cast(AutomoxClient, client), org_id=555, group_id=30, name="Workstations"
+    )
+
+    body = client.calls[1][2]
+    assert "enable_wsus" not in body
+    assert "wsus_server" not in body
+
+
+@pytest.mark.asyncio
+async def test_update_group_wsus_off_with_blank_server_sends_off_only() -> None:
+    group = {
+        **_GROUP_OWNED_LIVE,
+        "wsus_config": {**_GROUP_OWNED_LIVE["wsus_config"], "is_managed": False, "server_url": ""},
+    }
+    client = StubClient(get_responses={"/servergroups/30": [group]})
+    await update_server_group(
+        cast(AutomoxClient, client), org_id=555, group_id=30, name="Workstations"
+    )
+
+    body = client.calls[1][2]
+    assert body["enable_wsus"] is False
+    assert "wsus_server" not in body
 
 
 @pytest.mark.asyncio
@@ -447,7 +550,10 @@ async def test_create_server_group_non_mapping_response() -> None:
 @pytest.mark.asyncio
 async def test_update_server_group_non_mapping_response() -> None:
     """When update API returns a non-Mapping, fallback includes group_id and updated=True."""
-    client = StubClient(put_responses={"/servergroups/5": ["ok"]})
+    client = StubClient(
+        get_responses={"/servergroups/5": [{**_GROUP_B, "id": 5}]},
+        put_responses={"/servergroups/5": ["ok"]},
+    )
     result = await update_server_group(
         cast(AutomoxClient, client),
         org_id=1,
@@ -495,17 +601,8 @@ async def test_create_server_group_with_optional_fields() -> None:
 async def test_update_server_group_with_optional_fields() -> None:
     """Optional fields are included in update body when set."""
     client = StubClient(
-        put_responses={
-            "/servergroups/10": [
-                {
-                    "id": 10,
-                    "name": "Updated",
-                    "organization_id": 1,
-                    "server_count": 2,
-                    "policies": [],
-                }
-            ]
-        }
+        get_responses={"/servergroups/10": [_GROUP_A]},
+        put_responses={"/servergroups/10": [{}]},
     )
     result = await update_server_group(
         cast(AutomoxClient, client),

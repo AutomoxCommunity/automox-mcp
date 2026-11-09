@@ -704,7 +704,7 @@ class UpdateServerGroupParams(ForbidExtraModel):
         description="UI color for group",
         pattern=r"^#[0-9a-fA-F]{6}$",
     )
-    notes: str | None = Field(None, description="Group notes")
+    notes: str | None = Field(None, description="Group notes", max_length=500)
     policies: list[int] | None = Field(None, description="Policy IDs to assign")
 
 

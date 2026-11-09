@@ -16,8 +16,13 @@ from ..utils.response import build_pagination_metadata
 _REFRESH_INTERVAL_NOTE = (
     "refresh_interval is the group's agent check-in / scan cadence in MINUTES "
     "(live-verified 2026-06-05: console 24h/4h cadences read back as 1440/240). "
-    "Spec range: 240-1440. The raw integer is preserved as-is."
+    "Spec range: 240-1440. The raw integer is preserved as-is. null means the "
+    "organization's devices own their settings: omit refresh_interval when "
+    "creating or updating its groups."
 )
+
+# The API accepts longer notes on create than on update.
+_UPDATE_NOTES_MAX_LENGTH = 500
 
 
 def _summarize_group(group: Mapping[str, Any]) -> dict[str, Any]:
@@ -50,9 +55,13 @@ def _preserved_group_fields(group: Mapping[str, Any]) -> dict[str, Any]:
             preserved[field] = value
     wsus = group.get("wsus_config")
     if isinstance(wsus, Mapping) and wsus.get("is_managed") is not None:
-        preserved["enable_wsus"] = wsus["is_managed"]
-        if isinstance(wsus.get("server_url"), str):
-            preserved["wsus_server"] = wsus["server_url"]
+        server_url = wsus.get("server_url")
+        server = server_url.strip() if isinstance(server_url, str) else ""
+        # WSUS on without a server is rejected, so such a row is left to reset.
+        if server or wsus["is_managed"] is False:
+            preserved["enable_wsus"] = wsus["is_managed"]
+            if server:
+                preserved["wsus_server"] = server
     return preserved
 
 
@@ -193,7 +202,18 @@ async def update_server_group(
     """
     params: dict[str, Any] = {"o": org_id}
     current = await client.get(f"/servergroups/{group_id}", params=params)
-    body = _preserved_group_fields(current) if isinstance(current, Mapping) else {}
+    if not isinstance(current, Mapping) or current.get("id") is None:
+        raise ValueError(
+            f"Could not read server group {group_id} to keep its current settings; "
+            "the group was not updated."
+        )
+    body = _preserved_group_fields(current)
+    if notes is None and len(body.get("notes", "")) > _UPDATE_NOTES_MAX_LENGTH:
+        raise ValueError(
+            f"Server group {group_id} has notes longer than the "
+            f"{_UPDATE_NOTES_MAX_LENGTH} characters an update accepts; pass notes "
+            "explicitly (shortened, or an empty string to clear them)."
+        )
 
     body["name"] = name
     if refresh_interval is not None:

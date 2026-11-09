@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- **`update_server_group` no longer clears group settings the caller did not set.** The API replaces the whole group on update, so a call that left out the color, notes, OS auto update or WSUS settings cleared them. The tool now reads the group first and sends its current value for every field the caller leaves unset, including `refresh_interval`.
+- **`update_server_group` no longer clears group settings the caller did not set.** The API replaces the whole group on update, so a call that left out the color, notes, OS auto update or WSUS settings cleared them. The tool now reads the group first and sends its current value for every field the caller leaves unset, including `refresh_interval`. If the group cannot be read, nothing is sent. The API accepts at most 500 characters of notes on update (5000 on create), so a group with longer stored notes needs `notes` passed explicitly; the tool says so instead of clearing them.
 
 ### Security
 

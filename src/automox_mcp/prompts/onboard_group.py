@@ -27,7 +27,9 @@ def register(server: FastMCP) -> None:
 
 4. **Create the group** (confirm with user before proceeding): Use `create_server_group` with:
    - name: "{_safe_name}"
-   - refresh_interval: 1440 (24 hours, adjust as needed)
+   - refresh_interval: omit it if the existing groups read back null (the
+     organization's devices own their settings); otherwise 1440 (24 hours,
+     adjust as needed)
    - parent_server_group_id: (the appropriate parent from step 1)
 
 5. **Assign policies** (confirm with user before proceeding): Use `apply_policy_changes` to update existing policies to include the new group, or create new policies targeting this group.

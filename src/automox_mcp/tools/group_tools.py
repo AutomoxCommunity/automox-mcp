@@ -163,8 +163,9 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "If a kept color or notes value fails the update rules (#RRGGBB, at "
                 "most 500 characters), the tool asks you to pass "
                 'it; ui_color "" '
-                "clears the color. A stored WSUS server an update rejects is reset "
-                "with a warning. In an organization whose devices "
+                "clears the color. WSUS is kept unless it is on with a blank stored "
+                "server, or the stored server is longer than 100 characters; then it "
+                "is reset with a warning. In an organization whose devices "
                 "own their settings, omit refresh_interval: the API rejects a group "
                 "save that changes a device-owned setting (code DEVICE_OWNED_SETTINGS)."
             ),

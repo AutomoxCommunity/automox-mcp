@@ -706,20 +706,26 @@ async def test_update_group_wsus_on_without_server_is_not_sent() -> None:
     assert "WSUS setting was reset" in result["metadata"]["warnings"][0]
 
 
+@pytest.mark.parametrize("server_url", ["", "  "])
 @pytest.mark.asyncio
-async def test_update_group_wsus_off_with_blank_server_sends_off_only() -> None:
+async def test_update_group_wsus_off_with_blank_server_sends_off_only(server_url: str) -> None:
     group = {
         **_GROUP_OWNED_LIVE,
-        "wsus_config": {**_GROUP_OWNED_LIVE["wsus_config"], "is_managed": False, "server_url": ""},
+        "wsus_config": {
+            **_GROUP_OWNED_LIVE["wsus_config"],
+            "is_managed": False,
+            "server_url": server_url,
+        },
     }
     client = StubClient(get_responses={"/servergroups/30": [group]})
-    await update_server_group(
+    result = await update_server_group(
         cast(AutomoxClient, client), org_id=555, group_id=30, name="Workstations"
     )
 
     body = client.calls[1][2]
     assert body["enable_wsus"] is False
     assert "wsus_server" not in body
+    assert "warnings" not in result["metadata"]
 
 
 @pytest.mark.asyncio

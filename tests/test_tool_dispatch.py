@@ -1469,7 +1469,10 @@ class TestGroupToolsErrorHandling:
         assert recorded[0]["ui_color"] == ""
 
     def test_update_server_group_description_states_notes_limit(self) -> None:
-        from automox_mcp.utils.group_rules import UPDATE_NOTES_MAX_LENGTH
+        from automox_mcp.utils.group_rules import (
+            UPDATE_NOTES_MAX_LENGTH,
+            UPDATE_WSUS_SERVER_MAX_LENGTH,
+        )
 
         descriptions: dict[str, str] = {}
 
@@ -1480,7 +1483,34 @@ class TestGroupToolsErrorHandling:
 
         group_tools.register(DescribingServer(), read_only=False, client=FakeClient(org_id=42))
 
-        assert f"most {UPDATE_NOTES_MAX_LENGTH} characters" in descriptions["update_server_group"]
+        description = descriptions["update_server_group"]
+        assert f"most {UPDATE_NOTES_MAX_LENGTH} characters" in description
+        assert f"longer than {UPDATE_WSUS_SERVER_MAX_LENGTH} characters" in description
+        assert "on with a blank stored server" in description
+
+    @pytest.mark.parametrize("color", ["#FFF", "red", ""])
+    @pytest.mark.asyncio
+    async def test_create_server_group_rejects_invalid_color(
+        self, monkeypatch: pytest.MonkeyPatch, color: str
+    ) -> None:
+        from fastmcp.exceptions import ToolError
+
+        recorded: list[dict[str, Any]] = []
+
+        async def fake_create(client, **kwargs):
+            recorded.append(kwargs)
+            return _success()
+
+        monkeypatch.setattr(group_tools.workflows, "create_server_group", fake_create)
+
+        server = StubServer()
+        group_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+
+        with pytest.raises(ToolError, match="ui_color"):
+            await server.tools["create_server_group"](
+                name="Kiosks", parent_server_group_id=1, ui_color=color
+            )
+        assert recorded == []
 
     @pytest.mark.parametrize("color", ["#FFF", "red", "#00FF00x"])
     @pytest.mark.asyncio

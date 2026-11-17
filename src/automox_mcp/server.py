@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from importlib import import_module
 from types import ModuleType
-from typing import Any, cast
 
 from fastmcp import FastMCP
 
@@ -102,11 +101,9 @@ def _patch_stdio_transport() -> None:  # pragma: no cover - patches MCP internal
             except anyio.ClosedResourceError:  # pragma: no cover - EOF race
                 await anyio.lowlevel.checkpoint()
 
-        stdin_task = cast(Callable[..., Awaitable[Any]], stdin_reader)
-        stdout_task = cast(Callable[..., Awaitable[Any]], stdout_writer)
         async with anyio.create_task_group() as tg:
-            tg.start_soon(stdin_task)
-            tg.start_soon(stdout_task)
+            tg.start_soon(stdin_reader)
+            tg.start_soon(stdout_writer)
             yield read_stream, write_stream
 
     stdio_module.stdio_server = patched_stdio_server

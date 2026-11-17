@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **Bumped dependencies flagged by `pip-audit`** over the exported lockfile. Runtime: `authlib` 1.7.2 → 1.9.8, `mcp` 1.28.1 → 1.30.0, `pyjwt` 2.13.0 → 2.15.1, `joserfc` 1.7.1 → 1.8.0, `urllib3` 2.7.0 → 2.8.0, `anyio` 4.13.0 → 4.16.0 (with `typing-extensions` 4.15.0 → 4.16.0, so one `anyio` version serves every Python), `dnspython` 2.8.0 → 2.9.2, `certifi` 2026.2.25 → 2026.10.23, `opentelemetry-api` 1.40.0 → 1.45.2. Dev tooling only: `filelock` 3.29.0 → 4.2.11, `virtualenv` 21.4.1 → 21.15.8 (with `distlib`, `packaging` and `python-discovery` moving alongside). The fixed versions are now floors in `[tool.uv] constraint-dependencies`, so re-locking this repo cannot regress into the vulnerable ranges; for installs of the published package only the direct `joserfc` floor changes, raised to `>=1.7.6`. `pip-audit` over the regenerated lock reports no known vulnerabilities.
+
 ## [2.2.9] - 2026-07-21
 
 ### Changed

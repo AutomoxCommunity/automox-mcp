@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **`refresh_interval` is now optional on `create_server_group` and `update_server_group`.** When it is not set, the tools no longer send it. In an organization whose devices own their settings, the API rejects a group save that changes a device-owned setting, on create anything but the 1440 default (HTTP 422, code `DEVICE_OWNED_SETTINGS`), so a rename, policy change or create there must omit it; a create without it gets the 1440-minute default. In other organizations `create_server_group` still needs it.
-- **`parent_server_group_id` is now optional on `update_server_group`.** Left out, the group keeps its current parent, so a rename no longer needs it (for a default group the API only accepts the group's own id).
+- **`parent_server_group_id` is now optional on `update_server_group`.** Left out, the group keeps its current parent, so a rename no longer needs it (for a default group the API only accepts the group's own id). If the group has no stored parent, the tool asks for one instead of sending an update the API rejects.
 
 ### Fixed
 

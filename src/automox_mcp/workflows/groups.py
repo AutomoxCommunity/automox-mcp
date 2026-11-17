@@ -270,6 +270,11 @@ async def update_server_group(
             "accept, so pass these fields explicitly. "
             + " ".join(f"{field}: {fix}." for field, fix in rejected.items())
         )
+    if parent_server_group_id is None and body.get("parent_server_group_id") is None:
+        raise ValueError(
+            f"Server group {group_id} was not updated: it has no stored parent group and an "
+            "update requires one, so pass parent_server_group_id."
+        )
     wsus_reset = _wsus_dropped(current, body)
 
     body["name"] = name

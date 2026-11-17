@@ -311,6 +311,33 @@ async def test_update_group_keeps_parent_when_caller_leaves_it_unset() -> None:
 
 
 @pytest.mark.asyncio
+async def test_update_group_without_any_parent_asks_for_one() -> None:
+    group = {**_GROUP_OWNED_LIVE, "parent_server_group_id": None}
+    client = StubClient(get_responses={"/servergroups/30": [group]})
+    with pytest.raises(ValueError, match="no stored parent group.*pass parent_server_group_id"):
+        await update_server_group(
+            cast(AutomoxClient, client), org_id=555, group_id=30, name="Laptops"
+        )
+
+    assert [c[0] for c in client.calls] == ["GET"]
+
+
+@pytest.mark.asyncio
+async def test_update_group_caller_parent_covers_missing_stored_parent() -> None:
+    group = {**_GROUP_OWNED_LIVE, "parent_server_group_id": None}
+    client = StubClient(get_responses={"/servergroups/30": [group]})
+    await update_server_group(
+        cast(AutomoxClient, client),
+        org_id=555,
+        group_id=30,
+        name="Laptops",
+        parent_server_group_id=7,
+    )
+
+    assert client.calls[1][2]["parent_server_group_id"] == 7
+
+
+@pytest.mark.asyncio
 async def test_update_group_missing_stored_policies_are_not_sent() -> None:
     group = {k: v for k, v in _GROUP_OWNED_LIVE.items() if k != "policies"}
     client = StubClient(get_responses={"/servergroups/30": [group]})

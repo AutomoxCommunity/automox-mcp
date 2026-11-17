@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **The published package now declares floors for `mcp` (`>=1.30.0`), `authlib` (`>=1.9.1`) and `pyjwt` (`>=2.15.0`).** All three were already installed through `fastmcp-slim[server]`, whose own lower bounds still allow the vulnerable versions; the server also imports `mcp` directly. Declaring them in `[project].dependencies` means `pip install automox-mcp` gets the fixed versions too, not only re-locks of this repo.
+
 ## [2.2.10] - 2026-11-19
 
 ### Changed

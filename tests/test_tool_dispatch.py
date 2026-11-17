@@ -1468,12 +1468,7 @@ class TestGroupToolsErrorHandling:
         assert recorded[0]["notes"] == "n" * 500
         assert recorded[0]["ui_color"] == ""
 
-    def test_update_server_group_description_states_notes_limit(self) -> None:
-        from automox_mcp.utils.group_rules import (
-            UPDATE_NOTES_MAX_LENGTH,
-            UPDATE_WSUS_SERVER_MAX_LENGTH,
-        )
-
+    def test_update_server_group_description_states_call_time_rules(self) -> None:
         descriptions: dict[str, str] = {}
 
         class DescribingServer(StubServer):
@@ -1484,9 +1479,67 @@ class TestGroupToolsErrorHandling:
         group_tools.register(DescribingServer(), read_only=False, client=FakeClient(org_id=42))
 
         description = descriptions["update_server_group"]
-        assert f"most {UPDATE_NOTES_MAX_LENGTH} characters" in description
-        assert f"longer than {UPDATE_WSUS_SERVER_MAX_LENGTH} characters" in description
-        assert "on with a blank stored server" in description
+        assert "Fields left unset keep the group's current values" in description
+        assert 'ui_color "" clears the color' in description
+        assert "DEVICE_OWNED_SETTINGS" in description
+
+    @pytest.mark.parametrize(("group_id", "parent_id"), [(30, 1), (40, 40)])
+    @pytest.mark.asyncio
+    async def test_update_server_group_without_parent_keeps_current_parent(
+        self, group_id: int, parent_id: int
+    ) -> None:
+        from conftest import StubClient
+
+        # (40, 40) is a default group: the API requires its parent to be its own id.
+        group = {
+            "id": group_id,
+            "name": "Workstations",
+            "parent_server_group_id": parent_id,
+            "refresh_interval": 240,
+            "ui_color": None,
+            "notes": "",
+            "policies": [],
+            "enable_os_auto_update": None,
+            "wsus_config": None,
+        }
+        client = StubClient(get_responses={f"/servergroups/{group_id}": [group]})
+        server = StubServer()
+        group_tools.register(server, read_only=False, client=client)
+
+        await server.tools["update_server_group"](group_id=group_id, name="Laptops")
+
+        method, path, body = client.calls[1]
+        assert (method, path) == ("PUT", f"/servergroups/{group_id}")
+        assert body["parent_server_group_id"] == parent_id
+
+    @pytest.mark.parametrize("policies", [[999], []])
+    @pytest.mark.asyncio
+    async def test_update_server_group_caller_policies_replace_stored_list(
+        self, policies: list[int]
+    ) -> None:
+        from conftest import StubClient
+
+        group = {
+            "id": 30,
+            "name": "Workstations",
+            "parent_server_group_id": 1,
+            "refresh_interval": 240,
+            "ui_color": None,
+            "notes": "",
+            "policies": [301, 302],
+            "enable_os_auto_update": None,
+            "wsus_config": None,
+        }
+        client = StubClient(get_responses={"/servergroups/30": [group]})
+        server = StubServer()
+        group_tools.register(server, read_only=False, client=client)
+
+        result = await server.tools["update_server_group"](
+            group_id=30, name="Workstations", policies=policies
+        )
+
+        assert client.calls[1][2]["policies"] == policies
+        assert result["data"]["policies"] == policies
 
     @pytest.mark.asyncio
     async def test_update_server_group_kept_value_refusal_reaches_caller(self) -> None:
@@ -1513,7 +1566,7 @@ class TestGroupToolsErrorHandling:
             )
 
         message = str(excinfo.value)
-        assert "for ui_color; pass it" in message
+        assert "ui_color: the stored color is not #RRGGBB" in message
         assert "internal error" not in message
         assert [c[0] for c in client.calls] == ["GET"]
 

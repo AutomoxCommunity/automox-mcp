@@ -700,14 +700,22 @@ class UpdateServerGroupParams(ForbidExtraModel):
         ge=1,
         le=525600,
     )
-    parent_server_group_id: int = Field(description="Parent group ID (required by API)")
+    parent_server_group_id: int | None = Field(
+        None, description="Parent group ID. Omit to keep the current parent."
+    )
     ui_color: str | None = Field(
         None,
         description="UI color for group; an empty string clears it",
         pattern=f"^({UI_COLOR_HEX})?$",
     )
     notes: str | None = Field(None, description="Group notes", max_length=UPDATE_NOTES_MAX_LENGTH)
-    policies: list[int] | None = Field(None, description="Policy IDs to assign")
+    policies: list[int] | None = Field(
+        None,
+        description=(
+            "Full list of policy IDs for the group; it replaces the current list. "
+            "Omit to keep the current policies."
+        ),
+    )
 
 
 class ZoneAssignment(ForbidExtraModel):

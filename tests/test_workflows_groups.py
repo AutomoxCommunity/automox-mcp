@@ -292,10 +292,64 @@ async def test_update_group_preserves_unset_fields() -> None:
         "refresh_interval": 240,
         "ui_color": "#CC0000",
         "notes": "Office laptops",
+        "policies": [301, 302],
         "enable_os_auto_update": True,
         "enable_wsus": True,
         "wsus_server": "https://wsus.example.com:8531",
     }
+
+
+@pytest.mark.asyncio
+async def test_update_group_keeps_parent_when_caller_leaves_it_unset() -> None:
+    client = StubClient(get_responses={"/servergroups/30": [_GROUP_OWNED_LIVE]})
+    result = await update_server_group(
+        cast(AutomoxClient, client), org_id=555, group_id=30, name="Laptops"
+    )
+
+    assert client.calls[1][2]["parent_server_group_id"] == 1
+    assert result["data"]["parent_server_group_id"] == 1
+
+
+@pytest.mark.asyncio
+async def test_update_group_missing_stored_policies_are_not_sent() -> None:
+    group = {k: v for k, v in _GROUP_OWNED_LIVE.items() if k != "policies"}
+    client = StubClient(get_responses={"/servergroups/30": [group]})
+    await update_server_group(cast(AutomoxClient, client), org_id=555, group_id=30, name="Laptops")
+
+    assert "policies" not in client.calls[1][2]
+
+
+@pytest.mark.asyncio
+async def test_update_group_stored_empty_policies_go_back_empty() -> None:
+    group = {**_GROUP_OWNED_LIVE, "policies": []}
+    client = StubClient(get_responses={"/servergroups/30": [group]})
+    await update_server_group(cast(AutomoxClient, client), org_id=555, group_id=30, name="Laptops")
+
+    assert client.calls[1][2]["policies"] == []
+
+
+@pytest.mark.parametrize("notes", [42, ["a"], {"text": "a"}])
+@pytest.mark.asyncio
+async def test_update_group_non_text_stored_notes_need_explicit_notes(notes: Any) -> None:
+    group = {**_GROUP_OWNED_LIVE, "notes": notes}
+    client = StubClient(get_responses={"/servergroups/30": [group]})
+    with pytest.raises(ValueError, match="notes: the stored notes are not text"):
+        await update_server_group(
+            cast(AutomoxClient, client), org_id=555, group_id=30, name="Laptops"
+        )
+
+    assert [c[0] for c in client.calls] == ["GET"]
+
+
+@pytest.mark.asyncio
+async def test_update_group_non_text_stored_notes_replaced_by_caller() -> None:
+    group = {**_GROUP_OWNED_LIVE, "notes": 42}
+    client = StubClient(get_responses={"/servergroups/30": [group]})
+    await update_server_group(
+        cast(AutomoxClient, client), org_id=555, group_id=30, name="Laptops", notes=""
+    )
+
+    assert client.calls[1][2]["notes"] == ""
 
 
 @pytest.mark.asyncio
@@ -526,11 +580,16 @@ async def test_update_group_unreadable_group_sends_no_put(current: Any) -> None:
 async def test_update_group_long_stored_notes_need_explicit_notes() -> None:
     group = {**_GROUP_OWNED_LIVE, "notes": "n" * 501}
     client = StubClient(get_responses={"/servergroups/30": [group]})
-    with pytest.raises(ValueError, match="for notes; pass it"):
+    with pytest.raises(ValueError) as excinfo:
         await update_server_group(
             cast(AutomoxClient, client), org_id=555, group_id=30, name="Workstations"
         )
 
+    message = str(excinfo.value)
+    assert "was not updated" in message
+    assert "notes: the stored notes are 501 characters" in message
+    assert "or an empty string to clear them" in message
+    assert "ui_color" not in message
     assert [c[0] for c in client.calls] == ["GET"]
 
 
@@ -565,7 +624,7 @@ async def test_update_group_stored_color_update_rejects_needs_caller_value() -> 
     client = StubClient(
         get_responses={"/servergroups/30": [{**_GROUP_OWNED_LIVE, "ui_color": "#FFF"}]}
     )
-    with pytest.raises(ValueError, match="for ui_color; pass it"):
+    with pytest.raises(ValueError, match="ui_color: the stored color is not #RRGGBB"):
         await update_server_group(
             cast(AutomoxClient, client), org_id=555, group_id=30, name="Workstations"
         )
@@ -577,10 +636,14 @@ async def test_update_group_stored_color_update_rejects_needs_caller_value() -> 
 async def test_update_group_names_every_stored_value_update_rejects() -> None:
     group = {**_GROUP_OWNED_LIVE, "ui_color": "#FFF", "notes": "n" * 501}
     client = StubClient(get_responses={"/servergroups/30": [group]})
-    with pytest.raises(ValueError, match="for ui_color, notes; pass them"):
+    with pytest.raises(ValueError) as excinfo:
         await update_server_group(
             cast(AutomoxClient, client), org_id=555, group_id=30, name="Workstations"
         )
+
+    message = str(excinfo.value)
+    assert "ui_color: the stored color" in message
+    assert "notes: the stored notes are 501 characters" in message
 
     assert [c[0] for c in client.calls] == ["GET"]
 
@@ -595,7 +658,7 @@ async def test_update_group_names_only_stored_values_caller_left_unset(
 ) -> None:
     group = {**_GROUP_OWNED_LIVE, "ui_color": "#FFF", "notes": "n" * 501}
     client = StubClient(get_responses={"/servergroups/30": [group]})
-    with pytest.raises(ValueError, match=f"for {still_rejected}; pass it"):
+    with pytest.raises(ValueError) as excinfo:
         await update_server_group(
             cast(AutomoxClient, client),
             org_id=555,
@@ -603,6 +666,10 @@ async def test_update_group_names_only_stored_values_caller_left_unset(
             name="Workstations",
             **caller,
         )
+
+    message = str(excinfo.value)
+    assert f"{still_rejected}: the stored" in message
+    assert f"{next(iter(caller))}: the stored" not in message
 
     assert [c[0] for c in client.calls] == ["GET"]
 
@@ -673,7 +740,9 @@ async def test_update_group_wsus_server_over_limit_is_not_sent() -> None:
     body = client.calls[1][2]
     assert "enable_wsus" not in body
     assert "wsus_server" not in body
-    assert "WSUS setting was reset" in result["metadata"]["warnings"][0]
+    warning = result["metadata"]["warnings"][0]
+    assert "WSUS setting was reset" in warning
+    assert f"longer than the {UPDATE_WSUS_SERVER_MAX_LENGTH} characters" in warning
 
 
 @pytest.mark.asyncio

@@ -159,16 +159,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             description=(
                 "Update an existing Automox server group. refresh_interval is the agent "
                 "check-in/scan cadence in minutes (live-verified; spec range 240-1440). "
-                "Fields left unset keep the group's current values (refresh_interval, "
-                "color, notes, OS auto update, WSUS), read just before the write. "
-                "If a kept color or notes value fails the update rules (#RRGGBB, at "
-                "most 500 characters), the tool asks you to pass "
-                'it; ui_color "" '
-                "clears the color. WSUS is kept unless it is on with a blank stored "
-                "server, or the stored server is longer than 100 characters; then it "
-                "is reset with a warning. In an organization whose devices "
-                "own their settings, omit refresh_interval: the API rejects a group "
-                "save that changes a device-owned setting (code DEVICE_OWNED_SETTINGS)."
+                "Fields left unset keep the group's current values; if a kept value "
+                'fails the update rules, the error names the field to pass. ui_color "" '
+                "clears the color. In an organization whose devices own their settings, "
+                "omit refresh_interval: the API rejects a group save that changes a "
+                "device-owned setting (code DEVICE_OWNED_SETTINGS)."
             ),
             annotations={
                 "readOnlyHint": False,
@@ -180,7 +175,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         async def update_server_group(
             group_id: int,
             name: str,
-            parent_server_group_id: int,
+            parent_server_group_id: int | None = None,
             refresh_interval: Annotated[
                 int | None,
                 Field(
@@ -194,7 +189,15 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             ] = None,
             ui_color: str | None = None,
             notes: str | None = None,
-            policies: list[int] | None = None,
+            policies: Annotated[
+                list[int] | None,
+                Field(
+                    description=(
+                        "Full list of policy IDs for the group; it replaces the current "
+                        "list. Omit to keep the current policies."
+                    )
+                ),
+            ] = None,
             request_id: str | None = None,
         ) -> dict[str, Any]:
             cached = await check_idempotency(request_id, "update_server_group")

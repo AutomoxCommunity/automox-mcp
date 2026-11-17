@@ -48,16 +48,19 @@ def _summarize_group(group: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def _preserved_group_fields(group: Mapping[str, Any]) -> dict[str, Any]:
-    """Return the group's current settable fields that a full-replace PUT would clear.
+    """Return the group's current values to send for fields the caller leaves unset.
 
     A null value is left out: the GET reports device-owned settings as null, so
     null is not a stored value to keep.
     """
     preserved: dict[str, Any] = {}
-    for field in ("refresh_interval", "enable_os_auto_update", "notes"):
+    for field in ("parent_server_group_id", "refresh_interval", "enable_os_auto_update", "notes"):
         value = group.get(field)
         if value is not None:
             preserved[field] = value
+    # Without policies the API keeps them, but authorizes and audits each one as a change.
+    if isinstance(group.get("policies"), list):
+        preserved["policies"] = group["policies"]
     if group.get("ui_color"):
         preserved["ui_color"] = group["ui_color"]
     wsus = group.get("wsus_config")
@@ -91,14 +94,28 @@ def _wsus_dropped(group: Mapping[str, Any], preserved: Mapping[str, Any]) -> boo
     )
 
 
-def _rejected_on_update(preserved: Mapping[str, Any]) -> list[str]:
-    """Name the kept ui_color/notes values the update rules reject (not refresh_interval)."""
-    rejected: list[str] = []
+def _rejected_on_update(preserved: Mapping[str, Any]) -> dict[str, str]:
+    """Map each kept ui_color/notes value the update rules reject to what to pass instead.
+
+    refresh_interval is not checked.
+    """
+    rejected: dict[str, str] = {}
     color = preserved.get("ui_color")
     if color is not None and not (isinstance(color, str) and _UI_COLOR_PATTERN.fullmatch(color)):
-        rejected.append("ui_color")
-    if len(preserved.get("notes", "")) > UPDATE_NOTES_MAX_LENGTH:
-        rejected.append("notes")
+        rejected["ui_color"] = (
+            "the stored color is not #RRGGBB; pass a #RRGGBB color, or an empty string to clear it"
+        )
+    notes = preserved.get("notes", "")
+    if not isinstance(notes, str):
+        rejected["notes"] = (
+            "the stored notes are not text; pass notes, or an empty string to clear them"
+        )
+    elif len(notes) > UPDATE_NOTES_MAX_LENGTH:
+        notes_length = len(notes)
+        rejected["notes"] = (
+            f"the stored notes are {notes_length} characters and an update accepts at most "
+            f"{UPDATE_NOTES_MAX_LENGTH}; pass a shortened version, or an empty string to clear them"
+        )
     return rejected
 
 
@@ -234,8 +251,8 @@ async def update_server_group(
 ) -> dict[str, Any]:
     """Update an existing server group.
 
-    The API replaces the whole group, so fields the caller leaves unset are
-    filled from the group's current values instead of being cleared.
+    The API overwrites each setting with what the request carries, so fields
+    the caller leaves unset are filled from the group's current values.
     """
     params: dict[str, Any] = {"o": org_id}
     current = await client.get(f"/servergroups/{group_id}", params=params)
@@ -246,13 +263,12 @@ async def update_server_group(
         )
     body = _preserved_group_fields(current)
     caller_set = {"ui_color": ui_color, "notes": notes}
-    rejected = [f for f in _rejected_on_update(body) if caller_set.get(f) is None]
+    rejected = {f: fix for f, fix in _rejected_on_update(body).items() if caller_set.get(f) is None}
     if rejected:
         raise ValueError(
-            f"Server group {group_id} holds a value an update does not accept for "
-            f"{', '.join(rejected)}; pass {'it' if len(rejected) == 1 else 'them'} "
-            "explicitly (ui_color #RRGGBB or an empty string to clear, notes at "
-            f"most {UPDATE_NOTES_MAX_LENGTH} characters)."
+            f"Server group {group_id} was not updated: it holds a value an update does not "
+            "accept, so pass these fields explicitly. "
+            + " ".join(f"{field}: {fix}." for field, fix in rejected.items())
         )
     wsus_reset = _wsus_dropped(current, body)
 
@@ -284,10 +300,9 @@ async def update_server_group(
     }
     if wsus_reset:
         metadata["warnings"] = [
-            "This group's WSUS setting was reset (unless its organization's devices "
-            "own their settings): its stored WSUS server is blank while WSUS is on, or "
-            f"longer than the {UPDATE_WSUS_SERVER_MAX_LENGTH} characters a group save "
-            "accepts, and this tool cannot change WSUS."
+            "This group's WSUS setting was reset: its stored WSUS server is blank while "
+            f"WSUS is on, or longer than the {UPDATE_WSUS_SERVER_MAX_LENGTH} characters a "
+            "group save accepts, and this tool cannot change WSUS."
         ]
     return {"data": data, "metadata": metadata}
 

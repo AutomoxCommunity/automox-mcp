@@ -7,18 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.2.10] - 2026-11-19
+
 ### Changed
 
 - **`refresh_interval` is now optional on `create_server_group` and `update_server_group`.** When it is not set, the tools no longer send it. In an organization whose devices own their settings, the API rejects a group save that changes a device-owned setting, on create anything but the 1440 default (HTTP 422, code `DEVICE_OWNED_SETTINGS`), so a rename, policy change or create there must omit it; a create without it gets the 1440-minute default. In other organizations `create_server_group` still needs it.
 - **`parent_server_group_id` is now optional on `update_server_group`.** Left out, the group keeps its current parent, so a rename no longer needs it (for a default group the API only accepts the group's own id). If the group has no stored parent, the tool asks for one instead of sending an update the API rejects.
+- **The package now depends on `fastmcp-slim[server]` instead of the `fastmcp` metapackage.** `fastmcp` ships no code; its only dependency is `fastmcp-slim[client,server]`, so installs drop one package and the unused client extra. The floor is unchanged (`>=3.4.2`) and the `fastmcp` module is the same code.
+- **The README covers the hosted server.** New sections: what's new in 3.0, self-hosted vs. hosted, migrating to the hosted server (including how to remove the Claude Desktop extension or a config-file entry), troubleshooting and an FAQ.
 
 ### Fixed
 
 - **`update_server_group` no longer clears group settings the caller did not set.** The API overwrites each group setting with what the update carries, so a call that left out the color, notes, OS auto update or WSUS settings cleared them. The tool now reads the group just before the write and sends its current value for every field the caller leaves unset, including `refresh_interval`, the parent group and the assigned policies (the API keeps policies left out of an update, but then checks the caller's rights on every assigned policy and records a policy change); a change made by someone else between that read and the write is overwritten, and policy assignments changed in that window are reverted. If the group cannot be read, nothing is sent. When a kept `ui_color` or `notes` value would fail the update rules (color `#RRGGBB`, notes at most 500 characters, which is less than create allows), the tool asks the caller to pass that field instead of failing the update on a field the caller never set, and says how long the stored notes are. WSUS is kept unless it is on with a blank stored server, or the stored server is longer than the 100 characters an update accepts; then it is reset (or the server dropped) and the result carries a warning. Pass `ui_color: ""` to clear the color. The result reports the group's name, parent, color, notes, policies and refresh interval as saved (a refresh interval the organization's devices own reads null); the API answers an update with no body.
+- **Account and zone tools now resolve `account_id` from the client the server was built with before the environment.** They read the client's `account_uuid` first and fall back to `AUTOMOX_ACCOUNT_UUID`. Plain stdio use is unchanged, since the client reads that same variable; a server embedded with a client that carries a per-request identity no longer falls back to the process environment.
 
 ### Security
 
 - **Bumped dependencies flagged by `pip-audit`** over the exported lockfile. Runtime: `authlib` 1.7.2 → 1.9.8, `mcp` 1.28.1 → 1.30.0, `pyjwt` 2.13.0 → 2.15.1, `joserfc` 1.7.1 → 1.8.0, `urllib3` 2.7.0 → 2.8.0, `anyio` 4.13.0 → 4.16.0 (with `typing-extensions` 4.15.0 → 4.16.0, so one `anyio` version serves every Python), `dnspython` 2.8.0 → 2.9.2, `certifi` 2026.2.25 → 2026.10.23, `opentelemetry-api` 1.40.0 → 1.45.2. Dev tooling only: `filelock` 3.29.0 → 4.2.11, `virtualenv` 21.4.1 → 21.15.8 (with `distlib`, `packaging` and `python-discovery` moving alongside). The fixed versions are now floors in `[tool.uv] constraint-dependencies`, so re-locking this repo cannot regress into the vulnerable ranges; for installs of the published package only the direct `joserfc` floor changes, raised to `>=1.7.6`. `pip-audit` over the regenerated lock reports no known vulnerabilities.
+- **Bumped the resolved `cryptography` to 50.0.0** in the lockfile (from 49.0.0). Lockfile only; no declared floor changes.
+- **Bumped the resolved `fastmcp-slim` to 3.4.11** in the lockfile (from 3.4.2) for GHSA-7xgj-8392-5q4r (component authorization skipped on direct calls after a transform; fixed in 3.4.10). The `[tool.uv]` constraint floor moves to `>=3.4.10`; the published dependency floor is unchanged. `pip-audit` does not report this advisory, it came from the GitHub advisory database.
 
 ## [2.2.9] - 2026-07-21
 

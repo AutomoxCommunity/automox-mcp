@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from typing import Any
 
 from ..client import AutomoxClient
+from ..utils.group_rules import (
+    UI_COLOR_HEX,
+    UPDATE_NOTES_MAX_LENGTH,
+    UPDATE_WSUS_SERVER_MAX_LENGTH,
+)
 from ..utils.response import build_pagination_metadata
 
 # refresh_interval is the group's agent check-in / scan cadence. The unit is
@@ -16,8 +22,12 @@ from ..utils.response import build_pagination_metadata
 _REFRESH_INTERVAL_NOTE = (
     "refresh_interval is the group's agent check-in / scan cadence in MINUTES "
     "(live-verified 2026-06-05: console 24h/4h cadences read back as 1440/240). "
-    "Spec range: 240-1440. The raw integer is preserved as-is."
+    "Spec range: 240-1440. The raw integer is preserved as-is. null means the "
+    "organization's devices own their settings: omit refresh_interval when "
+    "creating or updating its groups."
 )
+
+_UI_COLOR_PATTERN = re.compile(UI_COLOR_HEX)
 
 
 def _summarize_group(group: Mapping[str, Any]) -> dict[str, Any]:
@@ -35,6 +45,78 @@ def _summarize_group(group: Mapping[str, Any]) -> dict[str, Any]:
         "notes": group.get("notes"),
         "refresh_interval": group.get("refresh_interval"),
     }
+
+
+def _preserved_group_fields(group: Mapping[str, Any]) -> dict[str, Any]:
+    """Return the group's current values to send for fields the caller leaves unset.
+
+    A null value is left out: the GET reports device-owned settings as null, so
+    null is not a stored value to keep.
+    """
+    preserved: dict[str, Any] = {}
+    for field in ("parent_server_group_id", "refresh_interval", "enable_os_auto_update", "notes"):
+        value = group.get(field)
+        if value is not None:
+            preserved[field] = value
+    # Without policies the API keeps them, but authorizes and audits each one as a change.
+    if isinstance(group.get("policies"), list):
+        preserved["policies"] = group["policies"]
+    if group.get("ui_color"):
+        preserved["ui_color"] = group["ui_color"]
+    wsus = group.get("wsus_config")
+    if isinstance(wsus, Mapping):
+        managed = wsus.get("is_managed")
+        server = _usable_wsus_server(wsus)
+        if server:
+            preserved["wsus_server"] = server
+        # WSUS on without a usable server is rejected, so such a row is left to reset.
+        if managed is False or (managed is True and server):
+            preserved["enable_wsus"] = managed
+    return preserved
+
+
+def _usable_wsus_server(wsus: Mapping[str, Any]) -> str:
+    """Return the stored WSUS server if an update accepts it, else an empty string."""
+    server_url = wsus.get("server_url")
+    server = server_url.strip() if isinstance(server_url, str) else ""
+    return server if len(server) <= UPDATE_WSUS_SERVER_MAX_LENGTH else ""
+
+
+def _wsus_dropped(group: Mapping[str, Any], preserved: Mapping[str, Any]) -> bool:
+    """Whether the update resets a stored WSUS setting the caller cannot keep."""
+    wsus = group.get("wsus_config")
+    if not isinstance(wsus, Mapping):
+        return False
+    server_url = wsus.get("server_url")
+    lost_server = isinstance(server_url, str) and bool(server_url.strip())
+    return (wsus.get("is_managed") is True and "enable_wsus" not in preserved) or (
+        lost_server and "wsus_server" not in preserved
+    )
+
+
+def _rejected_on_update(preserved: Mapping[str, Any]) -> dict[str, str]:
+    """Map each kept ui_color/notes value the update rules reject to what to pass instead.
+
+    refresh_interval is not checked.
+    """
+    rejected: dict[str, str] = {}
+    color = preserved.get("ui_color")
+    if color is not None and not (isinstance(color, str) and _UI_COLOR_PATTERN.fullmatch(color)):
+        rejected["ui_color"] = (
+            "the stored color is not #RRGGBB; pass a #RRGGBB color, or an empty string to clear it"
+        )
+    notes = preserved.get("notes", "")
+    if not isinstance(notes, str):
+        rejected["notes"] = (
+            "the stored notes are not text; pass notes, or an empty string to clear them"
+        )
+    elif len(notes) > UPDATE_NOTES_MAX_LENGTH:
+        notes_length = len(notes)
+        rejected["notes"] = (
+            f"the stored notes are {notes_length} characters and an update accepts at most "
+            f"{UPDATE_NOTES_MAX_LENGTH}; pass a shortened version, or an empty string to clear them"
+        )
+    return rejected
 
 
 async def list_server_groups(
@@ -117,17 +199,16 @@ async def create_server_group(
     *,
     org_id: int,
     name: str,
-    refresh_interval: int,
+    refresh_interval: int | None = None,
     parent_server_group_id: int | None = None,
     ui_color: str | None = None,
     notes: str | None = None,
     policies: list | None = None,
 ) -> dict[str, Any]:
     """Create a new server group."""
-    body: dict[str, Any] = {
-        "name": name,
-        "refresh_interval": refresh_interval,
-    }
+    body: dict[str, Any] = {"name": name}
+    if refresh_interval is not None:
+        body["refresh_interval"] = refresh_interval
     if parent_server_group_id is not None:
         body["parent_server_group_id"] = parent_server_group_id
     if ui_color is not None:
@@ -162,43 +243,73 @@ async def update_server_group(
     org_id: int,
     group_id: int,
     name: str,
-    refresh_interval: int,
+    refresh_interval: int | None = None,
     parent_server_group_id: int | None = None,
     ui_color: str | None = None,
     notes: str | None = None,
     policies: list | None = None,
 ) -> dict[str, Any]:
-    """Update an existing server group."""
-    body: dict[str, Any] = {
-        "name": name,
-        "refresh_interval": refresh_interval,
-    }
+    """Update an existing server group.
+
+    The API overwrites each setting with what the request carries, so fields
+    the caller leaves unset are filled from the group's current values.
+    """
+    params: dict[str, Any] = {"o": org_id}
+    current = await client.get(f"/servergroups/{group_id}", params=params)
+    if not isinstance(current, Mapping) or current.get("id") is None:
+        raise ValueError(
+            f"Could not read server group {group_id} to keep its current settings; "
+            "the group was not updated."
+        )
+    body = _preserved_group_fields(current)
+    caller_set = {"ui_color": ui_color, "notes": notes}
+    rejected = {f: fix for f, fix in _rejected_on_update(body).items() if caller_set.get(f) is None}
+    if rejected:
+        raise ValueError(
+            f"Server group {group_id} was not updated: it holds a value an update does not "
+            "accept, so pass these fields explicitly. "
+            + " ".join(f"{field}: {fix}." for field, fix in rejected.items())
+        )
+    if parent_server_group_id is None and body.get("parent_server_group_id") is None:
+        raise ValueError(
+            f"Server group {group_id} was not updated: it has no stored parent group and an "
+            "update requires one, so pass parent_server_group_id."
+        )
+    wsus_reset = _wsus_dropped(current, body)
+
+    body["name"] = name
+    if refresh_interval is not None:
+        body["refresh_interval"] = refresh_interval
     if parent_server_group_id is not None:
         body["parent_server_group_id"] = parent_server_group_id
     if ui_color is not None:
-        body["ui_color"] = ui_color
+        body["ui_color"] = ui_color or None
     if notes is not None:
         body["notes"] = notes
     if policies is not None:
         body["policies"] = policies
 
-    params: dict[str, Any] = {"o": org_id}
-    result = await client.put(f"/servergroups/{group_id}", json_data=body, params=params)
+    await client.put(f"/servergroups/{group_id}", json_data=body, params=params)
 
-    data: dict[str, Any]
-    if isinstance(result, Mapping):
-        data = _summarize_group(result)
-        data["updated"] = True
-    else:
-        data = {"group_id": group_id, "updated": True, "raw": result}
+    # The API answers an update with 204, so report the state that was sent; a
+    # setting read back as null is device-owned and the API ignores it.
+    sent = {**current, **body, "id": group_id}
+    if current.get("refresh_interval") is None:
+        sent["refresh_interval"] = None
+    data = _summarize_group(sent)
+    data["updated"] = True
 
-    return {
-        "data": data,
-        "metadata": {
-            "deprecated_endpoint": False,
-            "field_notes": {"refresh_interval": _REFRESH_INTERVAL_NOTE},
-        },
+    metadata: dict[str, Any] = {
+        "deprecated_endpoint": False,
+        "field_notes": {"refresh_interval": _REFRESH_INTERVAL_NOTE},
     }
+    if wsus_reset:
+        metadata["warnings"] = [
+            "This group's WSUS setting was reset: its stored WSUS server is blank while "
+            f"WSUS is on, or longer than the {UPDATE_WSUS_SERVER_MAX_LENGTH} characters a "
+            "group save accepts, and this tool cannot change WSUS."
+        ]
+    return {"data": data, "metadata": metadata}
 
 
 async def delete_server_group(

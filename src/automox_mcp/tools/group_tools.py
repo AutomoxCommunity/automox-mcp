@@ -96,7 +96,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             name="create_server_group",
             description=(
                 "Create a new Automox server group. refresh_interval is the agent "
-                "check-in/scan cadence in minutes (live-verified; spec range 240-1440)."
+                "check-in/scan cadence in minutes (live-verified; spec range 240-1440). "
+                "In an organization whose devices own their settings, omit "
+                "refresh_interval: the API rejects a group save that changes a "
+                "device-owned setting, on create anything but the 1440 default "
+                "(code DEVICE_OWNED_SETTINGS)."
             ),
             annotations={
                 "readOnlyHint": False,
@@ -107,16 +111,18 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         )
         async def create_server_group(
             name: str,
+            parent_server_group_id: int,
             refresh_interval: Annotated[
-                int,
+                int | None,
                 Field(
                     description=(
                         "Agent check-in/scan cadence in minutes "
-                        "(live-verified; spec range 240-1440)"
+                        "(live-verified; spec range 240-1440). Required unless the "
+                        "organization's devices own their settings; omit it there "
+                        "(the group gets the 1440 default)."
                     )
                 ),
-            ],
-            parent_server_group_id: int,
+            ] = None,
             ui_color: str | None = None,
             notes: str | None = None,
             policies: list[int] | None = None,
@@ -152,7 +158,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             name="update_server_group",
             description=(
                 "Update an existing Automox server group. refresh_interval is the agent "
-                "check-in/scan cadence in minutes (live-verified; spec range 240-1440)."
+                "check-in/scan cadence in minutes (live-verified; spec range 240-1440). "
+                "Fields left unset keep the group's current values; if a kept value "
+                'fails the update rules, the error names the field to pass. ui_color "" '
+                "clears the color. In an organization whose devices own their settings, "
+                "omit refresh_interval: the API rejects a group save that changes a "
+                "device-owned setting (code DEVICE_OWNED_SETTINGS)."
             ),
             annotations={
                 "readOnlyHint": False,
@@ -164,19 +175,29 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         async def update_server_group(
             group_id: int,
             name: str,
+            parent_server_group_id: int | None = None,
             refresh_interval: Annotated[
-                int,
+                int | None,
                 Field(
                     description=(
                         "Agent check-in/scan cadence in minutes "
-                        "(live-verified; spec range 240-1440)"
+                        "(live-verified; spec range 240-1440). Omit to keep the "
+                        "group's current value; omit it in an organization whose "
+                        "devices own their settings."
                     )
                 ),
-            ],
-            parent_server_group_id: int,
+            ] = None,
             ui_color: str | None = None,
             notes: str | None = None,
-            policies: list[int] | None = None,
+            policies: Annotated[
+                list[int] | None,
+                Field(
+                    description=(
+                        "Full list of policy IDs for the group; it replaces the current "
+                        "list. Omit to keep the current policies."
+                    )
+                ),
+            ] = None,
             request_id: str | None = None,
         ) -> dict[str, Any]:
             cached = await check_idempotency(request_id, "update_server_group")

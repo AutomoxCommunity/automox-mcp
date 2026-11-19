@@ -1400,6 +1400,261 @@ class TestGroupToolsErrorHandling:
             await server.tools["list_server_groups"]()
 
     @pytest.mark.asyncio
+    async def test_update_server_group_without_refresh_interval(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        recorded: dict[str, Any] = {}
+
+        async def fake_update(client, **kwargs):
+            recorded.update(kwargs)
+            return _success()
+
+        monkeypatch.setattr(group_tools.workflows, "update_server_group", fake_update)
+
+        server = StubServer()
+        group_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+
+        await server.tools["update_server_group"](
+            group_id=10, name="Prod-v2", parent_server_group_id=1
+        )
+
+        assert recorded.get("refresh_interval") is None
+
+    @pytest.mark.asyncio
+    async def test_create_server_group_without_refresh_interval(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        recorded: dict[str, Any] = {}
+
+        async def fake_create(client, **kwargs):
+            recorded.update(kwargs)
+            return _success()
+
+        monkeypatch.setattr(group_tools.workflows, "create_server_group", fake_create)
+
+        server = StubServer()
+        group_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+
+        await server.tools["create_server_group"](name="Kiosks", parent_server_group_id=1)
+
+        assert recorded.get("refresh_interval") is None
+
+    @pytest.mark.asyncio
+    async def test_update_server_group_rejects_notes_over_limit(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from fastmcp.exceptions import ToolError
+
+        recorded: list[dict[str, Any]] = []
+
+        async def fake_update(client, **kwargs):
+            recorded.append(kwargs)
+            return _success()
+
+        monkeypatch.setattr(group_tools.workflows, "update_server_group", fake_update)
+
+        server = StubServer()
+        group_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+
+        with pytest.raises(ToolError, match="notes"):
+            await server.tools["update_server_group"](
+                group_id=10, name="Prod", parent_server_group_id=1, notes="n" * 501
+            )
+        assert recorded == []
+
+        await server.tools["update_server_group"](
+            group_id=10, name="Prod", parent_server_group_id=1, notes="n" * 500, ui_color=""
+        )
+        assert recorded[0]["notes"] == "n" * 500
+        assert recorded[0]["ui_color"] == ""
+
+    def test_update_server_group_description_states_call_time_rules(self) -> None:
+        descriptions: dict[str, str] = {}
+
+        class DescribingServer(StubServer):
+            def tool(self, name: str, description: str = "", **kwargs: Any):
+                descriptions[name] = description
+                return super().tool(name, description, **kwargs)
+
+        group_tools.register(DescribingServer(), read_only=False, client=FakeClient(org_id=42))
+
+        description = descriptions["update_server_group"]
+        assert "Fields left unset keep the group's current values" in description
+        assert 'ui_color "" clears the color' in description
+        assert "DEVICE_OWNED_SETTINGS" in description
+
+    @pytest.mark.parametrize(("group_id", "parent_id"), [(30, 1), (40, 40)])
+    @pytest.mark.asyncio
+    async def test_update_server_group_without_parent_keeps_current_parent(
+        self, group_id: int, parent_id: int
+    ) -> None:
+        from conftest import StubClient
+
+        # (40, 40) is a default group: the API requires its parent to be its own id.
+        group = {
+            "id": group_id,
+            "name": "Workstations",
+            "parent_server_group_id": parent_id,
+            "refresh_interval": 240,
+            "ui_color": None,
+            "notes": "",
+            "policies": [],
+            "enable_os_auto_update": None,
+            "wsus_config": None,
+        }
+        client = StubClient(get_responses={f"/servergroups/{group_id}": [group]})
+        server = StubServer()
+        group_tools.register(server, read_only=False, client=client)
+
+        await server.tools["update_server_group"](group_id=group_id, name="Laptops")
+
+        method, path, body = client.calls[1]
+        assert (method, path) == ("PUT", f"/servergroups/{group_id}")
+        assert body["parent_server_group_id"] == parent_id
+
+    @pytest.mark.parametrize("policies", [[999], []])
+    @pytest.mark.asyncio
+    async def test_update_server_group_caller_policies_replace_stored_list(
+        self, policies: list[int]
+    ) -> None:
+        from conftest import StubClient
+
+        group = {
+            "id": 30,
+            "name": "Workstations",
+            "parent_server_group_id": 1,
+            "refresh_interval": 240,
+            "ui_color": None,
+            "notes": "",
+            "policies": [301, 302],
+            "enable_os_auto_update": None,
+            "wsus_config": None,
+        }
+        client = StubClient(get_responses={"/servergroups/30": [group]})
+        server = StubServer()
+        group_tools.register(server, read_only=False, client=client)
+
+        result = await server.tools["update_server_group"](
+            group_id=30, name="Workstations", policies=policies
+        )
+
+        assert client.calls[1][2]["policies"] == policies
+        assert result["data"]["policies"] == policies
+
+    @pytest.mark.asyncio
+    async def test_update_server_group_kept_value_refusal_reaches_caller(self) -> None:
+        from conftest import StubClient
+        from fastmcp.exceptions import ToolError
+
+        group = {
+            "id": 30,
+            "name": "Workstations",
+            "parent_server_group_id": 1,
+            "refresh_interval": 240,
+            "ui_color": "#FFF",
+            "notes": "",
+            "enable_os_auto_update": None,
+            "wsus_config": None,
+        }
+        client = StubClient(get_responses={"/servergroups/30": [group]})
+        server = StubServer()
+        group_tools.register(server, read_only=False, client=client)
+
+        with pytest.raises(ToolError) as excinfo:
+            await server.tools["update_server_group"](
+                group_id=30, name="Laptops", parent_server_group_id=1
+            )
+
+        message = str(excinfo.value)
+        assert "ui_color: the stored color is not #RRGGBB" in message
+        assert "internal error" not in message
+        assert [c[0] for c in client.calls] == ["GET"]
+
+    @pytest.mark.parametrize("color", ["#FFF", "red", ""])
+    @pytest.mark.asyncio
+    async def test_create_server_group_rejects_invalid_color(
+        self, monkeypatch: pytest.MonkeyPatch, color: str
+    ) -> None:
+        from fastmcp.exceptions import ToolError
+
+        recorded: list[dict[str, Any]] = []
+
+        async def fake_create(client, **kwargs):
+            recorded.append(kwargs)
+            return _success()
+
+        monkeypatch.setattr(group_tools.workflows, "create_server_group", fake_create)
+
+        server = StubServer()
+        group_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+
+        with pytest.raises(ToolError, match="ui_color"):
+            await server.tools["create_server_group"](
+                name="Kiosks", parent_server_group_id=1, ui_color=color
+            )
+        assert recorded == []
+
+    @pytest.mark.parametrize("color", ["#FFF", "red", "#00FF00x"])
+    @pytest.mark.asyncio
+    async def test_update_server_group_rejects_invalid_color(
+        self, monkeypatch: pytest.MonkeyPatch, color: str
+    ) -> None:
+        from fastmcp.exceptions import ToolError
+
+        recorded: list[dict[str, Any]] = []
+
+        async def fake_update(client, **kwargs):
+            recorded.append(kwargs)
+            return _success()
+
+        monkeypatch.setattr(group_tools.workflows, "update_server_group", fake_update)
+
+        server = StubServer()
+        group_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+
+        with pytest.raises(ToolError, match="ui_color"):
+            await server.tools["update_server_group"](
+                group_id=10, name="Prod", parent_server_group_id=1, ui_color=color
+            )
+        assert recorded == []
+
+    @pytest.mark.asyncio
+    async def test_update_server_group_device_owned_refusal_reaches_caller(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from fastmcp.exceptions import ToolError
+
+        from automox_mcp.client import AutomoxAPIError
+
+        # 422 body as the API returns it.
+        refusal = (
+            "This organization's devices own their settings, so a group save cannot "
+            "set them: refresh_interval. Use the Device Settings API instead."
+        )
+
+        async def fake_update(client, **kwargs):
+            raise AutomoxAPIError(
+                "automox API error",
+                status_code=422,
+                payload={"errors": [refusal], "code": "DEVICE_OWNED_SETTINGS"},
+            )
+
+        monkeypatch.setattr(group_tools.workflows, "update_server_group", fake_update)
+
+        server = StubServer()
+        group_tools.register(server, read_only=False, client=FakeClient(org_id=42))
+
+        with pytest.raises(ToolError) as excinfo:
+            await server.tools["update_server_group"](
+                group_id=10, name="Prod", refresh_interval=720, parent_server_group_id=1
+            )
+
+        message = str(excinfo.value)
+        assert "status=422" in message
+        assert "DEVICE_OWNED_SETTINGS" in message
+        assert "Use the Device Settings API instead." in message
+
+    @pytest.mark.asyncio
     async def test_delete_server_group_mixin_org_id_injected(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

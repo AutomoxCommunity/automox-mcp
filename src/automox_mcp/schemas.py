@@ -9,6 +9,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
+from .utils.group_rules import UI_COLOR_HEX, UPDATE_NOTES_MAX_LENGTH
+
 
 class ForbidExtraModel(BaseModel):
     """Base model that disallows unexpected parameters."""
@@ -669,12 +671,19 @@ class DeletePolicyToolParams(OrgIdContextMixin, ForbidExtraModel):
 
 class CreateServerGroupParams(ForbidExtraModel):
     name: str = Field(description="Group name")
-    refresh_interval: int = Field(description="Refresh interval in minutes", ge=1, le=525600)
+    refresh_interval: int | None = Field(
+        None,
+        description=(
+            "Refresh interval in minutes. Omit in an organization whose devices own their settings."
+        ),
+        ge=1,
+        le=525600,
+    )
     parent_server_group_id: int = Field(description="Parent group ID (required by API)")
     ui_color: str | None = Field(
         None,
         description="UI color for group",
-        pattern=r"^#[0-9a-fA-F]{6}$",
+        pattern=f"^{UI_COLOR_HEX}$",
     )
     notes: str | None = Field(None, description="Group notes")
     policies: list[int] | None = Field(None, description="Policy IDs to assign")
@@ -683,15 +692,30 @@ class CreateServerGroupParams(ForbidExtraModel):
 class UpdateServerGroupParams(ForbidExtraModel):
     group_id: int = Field(description="Server group ID")
     name: str = Field(description="Group name")
-    refresh_interval: int = Field(description="Refresh interval in minutes", ge=1, le=525600)
-    parent_server_group_id: int = Field(description="Parent group ID (required by API)")
+    refresh_interval: int | None = Field(
+        None,
+        description=(
+            "Refresh interval in minutes. Omit in an organization whose devices own their settings."
+        ),
+        ge=1,
+        le=525600,
+    )
+    parent_server_group_id: int | None = Field(
+        None, description="Parent group ID. Omit to keep the current parent."
+    )
     ui_color: str | None = Field(
         None,
-        description="UI color for group",
-        pattern=r"^#[0-9a-fA-F]{6}$",
+        description="UI color for group; an empty string clears it",
+        pattern=f"^({UI_COLOR_HEX})?$",
     )
-    notes: str | None = Field(None, description="Group notes")
-    policies: list[int] | None = Field(None, description="Policy IDs to assign")
+    notes: str | None = Field(None, description="Group notes", max_length=UPDATE_NOTES_MAX_LENGTH)
+    policies: list[int] | None = Field(
+        None,
+        description=(
+            "Full list of policy IDs for the group; it replaces the current list. "
+            "Omit to keep the current policies."
+        ),
+    )
 
 
 class ZoneAssignment(ForbidExtraModel):

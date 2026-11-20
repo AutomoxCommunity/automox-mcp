@@ -75,6 +75,11 @@ class _SettingValueFields(ForbidExtraModel):
     windows_update_source: WindowsUpdateSource | None = None
     wsus_server_url: str | None = Field(None, min_length=1, max_length=100)
 
+    @field_validator("wsus_server_url", mode="before")
+    @classmethod
+    def _strip_url(cls, value: Any) -> Any:
+        return value.strip() if isinstance(value, str) else value
+
     @model_validator(mode="after")
     def _check_setting_value(self) -> _SettingValueFields:
         workflows.build_setting_value(
@@ -151,13 +156,10 @@ class GetDeviceSettingValuesParams(OrgIdRequiredMixin, ForbidExtraModel):
 
 
 class ListDevicesBySettingValueParams(OrgIdRequiredMixin, _SettingValueFields):
+    # A server the organization already holds may be longer than a new one may be.
+    wsus_server_url: str | None = Field(None, min_length=1, max_length=2048)
     page: int = Field(0, ge=0)
     limit: int = Field(50, ge=1, le=_MAX_PAGE_LIMIT)
-
-
-def _with_org_id(params: dict[str, Any], org_id: int | None) -> dict[str, Any]:
-    # An absent org_id falls back to the client's organization.
-    return params if org_id is None else {**params, "org_id": org_id}
 
 
 def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient) -> None:
@@ -252,7 +254,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         return await call_tool_workflow(
             client,
             workflows.get_device_setting_values,
-            _with_org_id({"setting": setting}, org_id),
+            {"setting": setting, "org_id": org_id},
             params_model=GetDeviceSettingValuesParams,
         )
 
@@ -290,6 +292,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         org_id: int | None = None,
     ) -> dict[str, Any]:
         params = {
+            "org_id": org_id,
             "setting": setting,
             "interval_minutes": interval_minutes,
             "os_auto_update": os_auto_update,
@@ -301,7 +304,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         return await call_tool_workflow(
             client,
             workflows.list_devices_by_setting_value,
-            _with_org_id(params, org_id),
+            params,
             params_model=ListDevicesBySettingValueParams,
         )
 
@@ -316,15 +319,20 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "for new values); os-auto-update takes os_auto_update ENABLED, DISABLED "
             "or KEEP (leave the device's own setting); windows-update-source takes "
             "windows_update_source KEEP, WINDOWS_UPDATE or WSUS (with "
-            "wsus_server_url, at most 100 characters; a new server is added to the "
-            "organization's values). add_device_uuids get the value; devices in the "
+            "wsus_server_url, at most 100 characters; copy serverUrl exactly from "
+            "get_device_setting_values, since a server not in that list is added to the "
+            "organization's values for good). add_device_uuids get the value; devices in the "
             "optional remove_device_uuids that have this value go back to the "
             "organization's default. The newest job for a setting wins on every "
-            "device it shares with an earlier job. Returns a jobId: poll "
+            "device it shares with an earlier job. A job does not keep the devices' "
+            "earlier values: take add_device_uuids from one list_devices_by_setting_value "
+            "listing, so they all share one earlier value and one job with that value "
+            "undoes it. Returns a jobId: poll "
             "get_device_settings_job. Use the org_uuid of the organization the devices "
             "were listed in. If the call fails with no clear result, a job may exist: "
-            "follow the error's checks before sending it again (a resend with the same "
-            "request_id is answered with unclear: true and not sent). " + _OWNERSHIP_NOTE
+            "follow the error's checks, then send it with a new request_id (a resend "
+            "with the same request_id is answered with unclear: true, or duplicate: "
+            "true while the first call still runs, and is not sent). " + _OWNERSHIP_NOTE
         ),
         annotations={
             "readOnlyHint": False,
@@ -357,15 +365,17 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "add_device_uuids": add_device_uuids,
             "remove_device_uuids": remove_device_uuids,
         }
-        sent = False
+        job_may_exist = False
 
         async def create(client: AutomoxClient, **payload: Any) -> dict[str, Any]:
-            nonlocal sent
+            nonlocal job_may_exist
             try:
-                return await workflows.create_device_settings_job(client, **payload)
+                job = await workflows.create_device_settings_job(client, **payload)
             except (workflows.UnclearJobCreateError, asyncio.CancelledError):
-                sent = True
+                job_may_exist = True
                 raise
+            job_may_exist = True
+            return job
 
         try:
             result = await call_tool_workflow(
@@ -379,7 +389,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         except BaseException:
             # The job may exist: answer a resend with this request_id by saying so
             # (for the cache's lifetime in this process) instead of sending it again.
-            if sent:
+            if job_may_exist:
                 await store_idempotency(request_id, "create_device_settings_job", _UNCLEAR_REPLAY)
             else:
                 await release_idempotency(request_id, "create_device_settings_job")

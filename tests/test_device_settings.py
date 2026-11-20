@@ -424,10 +424,203 @@ async def test_group_create_other_error_unchanged() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Per-value reads
+# ---------------------------------------------------------------------------
+
+READ_BASE = "/orgs/42/device-settings"
+WSUS_URL = "http://wsus.example.test:8530"
+
+SCAN_INTERVAL_VALUES = {
+    "defaultIntervalMinutes": 1440,
+    "values": [
+        {
+            "intervalMinutes": 720,
+            "deviceCount": 0,
+            "dateUpdated": "2026-11-11T23:37:12Z",
+            "isDefault": False,
+        },
+        {
+            "intervalMinutes": 1440,
+            "deviceCount": 3,
+            "dateUpdated": "2026-11-12T18:17:22Z",
+            "isDefault": True,
+        },
+    ],
+}
+
+OS_PATCH_VALUES = {
+    "defaults": {"osAutoUpdate": {"state": "KEEP"}, "windowsUpdateSource": {"state": "KEEP"}},
+    "osAutoUpdate": [
+        {"value": {"state": "KEEP"}, "deviceCount": 3, "dateUpdated": None, "isDefault": True},
+    ],
+    "windowsUpdateSource": [
+        {"value": {"state": "KEEP"}, "deviceCount": 2, "dateUpdated": None, "isDefault": True},
+    ],
+    "wsusServers": [
+        {
+            "serverUrl": WSUS_URL,
+            "valueKey": WSUS_URL,
+            "deviceCount": 1,
+            "dateUpdated": "2026-11-12T18:19:05Z",
+            "isDefault": False,
+        },
+    ],
+}
+
+
+def _device_page(total: int, page: int, limit: int) -> dict[str, Any]:
+    return {
+        "data": [
+            {
+                "id": 1001,
+                "uuid": DEVICE_A,
+                "name": "host-a",
+                "ipAddress": "",
+                "isOnline": False,
+                "osFamily": "Windows",
+                "osName": "10 Enterprise",
+                "group": {"id": 7, "name": "", "color": "#059F1D"},
+                "tags": [],
+                "osAutoUpdate": {"state": "KEEP"},
+                "windowsUpdateSource": {"managed": True, "serverUrl": WSUS_URL},
+            }
+        ],
+        "total": total,
+        "page": page,
+        "limit": limit,
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("setting", "path", "payload"),
+    [
+        ("scan-interval", f"{READ_BASE}/scan-interval", SCAN_INTERVAL_VALUES),
+        ("os-auto-update", f"{READ_BASE}/os-patch", OS_PATCH_VALUES),
+        ("windows-update-source", f"{READ_BASE}/os-patch", OS_PATCH_VALUES),
+    ],
+)
+async def test_get_values_reads_route_for_setting(setting: str, path: str, payload: Any) -> None:
+    client = StubClient(get_responses={path: [payload]})
+    result = await workflows.get_device_setting_values(client, org_id=42, setting=setting)  # type: ignore[arg-type]
+    assert client.calls == [("GET", path, None)]
+    assert result["data"] == payload
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("kwargs", "path", "params"),
+    [
+        (
+            {"setting": "scan-interval", "interval_minutes": 720},
+            f"{READ_BASE}/scan-interval/720/devices",
+            {"page": 0, "limit": 100},
+        ),
+        (
+            {"setting": "os-auto-update", "os_auto_update": "ENABLED"},
+            f"{READ_BASE}/os-patch/os-auto-update/enabled/devices",
+            {"page": 0, "limit": 100},
+        ),
+        (
+            {"setting": "windows-update-source", "windows_update_source": "WINDOWS_UPDATE"},
+            f"{READ_BASE}/os-patch/windows-update-source/windows-update/devices",
+            {"page": 0, "limit": 100},
+        ),
+        (
+            {
+                "setting": "windows-update-source",
+                "windows_update_source": "WSUS",
+                "wsus_server_url": WSUS_URL,
+            },
+            f"{READ_BASE}/os-patch/windows-update-source/wsus/devices",
+            {"page": 0, "limit": 100, "server": WSUS_URL},
+        ),
+    ],
+)
+async def test_list_devices_builds_path_for_value(
+    kwargs: dict[str, Any], path: str, params: dict[str, Any]
+) -> None:
+    client = StubClient(get_responses={path: [_device_page(1, 0, 100)]})
+    result = await workflows.list_devices_by_setting_value(client, org_id=42, **kwargs)  # type: ignore[arg-type]
+    assert client.calls == [("GET", path, params)]
+    assert result["data"]["devices"][0]["uuid"] == DEVICE_A
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("total", "page", "limit", "complete"),
+    [(5, 0, 2, False), (5, 2, 2, True), (4, 1, 2, True), (0, 0, 100, True)],
+)
+async def test_list_devices_reports_completion(
+    total: int, page: int, limit: int, complete: bool
+) -> None:
+    path = f"{READ_BASE}/scan-interval/1440/devices"
+    client = StubClient(get_responses={path: [_device_page(total, page, limit)]})
+    result = await workflows.list_devices_by_setting_value(
+        client,  # type: ignore[arg-type]
+        org_id=42,
+        setting="scan-interval",
+        interval_minutes=1440,
+        page=page,
+        limit=limit,
+    )
+    assert result["metadata"] == {
+        "total": total,
+        "page": page,
+        "limit": limit,
+        "complete": complete,
+    }
+
+
+@pytest.mark.asyncio
+async def test_list_devices_unknown_value_keeps_code() -> None:
+    exc = AutomoxAPIError(
+        "automox API error",
+        404,
+        {
+            "errors": ["This scan interval is not configured for the organization."],
+            "code": "VALUE_NOT_FOUND",
+        },
+    )
+    with pytest.raises(AutomoxAPIError) as info:
+        await workflows.list_devices_by_setting_value(
+            RaisingClient(exc),  # type: ignore[arg-type]
+            org_id=42,
+            setting="scan-interval",
+            interval_minutes=9999,
+        )
+    assert "[code=VALUE_NOT_FOUND, retry=no]" in str(info.value)
+    assert "get_device_setting_values" in str(info.value)
+
+
+@pytest.mark.asyncio
+async def test_get_values_group_owned_org_points_to_group_tool() -> None:
+    exc = AutomoxAPIError(
+        "automox API error",
+        409,
+        {
+            "errors": ["This organization's devices do not own their settings."],
+            "code": "ORG_NOT_DEVICE_OWNED",
+        },
+    )
+    with pytest.raises(AutomoxAPIError, match="update_server_group"):
+        await workflows.get_device_setting_values(
+            RaisingClient(exc),  # type: ignore[arg-type]
+            org_id=42,
+            setting="scan-interval",
+        )
+
+
+# ---------------------------------------------------------------------------
 # Tools: registration and parameter validation
 # ---------------------------------------------------------------------------
 
-_READ_TOOLS = {"list_device_settings_jobs", "get_device_settings_job"}
+_READ_TOOLS = {
+    "list_device_settings_jobs",
+    "get_device_settings_job",
+    "get_device_setting_values",
+    "list_devices_by_setting_value",
+}
 _WRITE_TOOLS = {
     "create_device_settings_job",
     "cancel_device_settings_job",
@@ -463,6 +656,8 @@ def recorded(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         "list_device_settings_jobs",
         "cancel_device_settings_job",
         "add_device_setting_value",
+        "get_device_setting_values",
+        "list_devices_by_setting_value",
     ):
         monkeypatch.setattr(device_settings_tools.workflows, name, fake(name))
     return calls
@@ -562,3 +757,44 @@ async def test_add_value_tool_validation(
         with pytest.raises(ToolError):
             await server.tools["add_device_setting_value"](**kwargs)
         assert "add_device_setting_value" not in recorded
+
+
+@pytest.mark.asyncio
+async def test_value_read_tools_use_client_org_id(recorded: dict[str, Any]) -> None:
+    server = _register()
+    await server.tools["get_device_setting_values"](setting="os-auto-update")
+    await server.tools["list_devices_by_setting_value"](
+        setting="windows-update-source",
+        windows_update_source="WSUS",
+        wsus_server_url=WSUS_URL,
+        page=2,
+        limit=500,
+    )
+    assert recorded["get_device_setting_values"] == {"org_id": 42, "setting": "os-auto-update"}
+    assert recorded["list_devices_by_setting_value"] == {
+        "org_id": 42,
+        "setting": "windows-update-source",
+        "windows_update_source": "WSUS",
+        "wsus_server_url": WSUS_URL,
+        "page": 2,
+        "limit": 500,
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"setting": "scan-interval", "interval_minutes": 1440, "limit": 501},
+        {"setting": "scan-interval", "interval_minutes": 1440, "page": -1},
+        {"setting": "scan-interval"},
+        {"setting": "windows-update-source", "windows_update_source": "WSUS"},
+        {"setting": "os-auto-update", "os_auto_update": "KEEP", "interval_minutes": 60},
+    ],
+)
+async def test_list_devices_tool_rejects_bad_input(
+    recorded: dict[str, Any], kwargs: dict[str, Any]
+) -> None:
+    with pytest.raises(ToolError):
+        await _register().tools["list_devices_by_setting_value"](**kwargs)
+    assert "list_devices_by_setting_value" not in recorded

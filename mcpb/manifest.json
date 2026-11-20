@@ -4,7 +4,7 @@
   "display_name": "Automox",
   "version": "2.2.10",
   "description": "Talk to your Automox console in natural language. Manage devices, patches, and policies.",
-  "long_description": "The official Automox MCP server, packaged as a Claude Desktop Extension. Connects Claude to your Automox environment so you can manage devices, check compliance posture, run policies, prepare for Patch Tuesday, browse the worklet catalog, drive Splashtop remote-control sessions, and more \u2014 all by asking. Exposes 138 MCP tools across 19 domains (devices, policies, patches, groups, webhooks, worklets, vulnerability sync, audit, reports, Splashtop remote control, and more), 14 MCP resources (including interactive MCP App UIs for compliance triage, patch-approval review, policy blast-radius review, remediation-apply review, and RBAC access certification), and 6 workflow prompts (audit_policy, investigate_device, onboard_group, patch_tuesday, security_posture, triage_failure). Read-only mode and modular tool loading are supported via optional configuration.",
+  "long_description": "The official Automox MCP server, packaged as a Claude Desktop Extension. Connects Claude to your Automox environment so you can manage devices, check compliance posture, run policies, prepare for Patch Tuesday, browse the worklet catalog, drive Splashtop remote-control sessions, and more \u2014 all by asking. Exposes 140 MCP tools across 19 domains (devices, policies, patches, groups, webhooks, worklets, vulnerability sync, audit, reports, Splashtop remote control, and more), 14 MCP resources (including interactive MCP App UIs for compliance triage, patch-approval review, policy blast-radius review, remediation-apply review, and RBAC access certification), and 6 workflow prompts (audit_policy, investigate_device, onboard_group, patch_tuesday, security_posture, triage_failure). Read-only mode and modular tool loading are supported via optional configuration.",
   "author": {
     "name": "Automox",
     "url": "https://www.automox.com"
@@ -73,7 +73,7 @@
     "read_only": {
       "type": "boolean",
       "title": "Read-only mode",
-      "description": "Disable all 51 write operations. 87 read tools remain available. Recommended for auditing and exploration.",
+      "description": "Disable all 51 write operations. 89 read tools remain available. Recommended for auditing and exploration.",
       "default": false,
       "required": false
     }
@@ -296,6 +296,10 @@
       "description": "Upcoming maintenance periods for a device"
     },
     {
+      "name": "get_device_setting_values",
+      "description": "An organization's setting values with device counts"
+    },
+    {
       "name": "get_device_settings_job",
       "description": "Status and outcome counts of a settings job"
     },
@@ -378,6 +382,10 @@
     {
       "name": "list_devices",
       "description": "List devices with per-device detail"
+    },
+    {
+      "name": "list_devices_by_setting_value",
+      "description": "Devices that hold one setting value"
     },
     {
       "name": "list_devices_for_policies",

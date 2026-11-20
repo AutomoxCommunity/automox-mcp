@@ -1,12 +1,12 @@
 # Tool Reference
 
-Complete reference for all 138 tools, 6 workflow prompts, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
+Complete reference for all 140 tools, 6 workflow prompts, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
 
 ## At a Glance
 
 | Capability | Scope |
 |---|---|
-| **Tools** | **138** — 87 read, 51 write — across **19 domains** |
+| **Tools** | **140** — 89 read, 51 write — across **19 domains** |
 | **API coverage** | **100%** of the published Automox Console API and Webhooks API ([coverage map](api-coverage.md)), with one deliberate exception: secret-exposing endpoints are never wrapped |
 | **Interactive MCP Apps** | **5** inline UI surfaces — compliance triage, patch-approval review, policy blast-radius review, remediation apply, RBAC access certification |
 | **MCP resources** | **14** — 9 reference datasets and schemas, plus the 5 App UIs |
@@ -25,7 +25,7 @@ Complete reference for all 138 tools, 6 workflow prompts, MCP resources, paramet
 - [Policy History v2 (7 tools)](#policy-history-v2-7-tools)
 - [Package Management (2 tools)](#package-management-2-tools)
 - [Group Management (5 tools)](#group-management-5-tools)
-- [Device Settings (5 tools)](#device-settings-5-tools)
+- [Device Settings (7 tools)](#device-settings-7-tools)
 - [Webhook Management (9 tools)](#webhook-management-9-tools)
 - [Worklet Catalog (2 tools)](#worklet-catalog-2-tools)
 - [Data Extracts (3 tools)](#data-extracts-3-tools)
@@ -127,10 +127,12 @@ Richer policy execution reporting via the `/policy-history` API with UUID-based 
 - **`update_server_group`** - Update an existing server group. Fields left unset keep the group's current values (parent, refresh interval, color, notes, policies, OS auto update, WSUS) instead of being cleared. If a kept color or notes value fails the update rules (`#RRGGBB`, notes at most 500 characters, less than create allows), the error names the field, the stored notes length, and what to pass instead (an empty string clears either). Pass `ui_color` `""` to clear the color. WSUS is kept unless it is on with a blank stored server, or the stored server is longer than the 100 characters an update accepts; then it is reset (or the server dropped), with a warning in the result. In an organization whose devices own their settings, omit `refresh_interval`; the API rejects a save that changes it (`DEVICE_OWNED_SETTINGS`); change it per device with `create_device_settings_job`.
 - **`delete_server_group`** - Delete a server group permanently.
 
-## Device Settings (5 tools)
+## Device Settings (7 tools)
 
-In an organization whose devices own their settings, the scan interval, OS auto update and Windows update source are set per device, not on server groups (server groups there read `refresh_interval` as null, and a group save that changes these settings is refused with `DEVICE_OWNED_SETTINGS`). These tools change them through apply jobs. In an organization whose settings are managed on server groups they return `ORG_NOT_DEVICE_OWNED`; use `update_server_group` there. Errors carry the API's `code` and whether retrying can help.
+In an organization whose devices own their settings, the scan interval, OS auto update and Windows update source are set per device, not on server groups (server groups there read `refresh_interval` as null, and a group save that changes these settings is refused with `DEVICE_OWNED_SETTINGS`). These tools read which devices hold which value, and change them through apply jobs. In an organization whose settings are managed on server groups they return `ORG_NOT_DEVICE_OWNED`; use `update_server_group` there. Errors carry the API's `code` and whether retrying can help.
 
+- **`get_device_setting_values`** - Read the organization's values for a setting, each with its device count, and the default. `scan-interval` returns intervals in minutes; `os-auto-update` or `windows-update-source` returns both OS patch settings and the WSUS servers.
+- **`list_devices_by_setting_value`** - List one page of the devices that hold one value (`page` from 0, `limit` up to 500, default 100), with each device's `uuid` and current values. The value is given the same way as in `create_device_settings_job`. A value or WSUS server that is not one of the organization's values returns `VALUE_NOT_FOUND`. Page until `metadata.complete` is true.
 - **`list_device_settings_jobs`** - List the apply jobs still in progress (pending, running, or cancelled and still finishing), newest first, including jobs created in the console. Finished jobs are not listed; read them by id. Page with `cursor` until `metadata.complete` is true.
 - **`get_device_settings_job`** - Read one job: status, and per half (`add`, `remove`) the value, the device count and the outcome counts (`applied`, `superseded`, `notInOrg`, `gone`, `notApplicable`, `failed`).
 - **`create_device_settings_job`** - Set one setting on 1 to 500 devices: `scan-interval` (`interval_minutes`), `os-auto-update` (`ENABLED`, `DISABLED` or `KEEP`) or `windows-update-source` (`KEEP`, `WINDOWS_UPDATE`, or `WSUS` with `wsus_server_url`). Devices in the optional `remove_device_uuids` that have this value go back to the organization's default. The newest job for a setting wins on every device it shares with an earlier one. A create that fails with no clear result may still have created its job, so check the job list before sending it again.

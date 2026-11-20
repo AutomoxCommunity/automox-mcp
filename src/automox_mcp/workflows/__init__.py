@@ -82,8 +82,10 @@ from .device_settings import (
     build_setting_value,
     cancel_device_settings_job,
     create_device_settings_job,
+    get_device_setting_values,
     get_device_settings_job,
     list_device_settings_jobs,
+    list_devices_by_setting_value,
 )
 from .devices import (
     batch_update_devices,
@@ -353,6 +355,8 @@ __all__ = [
     "build_setting_value",
     "cancel_device_settings_job",
     "create_device_settings_job",
+    "get_device_setting_values",
     "get_device_settings_job",
     "list_device_settings_jobs",
+    "list_devices_by_setting_value",
 ]

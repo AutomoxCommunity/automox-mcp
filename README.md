@@ -159,7 +159,7 @@ Applies only to self-hosted 2.x servers. Not applicable to the hosted 3.0+ serve
 | `AUTOMOX_API_KEY` | Yes | — | Automox API key (org-scoped recommended — see [key types](#1-get-your-automox-credentials)) |
 | `AUTOMOX_ACCOUNT_UUID` | Yes | — | Account UUID from Secrets & Keys |
 | `AUTOMOX_ORG_ID` | Recommended | — | Numeric organization ID (required by most tools) |
-| `AUTOMOX_MCP_READ_ONLY` | No | `false` | Disable all write operations (87 of 138 tools remain) |
+| `AUTOMOX_MCP_READ_ONLY` | No | `false` | Disable all write operations (89 of 140 tools remain) |
 | `AUTOMOX_MCP_ALLOW_APPLY_REMEDIATION_ACTIONS` | No | `false` | Opt in to the `apply_remediation_actions` tool, which patches/runs worklets on endpoints immediately. Off by default even in write mode. |
 | `AUTOMOX_MCP_ALLOW_SPLASHTOP_BULK_INSTALL_UNINSTALL` | No | `false` | Opt in to the `splashtop_bulk_install_uninstall` tool, which installs/uninstalls the Splashtop client across an entire server group in one call. Off by default even in write mode. |
 | `AUTOMOX_MCP_ALLOW_DELETE_DEVICE` | No | `false` | Opt in to the `delete_device` tool, which permanently deletes a device record and its history (`DELETE /servers/{id}`). Irreversible and not reconstructable through the MCP. Off by default even in write mode. |
@@ -193,7 +193,7 @@ Applies only to self-hosted 2.x servers. Not applicable to the hosted 3.0+ serve
 AUTOMOX_MCP_READ_ONLY=true
 ```
 
-Disables all write operations. Only read-only tools are registered (87 of 138). Useful for auditing and monitoring.
+Disables all write operations. Only read-only tools are registered (89 of 140). Useful for auditing and monitoring.
 
 ### Modular Loading
 

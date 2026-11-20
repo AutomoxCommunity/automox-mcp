@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Device settings tools for organizations whose devices own their settings.** There, the scan interval, OS auto update and Windows update source are set per device, and a server-group save that changes them is refused (`DEVICE_OWNED_SETTINGS`). Five tools cover the Device Settings API: `create_device_settings_job` sets one setting on 1 to 500 devices as a background job (with an optional `remove` half that sets devices back to the organization's default), `get_device_settings_job` and `list_device_settings_jobs` read job status and outcome counts, `cancel_device_settings_job` stops a job, and `add_device_setting_value` adds a scan interval or WSUS server to the organization's list. Device lists are checked locally the way the API checks them and are never split into several jobs. A job create that ends with no clear result is not retried, and the error says to check the job list before sending it again. Errors carry the API's `code` and whether retrying can help; in an organization whose settings are managed on server groups the tools answer `ORG_NOT_DEVICE_OWNED` and point to `update_server_group`. The tool count is now 138 (87 read, 51 write) across 19 domains.
+
+### Changed
+
+- **`create_server_group` and `update_server_group` point a `DEVICE_OWNED_SETTINGS` refusal at `create_device_settings_job`.** The error and the tool descriptions now say to leave these settings out of the group save and change them per device.
+
 ### Security
 
 - **The published package now declares floors for `mcp` (`>=1.30.0`, excluding 2.0 and 2.1), `authlib` (`>=1.9.1`) and `pyjwt` (`>=2.15.0`).** All three were already installed through `fastmcp-slim[server]`, and the server imports `mcp` directly. fastmcp-slim 3.x still accepts the vulnerable versions, so an environment that stays on it (for example an upgrade without `--upgrade-strategy eager`) could keep them; declaring the floors in `[project].dependencies` makes installs of this package pull the fixed versions, not only re-locks of this repo.

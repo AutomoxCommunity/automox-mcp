@@ -12,7 +12,7 @@ from pydantic import Field, field_validator, model_validator
 
 from .. import workflows
 from ..client import AutomoxClient
-from ..schemas import ForbidExtraModel
+from ..schemas import ForbidExtraModel, OrgIdRequiredMixin
 from ..utils.tooling import (
     call_tool_workflow,
     check_idempotency,
@@ -113,6 +113,31 @@ class AddDeviceSettingValueParams(ForbidExtraModel):
         return self
 
 
+class GetDeviceSettingValuesParams(OrgIdRequiredMixin, ForbidExtraModel):
+    setting: SettingName
+
+
+class ListDevicesBySettingValueParams(OrgIdRequiredMixin, ForbidExtraModel):
+    setting: SettingName
+    interval_minutes: int | None = Field(None, ge=1)
+    os_auto_update: Literal["ENABLED", "DISABLED", "KEEP"] | None = None
+    windows_update_source: Literal["KEEP", "WINDOWS_UPDATE", "WSUS"] | None = None
+    wsus_server_url: str | None = Field(None, min_length=1, max_length=100)
+    page: int = Field(0, ge=0)
+    limit: int = Field(100, ge=1, le=_MAX_DEVICES)
+
+    @model_validator(mode="after")
+    def _check_value(self) -> ListDevicesBySettingValueParams:
+        workflows.build_setting_value(
+            self.setting,
+            interval_minutes=self.interval_minutes,
+            os_auto_update=self.os_auto_update,
+            windows_update_source=self.windows_update_source,
+            wsus_server_url=self.wsus_server_url,
+        )
+        return self
+
+
 async def _create_job(client: AutomoxClient, **params: Any) -> dict[str, Any]:
     value = workflows.build_setting_value(
         params["setting"],
@@ -186,6 +211,75 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             params_model=DeviceSettingsJobParams,
             org_uuid_field="org_uuid",
             dump_mode="json",
+        )
+
+    @server.tool(
+        name="get_device_setting_values",
+        description=(
+            "Read the values an organization has for a device setting, each with how "
+            "many devices hold it, and which value is the default. setting=scan-interval "
+            "returns intervals in minutes; os-auto-update or windows-update-source "
+            "returns both OS patch settings and the WSUS servers. Use a value from here "
+            "in list_devices_by_setting_value or create_device_settings_job. " + _OWNERSHIP_NOTE
+        ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
+    )
+    async def get_device_setting_values(
+        setting: SettingName,
+    ) -> dict[str, Any]:
+        return await call_tool_workflow(
+            client,
+            workflows.get_device_setting_values,
+            {"setting": setting},
+            params_model=GetDeviceSettingValuesParams,
+        )
+
+    @server.tool(
+        name="list_devices_by_setting_value",
+        description=(
+            "List the devices that hold one value of a device setting, one page at a "
+            "time (page from 0, limit up to 500, default 100). Give the value the same "
+            "way as create_device_settings_job: interval_minutes, os_auto_update, or "
+            "windows_update_source (with wsus_server_url for WSUS). Each device carries "
+            "its uuid, for use in create_device_settings_job, and its current values. "
+            "A value or WSUS server that is not one of the organization's values "
+            "returns VALUE_NOT_FOUND. Page until metadata.complete is true. " + _OWNERSHIP_NOTE
+        ),
+        annotations={
+            "readOnlyHint": True,
+            "destructiveHint": False,
+            "idempotentHint": True,
+            "openWorldHint": True,
+        },
+    )
+    async def list_devices_by_setting_value(
+        setting: SettingName,
+        interval_minutes: int | None = None,
+        os_auto_update: Literal["ENABLED", "DISABLED", "KEEP"] | None = None,
+        windows_update_source: Literal["KEEP", "WINDOWS_UPDATE", "WSUS"] | None = None,
+        wsus_server_url: str | None = None,
+        page: int = 0,
+        limit: int = 100,
+    ) -> dict[str, Any]:
+        params = {
+            "setting": setting,
+            "interval_minutes": interval_minutes,
+            "os_auto_update": os_auto_update,
+            "windows_update_source": windows_update_source,
+            "wsus_server_url": wsus_server_url,
+            "page": page,
+            "limit": limit,
+        }
+        return await call_tool_workflow(
+            client,
+            workflows.list_devices_by_setting_value,
+            params,
+            params_model=ListDevicesBySettingValueParams,
         )
 
     if read_only:

@@ -14,6 +14,13 @@ from urllib.parse import quote
 from ..client import AutomoxAPIError, AutomoxClient
 
 _BASE = "/organizations/{org_uuid}/scan/device-settings"
+_READ_BASE = "/orgs/{org_id}/device-settings"
+
+# Value -> path slug of the per-value device list under os-patch.
+_OS_PATCH_SLUGS: dict[str, dict[str, str]] = {
+    "os-auto-update": {"KEEP": "keep", "DISABLED": "disabled", "ENABLED": "enabled"},
+    "windows-update-source": {"KEEP": "keep", "WINDOWS_UPDATE": "windows-update", "WSUS": "wsus"},
+}
 
 # Error code -> (retry class, what the caller should do). Codes and retry classes
 # follow the API's ErrorCode table.
@@ -34,6 +41,11 @@ _ERROR_GUIDANCE: dict[str, tuple[str, str]] = {
         "action",
         "The organization is deleted or locked. Ask an Automox administrator or "
         "support which; send again once a locked organization is unlocked.",
+    ),
+    "VALUE_NOT_FOUND": (
+        "no",
+        "The value, or the WSUS server, is not one of the organization's values; "
+        "read them with get_device_setting_values.",
     ),
     "ORG_NOT_OPEN": (
         "yes",
@@ -258,11 +270,67 @@ async def add_device_setting_value(
     return {"data": result, "metadata": {}}
 
 
+async def get_device_setting_values(
+    client: AutomoxClient, *, org_id: int, setting: str
+) -> dict[str, Any]:
+    """Read the organization's values for *setting*, each with its device count."""
+    group = "scan-interval" if setting == "scan-interval" else "os-patch"
+    try:
+        result = await client.get(f"{_READ_BASE.format(org_id=org_id)}/{group}")
+    except AutomoxAPIError as exc:
+        raise _with_guidance(exc) from exc
+    return {"data": result, "metadata": {}}
+
+
+async def list_devices_by_setting_value(
+    client: AutomoxClient,
+    *,
+    org_id: int,
+    setting: str,
+    interval_minutes: int | None = None,
+    os_auto_update: str | None = None,
+    windows_update_source: str | None = None,
+    wsus_server_url: str | None = None,
+    page: int = 0,
+    limit: int = 100,
+) -> dict[str, Any]:
+    """List one page of the devices that hold one value of *setting*."""
+    value = build_setting_value(
+        setting,
+        interval_minutes=interval_minutes,
+        os_auto_update=os_auto_update,
+        windows_update_source=windows_update_source,
+        wsus_server_url=wsus_server_url,
+    )
+    base = _READ_BASE.format(org_id=org_id)
+    params: dict[str, Any] = {"page": page, "limit": limit}
+    if setting == "scan-interval":
+        path = f"{base}/scan-interval/{value['intervalMinutes']}/devices"
+    else:
+        chosen = os_auto_update if setting == "os-auto-update" else windows_update_source
+        path = f"{base}/os-patch/{setting}/{_OS_PATCH_SLUGS[setting][str(chosen)]}/devices"
+        if wsus_server_url is not None:
+            params["server"] = wsus_server_url
+    try:
+        result = await client.get(path, params=params)
+    except AutomoxAPIError as exc:
+        raise _with_guidance(exc) from exc
+    devices = result.get("data", []) if isinstance(result, Mapping) else []
+    total = result.get("total") if isinstance(result, Mapping) else None
+    complete = not isinstance(total, int) or (page + 1) * limit >= total
+    return {
+        "data": {"devices": devices},
+        "metadata": {"total": total, "page": page, "limit": limit, "complete": complete},
+    }
+
+
 __all__ = [
     "add_device_setting_value",
     "build_setting_value",
     "cancel_device_settings_job",
     "create_device_settings_job",
+    "get_device_setting_values",
     "get_device_settings_job",
     "list_device_settings_jobs",
+    "list_devices_by_setting_value",
 ]

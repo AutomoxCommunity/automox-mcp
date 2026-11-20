@@ -698,6 +698,43 @@ async def run_readonly_tools() -> None:
         )
         record("get_device_settings_job", resp is _TOLERATED, "unknown id -> 404 expected")
 
+        # 19c. get_device_setting_values — a group-owned organization answers 409
+        # ORG_NOT_DEVICE_OWNED; a device-owned one must list values with the default.
+        resp = await _safe_call(
+            session, "get_device_setting_values", {"setting": "scan-interval"}, tolerate=(409,)
+        )
+        values = resp.get("data", {}).get("values") if isinstance(resp, dict) else None
+        default = (
+            resp.get("data", {}).get("defaultIntervalMinutes") if isinstance(resp, dict) else None
+        )
+        record(
+            "get_device_setting_values",
+            resp is _TOLERATED or (isinstance(values, list) and isinstance(default, int)),
+            "group-owned -> 409" if resp is _TOLERATED else f"values={values} default={default}",
+        )
+
+        # 19d. list_devices_by_setting_value — in a device-owned organization every
+        # device listed under the default interval must report that interval.
+        resp = await _safe_call(
+            session,
+            "list_devices_by_setting_value",
+            {"setting": "scan-interval", "interval_minutes": default or 1440, "limit": 5},
+            tolerate=(409,),
+        )
+        devices = resp.get("data", {}).get("devices") if isinstance(resp, dict) else None
+        record(
+            "list_devices_by_setting_value",
+            resp is _TOLERATED
+            or (
+                isinstance(devices, list)
+                and all(d.get("scanIntervalMinutes") == (default or 1440) for d in devices)
+                and isinstance(resp.get("metadata", {}).get("complete"), bool)
+            ),
+            "group-owned -> 409"
+            if resp is _TOLERATED
+            else f"devices={len(devices) if isinstance(devices, list) else None}",
+        )
+
         # ---- Events ----
         # 20. list_events — assert count_only CORRECTNESS, not just 200. The bug:
         # snake_case `count_only` was an unknown param the API ignored, so a

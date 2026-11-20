@@ -87,6 +87,8 @@ _DOMAIN_CATALOG: dict[str, list[tuple[str, str]]] = {
         ("delete_server_group", "Delete a server group"),
     ],
     "device_settings": [
+        ("get_device_setting_values", "An organization's setting values with device counts"),
+        ("list_devices_by_setting_value", "Devices that hold one setting value"),
         ("list_device_settings_jobs", "Device settings apply jobs in progress"),
         ("get_device_settings_job", "Status and outcome counts of a settings job"),
         ("create_device_settings_job", "Set scan interval, OS auto update or WSUS on devices"),

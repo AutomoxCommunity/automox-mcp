@@ -169,7 +169,12 @@ In an organization whose devices own their settings, the scan interval, OS auto 
 
 Selections are validated locally the way the API does (1 to 500 distinct RFC 9562 device UUIDs per half, no device in both halves) and are never split into several jobs, because the newest job for a setting wins on every device it shares with an earlier one. A job create that ends with no clear result (no response, 500 or 503) may have created its job, so it is not retried and the error says to check the job list first.
 
-Not wrapped yet: reading which value each device has. The API reports outcome counts per job, not per device.
+Reading which value each device holds is not part of the Device Settings API; two Console API routes that are not in the published spec cover it. Both were verified live with an API key, and answer `ORG_NOT_DEVICE_OWNED` (409) in an organization whose settings are managed on server groups:
+
+| Operation | Tool | Tier |
+|---|---|---|
+| `GET /orgs/{orgId}/device-settings/scan-interval`, `GET /orgs/{orgId}/device-settings/os-patch` | `get_device_setting_values` | Read |
+| `GET /orgs/{orgId}/device-settings/scan-interval/{minutes}/devices`, `GET /orgs/{orgId}/device-settings/os-patch/{setting}/{value}/devices` (`server` for a WSUS server) | `list_devices_by_setting_value` | Read |
 
 ## Not a gap — redundant
 

@@ -22,6 +22,7 @@ import pytest
 from conftest import FakeClient, StubServer
 from fastmcp.exceptions import ToolError
 
+from automox_mcp.client import AutomoxAPIError
 from automox_mcp.tools import (
     account_tools,
     device_settings_tools,
@@ -57,6 +58,24 @@ def _wire_via_workflows_attr(
             return _success()
 
         monkeypatch.setattr(module.workflows, wf_name, fail_then_succeed)
+
+    return wire
+
+
+def _wire_refusal_then_success(
+    module: Any, wf_name: str
+) -> Callable[[pytest.MonkeyPatch, list[bool]], None]:
+    """Fail with a clear API refusal: a tool that keeps the slot when a write may
+    have landed still frees it when the API refused the write."""
+
+    def wire(monkeypatch: pytest.MonkeyPatch, calls: list[bool]) -> None:
+        async def refuse_then_succeed(client, **_):
+            calls.append(True)
+            if len(calls) == 1:
+                raise AutomoxAPIError("refused", status_code=400, payload={"code": "INVALID_VALUE"})
+            return _success()
+
+        monkeypatch.setattr(module.workflows, wf_name, refuse_then_succeed)
 
     return wire
 
@@ -119,7 +138,7 @@ _CASES = [
     (
         "create_device_settings_job",
         device_settings_tools,
-        _wire_via_workflows_attr(device_settings_tools, "create_device_settings_job"),
+        _wire_refusal_then_success(device_settings_tools, "create_device_settings_job"),
         {
             "org_uuid": _ORG_UUID,
             "setting": "scan-interval",

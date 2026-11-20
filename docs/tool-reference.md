@@ -1,17 +1,17 @@
 # Tool Reference
 
-Complete reference for all 133 tools, 6 workflow prompts, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
+Complete reference for all 140 tools, 6 workflow prompts, MCP resources, parameters, and enterprise features exposed by the Automox MCP server.
 
 ## At a Glance
 
 | Capability | Scope |
 |---|---|
-| **Tools** | **133** — 85 read, 48 write — across **18 domains** |
-| **API coverage** | **100%** of the published Automox Console API and Webhooks API ([coverage map](api-coverage.md)), with one deliberate exception: secret-exposing endpoints are never wrapped |
+| **Tools** | **140** — 89 read, 51 write — across **19 domains** |
+| **API coverage** | **100%** of the published Automox Console API and Webhooks API, and all of the Device Settings API ([coverage map](api-coverage.md)), with one deliberate exception: secret-exposing endpoints are never wrapped |
 | **Interactive MCP Apps** | **5** inline UI surfaces — compliance triage, patch-approval review, policy blast-radius review, remediation apply, RBAC access certification |
 | **MCP resources** | **14** — 9 reference datasets and schemas, plus the 5 App UIs |
 | **Workflow prompts** | **6** guided multi-step admin workflows |
-| **Safety** | MCP tool annotations on every tool; idempotency `request_id` on all 48 write tools; destructive operations tiered behind **4 opt-in env gates** |
+| **Safety** | MCP tool annotations on every tool; idempotency `request_id` on all 51 write tools; destructive operations tiered behind **4 opt-in env gates** |
 | **Output ergonomics** | Markdown-table mode on 64 read tools; canonical pagination block; compound tools with token-budget caps and follow-up hints |
 | **Enterprise** | OAuth 2.1/JWT or static-key endpoint auth, correlation IDs, DNS-rebinding protection, security response headers, token-budget estimation |
 
@@ -25,6 +25,7 @@ Complete reference for all 133 tools, 6 workflow prompts, MCP resources, paramet
 - [Policy History v2 (7 tools)](#policy-history-v2-7-tools)
 - [Package Management (2 tools)](#package-management-2-tools)
 - [Group Management (5 tools)](#group-management-5-tools)
+- [Device Settings (7 tools)](#device-settings-7-tools)
 - [Webhook Management (9 tools)](#webhook-management-9-tools)
 - [Worklet Catalog (2 tools)](#worklet-catalog-2-tools)
 - [Data Extracts (3 tools)](#data-extracts-3-tools)
@@ -123,8 +124,20 @@ Richer policy execution reporting via the `/policy-history` API with UUID-based 
 - **`list_server_groups`** - List all server groups with device counts, assigned policies, and group `uuid` (needed by policy windows tools). `refresh_interval` is the agent check-in/scan cadence in minutes (live-verified; spec range 240-1440).
 - **`get_server_group`** - Get detailed information about a specific server group.
 - **`create_server_group`** - Create a new server group with name, parent group, refresh interval, and optional policies and notes. The refresh interval is required unless the organization's devices own their settings; omit it there.
-- **`update_server_group`** - Update an existing server group. Fields left unset keep the group's current values (parent, refresh interval, color, notes, policies, OS auto update, WSUS) instead of being cleared. If a kept color or notes value fails the update rules (`#RRGGBB`, notes at most 500 characters, less than create allows), the error names the field, the stored notes length, and what to pass instead (an empty string clears either). Pass `ui_color` `""` to clear the color. WSUS is kept unless it is on with a blank stored server, or the stored server is longer than the 100 characters an update accepts; then it is reset (or the server dropped), with a warning in the result. In an organization whose devices own their settings, omit `refresh_interval`; the API rejects a save that changes it (`DEVICE_OWNED_SETTINGS`).
+- **`update_server_group`** - Update an existing server group. Fields left unset keep the group's current values (parent, refresh interval, color, notes, policies, OS auto update, WSUS) instead of being cleared. If a kept color or notes value fails the update rules (`#RRGGBB`, notes at most 500 characters, less than create allows), the error names the field, the stored notes length, and what to pass instead (an empty string clears either). Pass `ui_color` `""` to clear the color. WSUS is kept unless it is on with a blank stored server, or the stored server is longer than the 100 characters an update accepts; then it is reset (or the server dropped), with a warning in the result. In an organization whose devices own their settings, omit `refresh_interval`; the API rejects a save that changes it (`DEVICE_OWNED_SETTINGS`); change it per device with `create_device_settings_job`.
 - **`delete_server_group`** - Delete a server group permanently.
+
+## Device Settings (7 tools)
+
+In an organization whose devices own their settings, the scan interval, OS auto update and Windows update source are set per device, not on server groups (server groups there read `refresh_interval` as null, and a group save that changes these settings is refused with `DEVICE_OWNED_SETTINGS`). These tools read which devices hold which value, and change them through apply jobs. In an organization whose settings are managed on server groups, the value reads, the job create and the value add return `ORG_NOT_DEVICE_OWNED` (the job reads and cancel answer with an empty list or `JOB_NOT_FOUND`); set the scan interval there with `update_server_group`. Errors with a known `code` say whether retrying can help.
+
+- **`get_device_setting_values`** - Read the organization's values for a setting, each with its device count, and the default. `scan-interval` returns intervals in minutes; `os-auto-update` or `windows-update-source` returns both OS patch settings and the WSUS servers. This tool and `list_devices_by_setting_value` take an optional `org_id` (default: the configured organization).
+- **`list_devices_by_setting_value`** - List one page of the devices that hold one value (`page` from 0, `limit` 1 to 50, default 50), each with its `uuid`, name, online state and OS. The value is given the same way as in `create_device_settings_job`. Page until `metadata.pagination.has_more` is false, and read every page before sending a job, since a job moves devices off the list. A page cut to fit the response size reports `metadata.truncated`; start again from page 0 with a smaller `limit`. A value or WSUS server that is not one of the organization's values returns `VALUE_NOT_FOUND`.
+- **`list_device_settings_jobs`** - List the apply jobs still in progress (pending, running, or cancelled and still finishing), newest first, including jobs created in the console. Finished jobs are not listed; read them by id. `limit` is 1 to 15 (default 10). Page with `metadata.pagination.next_cursor` until `has_more` is false; a page cut to fit the response size is read again with the same cursor and a smaller `limit`.
+- **`get_device_settings_job`** - Read one job: status, and per half (`add`, `remove`) the value, the device count and the outcome counts (`applied`, `superseded`, `notInOrg`, `gone`, `notApplicable`, `failed`).
+- **`create_device_settings_job`** - Set one setting on 1 to 500 devices: `scan-interval` (`interval_minutes`), `os-auto-update` (`ENABLED`, `DISABLED` or `KEEP`) or `windows-update-source` (`KEEP`, `WINDOWS_UPDATE`, or `WSUS` with `wsus_server_url`). Devices in the optional `remove_device_uuids` that have this value go back to the organization's default. The newest job for a setting wins on every device it shares with an earlier one. A create that fails with no clear result (no response, a 5xx without a known error code, a reply that cannot be read or has no `jobId`, or a cancelled call) may still have created its job: check the job list and the devices' values, then send it with a new `request_id`; a resend with the same `request_id` within the idempotency window is answered with `unclear: true` and not sent. A job does not keep the devices' earlier values, so take `add_device_uuids` from one `list_devices_by_setting_value` listing; one job with that value then undoes it. Copy a WSUS `serverUrl` exactly from `get_device_setting_values`: a server not in the list is added to the organization's values for good.
+- **`cancel_device_settings_job`** - Cancel a job. Devices already changed keep the new value, and devices it had started may still change. A job that already finished is returned unchanged with `metadata.cancelled` false.
+- **`add_device_setting_value`** - Add a scan interval (240 to 1440 minutes, a multiple of 60) or a WSUS server to the organization's list of values without applying it. Values cannot be removed through the API.
 
 ## Webhook Management (9 tools)
 
@@ -243,7 +256,7 @@ Tenants without an active Remote Control subscription (Core bundled with Automat
 
 ## Capability Discovery (1 tool)
 
-- **`discover_capabilities`** - Canonical inventory of the server's tools, organized by domain (devices, device_search, policies, policy_history, patches, groups, events, reports, audit, webhooks, worklets, data_extracts, vuln_sync, account, compound, policy_windows, splashtop). Always loaded regardless of `AUTOMOX_MCP_MODULES`. Output is annotated with live per-session availability introspected from the registry at call time: each tool entry carries `available` (false when hidden by an opt-in env gate, read-only mode, or module filtering), gated tools always name their `gated_by` env var, cross-listed entries are flagged `cross_listed`, and `compound` is marked `alias_domain`. The no-arg call returns self-check totals (`unique_tool_count`, `registered_tool_count`, per-domain counts, any `unavailable_tools`); pass `list_all_tools=true` for a flat deduplicated tool list. The directory excludes `discover_capabilities` itself.
+- **`discover_capabilities`** - Canonical inventory of the server's tools, organized by domain (devices, device_search, policies, policy_history, patches, groups, device_settings, events, reports, audit, webhooks, worklets, data_extracts, vuln_sync, account, compound, policy_windows, splashtop). Always loaded regardless of `AUTOMOX_MCP_MODULES`. Output is annotated with live per-session availability introspected from the registry at call time: each tool entry carries `available` (false when hidden by an opt-in env gate, read-only mode, or module filtering), gated tools always name their `gated_by` env var, cross-listed entries are flagged `cross_listed`, and `compound` is marked `alias_domain`. The no-arg call returns self-check totals (`unique_tool_count`, `registered_tool_count`, per-domain counts, any `unavailable_tools`); pass `list_all_tools=true` for a flat deduplicated tool list. The directory excludes `discover_capabilities` itself.
 
 ## Workflow Prompts (6 prompts)
 
@@ -418,7 +431,7 @@ AUTOMOX_MCP_TOKEN_BUDGET=4000   # default; set higher to allow larger responses
 
 ### Idempotency Keys
 
-All 48 write tools accept an optional `request_id` parameter (any UUID string). Submitting the same `request_id` within 300 seconds returns the cached response without re-executing the underlying API call. The cache holds up to 1000 entries and is stored in-memory (cleared on server restart).
+All 51 write tools accept an optional `request_id` parameter (any UUID string). Submitting the same `request_id` within 300 seconds returns the cached response without re-executing the underlying API call. The cache holds up to 1000 entries and is stored in-memory (cleared on server restart).
 
 ```
 # Example: safe to retry -- second call returns the cached result

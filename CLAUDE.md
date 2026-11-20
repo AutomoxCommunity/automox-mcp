@@ -17,7 +17,7 @@ A tool's name and count appear in several hand-maintained places. When you chang
 | `tests/smoke_production.py` | live read-side coverage for new read tools (not destructive writes) | ❌ **manual, not in CI** |
 | `CHANGELOG.md` | the entry under the active version | ❌ manual |
 
-The current split is **133 tools / 85 read / 48 write**. `discover_capabilities` is intentionally excluded from `_DOMAIN_CATALOG`.
+The current split is **140 tools / 89 read / 51 write**. `discover_capabilities` is intentionally excluded from `_DOMAIN_CATALOG`.
 
 ## Adding / removing an MCP resource or MCP App
 

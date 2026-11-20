@@ -34,6 +34,7 @@ _VALID_MODULES: frozenset[str] = frozenset(
         "audit_v2",
         "devices",
         "device_search",
+        "device_settings",
         "policies",
         "policy_history",
         "users",

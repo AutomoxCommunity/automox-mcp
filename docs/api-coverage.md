@@ -155,6 +155,22 @@ The Webhooks API (`Automox Webhooks API` v1.0.0) is published as a **separate** 
 
 ---
 
+## Device Settings API coverage
+
+In an organization whose devices own their settings, the scan interval, OS auto update and Windows update source are set per device through apply jobs, and server-group saves that change them are refused (`DEVICE_OWNED_SETTINGS`). Every operation of the Device Settings API is wrapped:
+
+| Operation | Tool | Tier |
+|---|---|---|
+| `GET /organizations/{orgUuid}/scan/device-settings/jobs` | `list_device_settings_jobs` | Read |
+| `GET /organizations/{orgUuid}/scan/device-settings/jobs/{jobId}` | `get_device_settings_job` | Read |
+| `POST /organizations/{orgUuid}/scan/device-settings/jobs` | `create_device_settings_job` | Tier 1 ask-first. Bulk (up to 500 devices), but it changes configuration, not code, and is reversed by a job that sets the earlier value. |
+| `POST /organizations/{orgUuid}/scan/device-settings/jobs/{jobId}/cancel` | `cancel_device_settings_job` | Tier 1 ask-first. Does not undo devices already changed. |
+| `POST /organizations/{orgUuid}/scan/device-settings/values/{setting}` | `add_device_setting_value` | Plain write, no gate. Adds an option to the organization's list without applying it; values cannot be removed through the API. |
+
+Selections are validated locally the way the API does (1 to 500 distinct RFC 9562 device UUIDs per half, no device in both halves) and are never split into several jobs, because the newest job for a setting wins on every device it shares with an earlier one. A job create that ends with no clear result (no response, 500 or 503) may have created its job, so it is not retried and the error says to check the job list first.
+
+Not wrapped yet: reading which value each device has. The API reports outcome counts per job, not per device.
+
 ## Not a gap — redundant
 
 | Operation | Why |

@@ -676,6 +676,28 @@ async def run_readonly_tools() -> None:
         else:
             record("get_server_group", False, "skipped — no group_id")
 
+        # ---- Device Settings ----
+        # 19a. list_device_settings_jobs — answers in any organization (an empty
+        # list where settings are group-owned); the cursor must report completeness.
+        resp = await _safe_call(session, "list_device_settings_jobs", {"limit": 5})
+        meta = resp.get("metadata", {}) if isinstance(resp, dict) else {}
+        jobs = resp.get("data", {}).get("jobs") if isinstance(resp, dict) else None
+        record(
+            "list_device_settings_jobs",
+            isinstance(jobs, list) and isinstance(meta.get("complete"), bool),
+            f"jobs={len(jobs) if isinstance(jobs, list) else None} complete={meta.get('complete')}",
+        )
+
+        # 19b. get_device_settings_job — an unknown id must come back 404 JOB_NOT_FOUND,
+        # which proves the path and the org UUID resolve.
+        resp = await _safe_call(
+            session,
+            "get_device_settings_job",
+            {"job_id": "00000000-0000-4000-8000-000000000000"},
+            tolerate=(404,),
+        )
+        record("get_device_settings_job", resp is _TOLERATED, "unknown id -> 404 expected")
+
         # ---- Events ----
         # 20. list_events — assert count_only CORRECTNESS, not just 200. The bug:
         # snake_case `count_only` was an unknown param the API ignored, so a

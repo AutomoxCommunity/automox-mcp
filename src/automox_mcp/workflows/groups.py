@@ -6,7 +6,7 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
-from ..client import AutomoxClient
+from ..client import AutomoxAPIError, AutomoxClient
 from ..utils.group_rules import (
     UI_COLOR_HEX,
     UPDATE_NOTES_MAX_LENGTH,
@@ -194,6 +194,20 @@ async def get_server_group(
     }
 
 
+def _with_device_owned_hint(exc: AutomoxAPIError) -> AutomoxAPIError:
+    """Point a DEVICE_OWNED_SETTINGS refusal at the per-device settings tool."""
+    payload = exc.payload if isinstance(exc.payload, Mapping) else {}
+    if payload.get("code") != "DEVICE_OWNED_SETTINGS":
+        return exc
+    return AutomoxAPIError(
+        f"{exc}. This organization's devices own their settings: leave "
+        "refresh_interval, OS auto update and WSUS out of the group save, and change "
+        "them per device with create_device_settings_job.",
+        exc.status_code,
+        exc.payload,
+    )
+
+
 async def create_server_group(
     client: AutomoxClient,
     *,
@@ -219,7 +233,10 @@ async def create_server_group(
         body["policies"] = policies
 
     params: dict[str, Any] = {"o": org_id}
-    result = await client.post("/servergroups", json_data=body, params=params)
+    try:
+        result = await client.post("/servergroups", json_data=body, params=params)
+    except AutomoxAPIError as exc:
+        raise _with_device_owned_hint(exc) from exc
 
     data: dict[str, Any]
     if isinstance(result, Mapping):
@@ -289,7 +306,10 @@ async def update_server_group(
     if policies is not None:
         body["policies"] = policies
 
-    await client.put(f"/servergroups/{group_id}", json_data=body, params=params)
+    try:
+        await client.put(f"/servergroups/{group_id}", json_data=body, params=params)
+    except AutomoxAPIError as exc:
+        raise _with_device_owned_hint(exc) from exc
 
     # The API answers an update with 204, so report the state that was sent; a
     # setting read back as null is device-owned and the API ignores it.

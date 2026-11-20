@@ -201,8 +201,8 @@ def _with_device_owned_hint(exc: AutomoxAPIError) -> AutomoxAPIError:
         return exc
     return AutomoxAPIError(
         f"{exc}. This organization's devices own their settings: leave "
-        "refresh_interval, OS auto update and WSUS out of the group save, and change "
-        "them per device with create_device_settings_job.",
+        "refresh_interval out of the group save, and change the scan interval, OS "
+        "auto update or WSUS per device with create_device_settings_job.",
         exc.status_code,
         exc.payload,
     )

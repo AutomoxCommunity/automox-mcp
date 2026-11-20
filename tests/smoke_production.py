@@ -678,14 +678,15 @@ async def run_readonly_tools() -> None:
 
         # ---- Device Settings ----
         # 19a. list_device_settings_jobs answers in any organization (an empty
-        # list where settings are group-owned); the cursor must report completeness.
+        # list where settings are group-owned); pagination must say whether more exist.
         resp = await _safe_call(session, "list_device_settings_jobs", {"limit": 5})
         meta = resp.get("metadata", {}) if isinstance(resp, dict) else {}
         jobs = resp.get("data", {}).get("jobs") if isinstance(resp, dict) else None
+        has_more = (meta.get("pagination") or {}).get("has_more")
         record(
             "list_device_settings_jobs",
-            isinstance(jobs, list) and isinstance(meta.get("complete"), bool),
-            f"jobs={len(jobs) if isinstance(jobs, list) else None} complete={meta.get('complete')}",
+            isinstance(jobs, list) and isinstance(has_more, bool),
+            f"jobs={len(jobs) if isinstance(jobs, list) else None} has_more={has_more}",
         )
 
         # 19b. get_device_settings_job: an unknown id must come back 404 JOB_NOT_FOUND,
@@ -732,7 +733,11 @@ async def run_readonly_tools() -> None:
             tolerate_code="ORG_NOT_DEVICE_OWNED",
         )
         devices = resp.get("data", {}).get("devices") if isinstance(resp, dict) else None
-        total = resp.get("metadata", {}).get("total") if isinstance(resp, dict) else None
+        total = (
+            (resp.get("metadata", {}).get("pagination") or {}).get("total_elements")
+            if isinstance(resp, dict)
+            else None
+        )
         record(
             "list_devices_by_setting_value",
             resp is _TOLERATED

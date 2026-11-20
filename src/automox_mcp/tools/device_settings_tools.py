@@ -3,6 +3,7 @@ per device in organizations whose devices own their settings."""
 
 from __future__ import annotations
 
+import asyncio
 import uuid as uuid_lib
 from typing import Any, Literal
 from uuid import UUID
@@ -25,23 +26,33 @@ OsAutoUpdate = Literal["ENABLED", "DISABLED", "KEEP"]
 WindowsUpdateSource = Literal["KEEP", "WINDOWS_UPDATE", "WSUS"]
 
 _MAX_DEVICES = 500
-_MAX_PAGE_LIMIT = 500
+_MAX_PAGE_LIMIT = 50
 # RFC 9562 defines UUID versions 1 to 8.
 _UUID_VERSIONS = range(1, 9)
 
 _OWNERSHIP_NOTE = (
     "Only for organizations whose devices own their settings (server groups there "
-    "read refresh_interval as null); otherwise the API answers ORG_NOT_DEVICE_OWNED "
-    "and the settings are changed with update_server_group."
+    "read refresh_interval as null); otherwise the API answers ORG_NOT_DEVICE_OWNED, "
+    "and the scan interval is changed with update_server_group."
 )
+_MAX_JOBS_LIMIT = 15
+
+# Stored under the request_id of a create with no clear result, so a resend
+# with it gets this instead of sending the job again.
+_UNCLEAR_REPLAY: dict[str, Any] = {
+    "data": {"jobId": None, "unclear": True},
+    "metadata": {
+        "note": (
+            "This request_id was already sent and the create had no clear result, "
+            "so it was not sent again. "
+        )
+        + workflows.UNCLEAR_CREATE_NOTE
+    },
+}
 
 
-def _check_device_uuids(values: list[UUID] | None, field: str) -> list[UUID] | None:
-    if not values:
-        if values is not None and field == "add_device_uuids":
-            raise ValueError(f"{field} must list 1 to {_MAX_DEVICES} devices")
-        return None
-    if len(values) > _MAX_DEVICES:
+def _check_device_uuids(values: list[UUID], field: str) -> list[UUID]:
+    if not 1 <= len(values) <= _MAX_DEVICES:
         raise ValueError(
             f"{field} must list 1 to {_MAX_DEVICES} devices; split a larger set into "
             "jobs yourself, knowing that the newest job for a setting wins on every "
@@ -83,13 +94,14 @@ class CreateDeviceSettingsJobParams(_SettingValueFields):
 
     @field_validator("add_device_uuids")
     @classmethod
-    def _check_add(cls, value: list[UUID]) -> list[UUID] | None:
+    def _check_add(cls, value: list[UUID]) -> list[UUID]:
         return _check_device_uuids(value, "add_device_uuids")
 
     @field_validator("remove_device_uuids")
     @classmethod
     def _check_remove(cls, value: list[UUID] | None) -> list[UUID] | None:
-        return _check_device_uuids(value, "remove_device_uuids")
+        # An empty remove list means no remove half.
+        return _check_device_uuids(value, "remove_device_uuids") if value else None
 
     @model_validator(mode="after")
     def _check_halves(self) -> CreateDeviceSettingsJobParams:
@@ -102,11 +114,19 @@ class DeviceSettingsJobParams(ForbidExtraModel):
     org_uuid: UUID
     job_id: str = Field(min_length=1, max_length=200)
 
+    @field_validator("job_id")
+    @classmethod
+    def _check_job_id(cls, value: str) -> str:
+        # "." and ".." would be resolved as path segments into another route.
+        if not value.strip("."):
+            raise ValueError("job_id must be a job's id")
+        return value
+
 
 class ListDeviceSettingsJobsParams(ForbidExtraModel):
     org_uuid: UUID
     setting: SettingName | None = None
-    limit: int | None = Field(None, ge=1, le=200)
+    limit: int = Field(10, ge=1, le=_MAX_JOBS_LIMIT)
     cursor: str | None = Field(None, min_length=1, max_length=2000)
 
 
@@ -149,8 +169,11 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "List the organization's device settings apply jobs that are still in "
             "progress (PENDING, RUNNING, or CANCELLED and still finishing), newest "
             "first, including jobs created in the Automox console. A finished job is "
-            "not listed: read it with get_device_settings_job. Page with cursor until "
-            "metadata.complete is true. " + _OWNERSHIP_NOTE
+            "not listed: read it with get_device_settings_job. limit is 1 to 15 "
+            "(default 10). Page with metadata.pagination.next_cursor until "
+            "metadata.pagination.has_more is false; if metadata.truncated is true, read "
+            "the same cursor again with a smaller limit. Answers with an empty list in "
+            "an organization whose settings are managed on server groups."
         ),
         annotations={
             "readOnlyHint": True,
@@ -161,7 +184,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     )
     async def list_device_settings_jobs(
         setting: SettingName | None = None,
-        limit: int | None = None,
+        limit: int = 10,
         cursor: str | None = None,
         org_uuid: str | None = None,
     ) -> dict[str, Any]:
@@ -211,7 +234,8 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "many devices hold it, and which value is the default. setting=scan-interval "
             "returns intervals in minutes; os-auto-update or windows-update-source "
             "returns both OS patch settings and the WSUS servers. Use a value from here "
-            "in list_devices_by_setting_value or create_device_settings_job. org_id "
+            "in list_devices_by_setting_value or create_device_settings_job. If "
+            "metadata.truncated is true, some values were left out of the answer. org_id "
             "defaults to the configured organization. " + _OWNERSHIP_NOTE
         ),
         annotations={
@@ -236,16 +260,17 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         name="list_devices_by_setting_value",
         description=(
             "List the devices that hold one value of a device setting, one page at a "
-            "time (page from 0, limit up to 500, default 50), each with its uuid for "
+            "time (page from 0, limit 1 to 50, default 50), each with its uuid for "
             "create_device_settings_job. Give the value the same way as "
             "create_device_settings_job: interval_minutes, os_auto_update, or "
             "windows_update_source (with wsus_server_url for WSUS). Page until "
-            "metadata.complete is true, and read every page before sending a job: a job "
-            "moves devices off this list and shifts later pages. If metadata.truncated "
-            "is true the page was cut to fit the response size; read it again with a "
-            "smaller limit. A value or WSUS server that is not one of the organization's "
-            "values returns VALUE_NOT_FOUND. org_id defaults to the configured "
-            "organization. " + _OWNERSHIP_NOTE
+            "metadata.pagination.has_more is false, and read every page before sending "
+            "a job: a job, yours or one from the console, moves devices off this list "
+            "and shifts later pages. If metadata.truncated is true the page was cut to "
+            "fit the response size; start again from page 0 with a smaller limit. Pass "
+            "the same organization's org_uuid to create_device_settings_job. A value "
+            "or WSUS server that is not one of the organization's values returns "
+            "VALUE_NOT_FOUND. org_id defaults to the configured organization. " + _OWNERSHIP_NOTE
         ),
         annotations={
             "readOnlyHint": True,
@@ -296,8 +321,10 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "optional remove_device_uuids that have this value go back to the "
             "organization's default. The newest job for a setting wins on every "
             "device it shares with an earlier job. Returns a jobId: poll "
-            "get_device_settings_job. If the call fails with no clear result, a job "
-            "may exist: check list_device_settings_jobs before sending it again. " + _OWNERSHIP_NOTE
+            "get_device_settings_job. Use the org_uuid of the organization the devices "
+            "were listed in. If the call fails with no clear result, a job may exist: "
+            "follow the error's checks before sending it again (a resend with the same "
+            "request_id is answered with unclear: true and not sent). " + _OWNERSHIP_NOTE
         ),
         annotations={
             "readOnlyHint": False,
@@ -330,19 +357,31 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "add_device_uuids": add_device_uuids,
             "remove_device_uuids": remove_device_uuids,
         }
+        sent = False
+
+        async def create(client: AutomoxClient, **payload: Any) -> dict[str, Any]:
+            nonlocal sent
+            try:
+                return await workflows.create_device_settings_job(client, **payload)
+            except (workflows.UnclearJobCreateError, asyncio.CancelledError):
+                sent = True
+                raise
+
         try:
             result = await call_tool_workflow(
                 client,
-                workflows.create_device_settings_job,
+                create,
                 params,
                 params_model=CreateDeviceSettingsJobParams,
                 org_uuid_field="org_uuid",
                 dump_mode="json",
             )
-        except BaseException as exc:
-            # A job may exist after an unclear create: keep the request_id taken so
-            # a resend with it cannot create a second job.
-            if not isinstance(exc.__cause__, workflows.UnclearJobCreateError):
+        except BaseException:
+            # The job may exist: answer a resend with this request_id by saying so
+            # (for the cache's lifetime in this process) instead of sending it again.
+            if sent:
+                await store_idempotency(request_id, "create_device_settings_job", _UNCLEAR_REPLAY)
+            else:
                 await release_idempotency(request_id, "create_device_settings_job")
             raise
         await store_idempotency(request_id, "create_device_settings_job", result)

@@ -3,7 +3,6 @@ per device in organizations whose devices own their settings."""
 
 from __future__ import annotations
 
-import asyncio
 import uuid as uuid_lib
 from typing import Any, Literal
 from uuid import UUID
@@ -12,7 +11,7 @@ from fastmcp import FastMCP
 from pydantic import Field, field_validator, model_validator
 
 from .. import workflows
-from ..client import AutomoxClient
+from ..client import AutomoxAPIError, AutomoxClient
 from ..schemas import ForbidExtraModel, OrgIdRequiredMixin
 from ..utils.tooling import (
     call_tool_workflow,
@@ -27,6 +26,7 @@ WindowsUpdateSource = Literal["KEEP", "WINDOWS_UPDATE", "WSUS"]
 
 _MAX_DEVICES = 500
 _MAX_PAGE_LIMIT = 50
+_MAX_JOBS_LIMIT = 15
 # RFC 9562 defines UUID versions 1 to 8.
 _UUID_VERSIONS = range(1, 9)
 
@@ -35,7 +35,6 @@ _OWNERSHIP_NOTE = (
     "read refresh_interval as null); otherwise the API answers ORG_NOT_DEVICE_OWNED, "
     "and the scan interval is changed with update_server_group."
 )
-_MAX_JOBS_LIMIT = 15
 
 # Stored under the request_id of a create with no clear result, so a resend
 # with it gets this instead of sending the job again.
@@ -66,6 +65,10 @@ def _check_device_uuids(values: list[UUID], field: str) -> list[UUID]:
     return values
 
 
+def _strip(value: Any) -> Any:
+    return value.strip() if isinstance(value, str) else value
+
+
 class _SettingValueFields(ForbidExtraModel):
     """One value of one setting, given as flat arguments."""
 
@@ -75,10 +78,7 @@ class _SettingValueFields(ForbidExtraModel):
     windows_update_source: WindowsUpdateSource | None = None
     wsus_server_url: str | None = Field(None, min_length=1, max_length=100)
 
-    @field_validator("wsus_server_url", mode="before")
-    @classmethod
-    def _strip_url(cls, value: Any) -> Any:
-        return value.strip() if isinstance(value, str) else value
+    _strip_url = field_validator("wsus_server_url", mode="before")(_strip)
 
     @model_validator(mode="after")
     def _check_setting_value(self) -> _SettingValueFields:
@@ -140,6 +140,8 @@ class AddDeviceSettingValueParams(ForbidExtraModel):
     setting: Literal["scan-interval", "windows-update-source"]
     interval_minutes: int | None = Field(None, ge=240, le=1440, multiple_of=60)
     wsus_server_url: str | None = Field(None, min_length=1, max_length=100)
+
+    _strip_url = field_validator("wsus_server_url", mode="before")(_strip)
 
     @model_validator(mode="after")
     def _check_value(self) -> AddDeviceSettingValueParams:
@@ -371,7 +373,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             nonlocal job_may_exist
             try:
                 job = await workflows.create_device_settings_job(client, **payload)
-            except (workflows.UnclearJobCreateError, asyncio.CancelledError):
+            except workflows.UnclearJobCreateError:
+                job_may_exist = True
+                raise
+            except AutomoxAPIError:
+                raise  # a clear refusal: no job was created
+            except BaseException:
                 job_may_exist = True
                 raise
             job_may_exist = True

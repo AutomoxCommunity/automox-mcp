@@ -1044,3 +1044,55 @@ async def test_create_tool_strips_and_caps_wsus_server(recorded: dict[str, Any])
             wsus_server_url="https://" + "w" * 100,
             add_device_uuids=[DEVICE_A],
         )
+
+
+@pytest.mark.asyncio
+async def test_unexpected_error_during_create_keeps_request_id() -> None:
+    class UndecodableClient(StubClient):
+        async def post(self, path: str, **kwargs: Any) -> Any:
+            self.calls.append(("POST", path, kwargs.get("json_data")))
+            raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
+
+    client = UndecodableClient()
+    tool = _register_with(client).tools["create_device_settings_job"]
+    with pytest.raises(ToolError):
+        await tool(**_CREATE_ARGS, request_id="undecodable-create-1")
+    again = await tool(**_CREATE_ARGS, request_id="undecodable-create-1")
+    assert len(client.calls) == 1
+    assert again["data"]["unclear"] is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [408, 499])
+async def test_gateway_timeout_on_create_is_unclear(status: int) -> None:
+    client = RaisingClient(AutomoxAPIError("timeout", status_code=status))
+    with pytest.raises(workflows.UnclearJobCreateError):
+        await workflows.create_device_settings_job(
+            client,  # type: ignore[arg-type]
+            org_uuid=ORG_UUID,
+            setting="scan-interval",
+            interval_minutes=720,
+            add_device_uuids=[DEVICE_A],
+        )
+
+
+@pytest.mark.asyncio
+async def test_add_value_tool_strips_wsus_server(recorded: dict[str, Any]) -> None:
+    await _register().tools["add_device_setting_value"](
+        setting="windows-update-source", wsus_server_url=" https://wsus.example.com "
+    )
+    assert recorded["add_device_setting_value"]["wsus_server_url"] == "https://wsus.example.com"
+
+
+@pytest.mark.asyncio
+async def test_cancel_of_already_cancelled_job_says_so() -> None:
+    job = {**JOB_COMPLETED, "status": "CANCELLED"}
+    client = RaisingClient(AutomoxAPIError("conflict", status_code=409, payload=job))
+    result = await workflows.cancel_device_settings_job(
+        client,  # type: ignore[arg-type]
+        org_uuid=ORG_UUID,
+        job_id=JOB_ID,
+    )
+    assert result["metadata"]["cancelled"] is False
+    assert "already CANCELLED" in result["metadata"]["note"]
+    assert "earlier cancel" in result["metadata"]["note"]

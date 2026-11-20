@@ -59,7 +59,8 @@ UNCLEAR_CREATE_NOTE = (
     "The job create returned no clear result, so a job may already have been "
     "created. Do not resend it blindly: look for it with list_device_settings_jobs "
     "(jobs still running), and since a finished job is not listed there, check with "
-    "list_devices_by_setting_value whether the devices already hold the value. "
+    "list_devices_by_setting_value whether the devices already hold the value (and "
+    "the remove devices the organization's default). "
     "Resending is safe only if no later job for the same setting has been sent "
     "since; otherwise leave the devices that job shares out of the retry. Resend "
     "with a new request_id."
@@ -95,8 +96,10 @@ def _with_guidance(exc: AutomoxAPIError) -> AutomoxAPIError:
 
 
 def _is_unclear(exc: AutomoxAPIError) -> bool:
-    # 0 = no response; a 2xx here is a body that could not be read.
-    return exc.status_code == 0 or exc.status_code >= 500 or 200 <= exc.status_code < 300
+    # 0 = no response; a 2xx here is a body that could not be read; 408 and 499 are
+    # gateway timeouts that say nothing about the job.
+    status = exc.status_code
+    return status in (0, 408, 499) or status >= 500 or 200 <= status < 300
 
 
 def build_setting_value(
@@ -262,7 +265,10 @@ async def cancel_device_settings_job(
                 "data": dict(payload),
                 "metadata": {
                     "cancelled": False,
-                    "note": f"The job was not cancelled; it is already {payload.get('status')}.",
+                    "note": (
+                        f"The job is already {payload.get('status')}, so this call did not "
+                        "change it (an earlier cancel may have)."
+                    ),
                 },
             }
         raise _with_guidance(exc) from exc
@@ -341,7 +347,7 @@ async def list_devices_by_setting_value(
     if setting == "scan-interval":
         path = f"{base}/scan-interval/{value['intervalMinutes']}/devices"
     else:
-        chosen = str(os_auto_update or windows_update_source)
+        chosen = str(os_auto_update if setting == "os-auto-update" else windows_update_source)
         path = f"{base}/os-patch/{setting}/{_OS_PATCH_SLUGS[setting][chosen]}/devices"
         if value.get("serverUrl"):
             params["server"] = value["serverUrl"]

@@ -6,6 +6,7 @@ devices own their settings (ids, names and counts replaced).
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 import pytest
@@ -303,8 +304,11 @@ async def test_list_jobs_passes_filters_and_reports_cursor() -> None:
         ("GET", f"{BASE}/jobs", {"setting": "scan-interval", "limit": 10, "cursor": "prev"})
     ]
     assert result["data"]["jobs"] == [JOB_COMPLETED]
-    assert result["metadata"]["next_cursor"] == "next"
-    assert result["metadata"]["complete"] is False
+    assert result["metadata"]["pagination"] == {
+        "page_size": 10,
+        "has_more": True,
+        "next_cursor": "next",
+    }
 
 
 @pytest.mark.asyncio
@@ -316,7 +320,7 @@ async def test_list_jobs_last_page_is_complete() -> None:
     )
     assert client.calls == [("GET", f"{BASE}/jobs", None)]
     assert result["data"]["jobs"] == []
-    assert result["metadata"]["complete"] is True
+    assert result["metadata"]["pagination"] == {"has_more": False}
 
 
 @pytest.mark.asyncio
@@ -596,11 +600,11 @@ async def test_list_devices_builds_path_for_value(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("total", "page", "limit", "complete"),
-    [(5, 0, 2, False), (5, 2, 2, True), (4, 1, 2, True), (0, 0, 100, True)],
+    ("total", "page", "limit", "has_more"),
+    [(5, 0, 2, True), (5, 2, 2, False), (4, 1, 2, False), (0, 0, 50, False)],
 )
 async def test_list_devices_reports_completion(
-    total: int, page: int, limit: int, complete: bool
+    total: int, page: int, limit: int, has_more: bool
 ) -> None:
     path = f"{READ_BASE}/scan-interval/1440/devices"
     client = StubClient(get_responses={path: [_device_page(total, page, limit)]})
@@ -612,12 +616,10 @@ async def test_list_devices_reports_completion(
         page=page,
         limit=limit,
     )
-    assert result["metadata"] == {
-        "total": total,
-        "page": page,
-        "limit": limit,
-        "complete": complete,
-    }
+    pagination = result["metadata"]["pagination"]
+    assert pagination["total_elements"] == total
+    assert (pagination["page"], pagination["page_size"]) == (page, limit)
+    assert pagination["has_more"] is has_more
 
 
 @pytest.mark.asyncio
@@ -643,8 +645,8 @@ async def test_list_devices_returns_only_targeting_fields() -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize(("limit", "complete"), [(1, False), (2, True)])
-async def test_list_devices_without_total_uses_page_fill(limit: int, complete: bool) -> None:
+@pytest.mark.parametrize(("limit", "has_more"), [(1, True), (2, False)])
+async def test_list_devices_without_total_uses_page_fill(limit: int, has_more: bool) -> None:
     path = f"{READ_BASE}/scan-interval/1440/devices"
     page = _device_page(1, 0, limit)
     del page["total"]
@@ -656,8 +658,8 @@ async def test_list_devices_without_total_uses_page_fill(limit: int, complete: b
         interval_minutes=1440,
         limit=limit,
     )
-    assert result["metadata"]["total"] is None
-    assert result["metadata"]["complete"] is complete
+    assert "total_elements" not in result["metadata"]["pagination"]
+    assert result["metadata"]["pagination"]["has_more"] is has_more
 
 
 @pytest.mark.asyncio
@@ -799,9 +801,9 @@ async def test_create_tool_rejects_bad_input(
 
 
 @pytest.mark.asyncio
-async def test_list_tool_rejects_limit_over_200(recorded: dict[str, Any]) -> None:
+async def test_list_tool_rejects_limit_over_15(recorded: dict[str, Any]) -> None:
     with pytest.raises(ToolError):
-        await _register().tools["list_device_settings_jobs"](limit=201)
+        await _register().tools["list_device_settings_jobs"](limit=16)
     assert "list_device_settings_jobs" not in recorded
 
 
@@ -856,7 +858,7 @@ async def test_value_read_tools_use_client_org_id(recorded: dict[str, Any]) -> N
         windows_update_source="WSUS",
         wsus_server_url=WSUS_URL,
         page=2,
-        limit=500,
+        limit=50,
     )
     assert recorded["get_device_setting_values"] == {"org_id": 42, "setting": "os-auto-update"}
     assert recorded["list_devices_by_setting_value"] == {
@@ -865,7 +867,7 @@ async def test_value_read_tools_use_client_org_id(recorded: dict[str, Any]) -> N
         "windows_update_source": "WSUS",
         "wsus_server_url": WSUS_URL,
         "page": 2,
-        "limit": 500,
+        "limit": 50,
     }
 
 
@@ -873,7 +875,7 @@ async def test_value_read_tools_use_client_org_id(recorded: dict[str, Any]) -> N
 @pytest.mark.parametrize(
     "kwargs",
     [
-        {"setting": "scan-interval", "interval_minutes": 1440, "limit": 501},
+        {"setting": "scan-interval", "interval_minutes": 1440, "limit": 51},
         {"setting": "scan-interval", "interval_minutes": 1440, "page": -1},
         {"setting": "scan-interval"},
         {"setting": "windows-update-source", "windows_update_source": "WSUS"},
@@ -910,24 +912,84 @@ async def test_create_tool_treats_empty_remove_as_absent(recorded: dict[str, Any
     assert "remove_device_uuids" not in recorded["create_device_settings_job"]
 
 
+def _register_with(client: Any) -> StubServer:
+    server = StubServer()
+    device_settings_tools.register(server, client=client)
+    return server
+
+
+_CREATE_ARGS: dict[str, Any] = {
+    "org_uuid": ORG_UUID,
+    "setting": "scan-interval",
+    "interval_minutes": 720,
+    "add_device_uuids": [DEVICE_A],
+}
+
+
 @pytest.mark.asyncio
-async def test_unclear_create_keeps_request_id_taken(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[str] = []
+async def test_unclear_create_answers_resend_without_sending() -> None:
+    client = RaisingClient(AutomoxAPIError("network error", status_code=0))
+    tool = _register_with(client).tools["create_device_settings_job"]
+    with pytest.raises(ToolError, match="no clear result"):
+        await tool(**_CREATE_ARGS, request_id="unclear-create-1")
+    again = await tool(**_CREATE_ARGS, request_id="unclear-create-1")
+    assert len(client.calls) == 1
+    assert again["data"] == {"jobId": None, "unclear": True}
+    assert "list_devices_by_setting_value" in again["metadata"]["note"]
 
-    async def unclear(client: Any, **kwargs: Any) -> dict[str, Any]:
-        calls.append("create")
-        raise workflows.UnclearJobCreateError("timed out", 0)
 
-    monkeypatch.setattr(device_settings_tools.workflows, "create_device_settings_job", unclear)
-    tool = _register().tools["create_device_settings_job"]
-    kwargs = {
-        "setting": "scan-interval",
-        "interval_minutes": 720,
-        "add_device_uuids": [DEVICE_A],
-        "request_id": "unclear-create-1",
-    }
-    with pytest.raises(ToolError, match="no clear result|timed out"):
-        await tool(**kwargs)
-    again = await tool(**kwargs)
-    assert calls == ["create"]
-    assert again["data"]["duplicate"] is True
+@pytest.mark.asyncio
+async def test_cancelled_create_answers_resend_without_sending() -> None:
+    class CancellingClient(StubClient):
+        async def post(self, path: str, **kwargs: Any) -> Any:
+            self.calls.append(("POST", path, kwargs.get("json_data")))
+            raise asyncio.CancelledError
+
+    client = CancellingClient()
+    tool = _register_with(client).tools["create_device_settings_job"]
+    with pytest.raises(asyncio.CancelledError):
+        await tool(**_CREATE_ARGS, request_id="cancelled-create-1")
+    again = await tool(**_CREATE_ARGS, request_id="cancelled-create-1")
+    assert len(client.calls) == 1
+    assert again["data"]["unclear"] is True
+
+
+@pytest.mark.asyncio
+async def test_refused_create_frees_request_id() -> None:
+    payload = _problem(400, "Bad Request", "bad value", "INVALID_VALUE")
+    client = RaisingClient(AutomoxAPIError("bad", status_code=400, payload=payload))
+    tool = _register_with(client).tools["create_device_settings_job"]
+    for _ in range(2):
+        with pytest.raises(ToolError, match="INVALID_VALUE"):
+            await tool(**_CREATE_ARGS, request_id="refused-create-1")
+    assert len(client.calls) == 2
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("answer", [{}, {"status": "PENDING"}])
+async def test_create_without_job_id_is_unclear(answer: dict[str, Any]) -> None:
+    client = StubClient(post_responses={f"{BASE}/jobs": [answer]})
+    with pytest.raises(workflows.UnclearJobCreateError, match="without a jobId"):
+        await workflows.create_device_settings_job(
+            client,  # type: ignore[arg-type]
+            org_uuid=ORG_UUID,
+            setting="scan-interval",
+            interval_minutes=720,
+            add_device_uuids=[DEVICE_A],
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("job_id", [".", "..", "..."])
+async def test_job_tools_reject_dot_ids(recorded: dict[str, Any], job_id: str) -> None:
+    server = _register()
+    for name in ("get_device_settings_job", "cancel_device_settings_job"):
+        with pytest.raises(ToolError):
+            await server.tools[name](job_id=job_id)
+    assert "get_device_settings_job" not in recorded
+
+
+@pytest.mark.asyncio
+async def test_list_jobs_tool_sends_default_limit(recorded: dict[str, Any]) -> None:
+    await _register().tools["list_device_settings_jobs"]()
+    assert recorded["list_device_settings_jobs"]["limit"] == 10

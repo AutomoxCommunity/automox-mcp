@@ -615,14 +615,11 @@ def _reconcile_sibling_counts(
 def _reconcile_after_truncation(meta: dict[str, Any], *, returned: int) -> None:
     """Ensure a truncated response never signals completeness.
 
-    When items were dropped, neither ``metadata.complete`` nor a
-    ``metadata.pagination`` block may assert the page is complete: clear
-    ``complete``, force ``has_more=True`` and clear any ``last=True`` (Spring
+    When items were dropped, a ``metadata.pagination`` block must not assert the
+    page is complete: force ``has_more=True`` and clear any ``last=True`` (Spring
     completeness flag) so the response cannot simultaneously claim completeness
     and be truncated.
     """
-    if meta.get("complete") is True:
-        meta["complete"] = False
     pagination = meta.get("pagination")
     if isinstance(pagination, dict):
         pagination["has_more"] = True

@@ -12,6 +12,7 @@ from typing import Any
 from urllib.parse import quote
 
 from ..client import AutomoxAPIError, AutomoxClient
+from ..utils.response import build_pagination_metadata
 
 _BASE = "/organizations/{org_uuid}/scan/device-settings"
 _READ_BASE = "/orgs/{org_id}/device-settings"
@@ -33,8 +34,9 @@ _ERROR_GUIDANCE: dict[str, tuple[str, str]] = {
     "VALUE_EXISTS": ("no", "The organization already has this value; it can be used in a job."),
     "ORG_NOT_DEVICE_OWNED": (
         "action",
-        "This organization's settings are managed on server groups: use "
-        "update_server_group (refresh_interval, OS auto update, WSUS) instead.",
+        "This organization's settings are managed on server groups: set the scan "
+        "interval with update_server_group (refresh_interval); OS auto update and "
+        "WSUS on a server group are changed in the Automox console.",
     ),
     "ORG_OUT_OF_SCOPE": (
         "action",
@@ -53,7 +55,7 @@ _ERROR_GUIDANCE: dict[str, tuple[str, str]] = {
     ),
 }
 
-_UNCLEAR_CREATE = (
+UNCLEAR_CREATE_NOTE = (
     "The job create returned no clear result, so a job may already have been "
     "created. Do not resend it blindly: look for it with list_device_settings_jobs "
     "(jobs still running), and since a finished job is not listed there, check with "
@@ -176,15 +178,23 @@ async def create_device_settings_job(
     except AutomoxAPIError as exc:
         if _guidance(exc) is None and _is_unclear(exc):
             raise UnclearJobCreateError(
-                f"{exc}. {_UNCLEAR_CREATE}", exc.status_code, exc.payload
+                f"{exc}. {UNCLEAR_CREATE_NOTE}", exc.status_code, exc.payload
             ) from exc
         raise _with_guidance(exc) from exc
+    if not isinstance(result, Mapping) or not result.get("jobId"):
+        raise UnclearJobCreateError(
+            f"The job create answered without a jobId. {UNCLEAR_CREATE_NOTE}",
+            200,
+            result if isinstance(result, Mapping) else None,
+        )
     return {
         "data": result,
         "metadata": {
             "next_step": (
                 "The job runs in the background. Poll get_device_settings_job with "
-                "this jobId until status is COMPLETED, PARTIAL, FAILED or CANCELLED."
+                "this jobId until status is COMPLETED, PARTIAL or FAILED; a CANCELLED "
+                "job can still be finishing, and its counts are final once it leaves "
+                "list_device_settings_jobs."
             ),
         },
     }
@@ -226,8 +236,9 @@ async def list_device_settings_jobs(
     return {
         "data": {"jobs": jobs},
         "metadata": {
-            "next_cursor": next_cursor,
-            "complete": next_cursor is None,
+            "pagination": build_pagination_metadata(
+                page_size=limit, has_more=next_cursor is not None, next_cursor=next_cursor
+            ),
             "note": (
                 "Only jobs in progress are listed; read a finished job by its jobId. "
                 "A page can be empty and still have a next_cursor."
@@ -276,10 +287,12 @@ async def add_device_setting_value(
     wsus_server_url: str | None = None,
 ) -> dict[str, Any]:
     """Add a scan interval or WSUS server to the organization's list of values."""
-    body: dict[str, Any] = (
-        {"intervalMinutes": interval_minutes}
+    body = (
+        build_setting_value(setting, interval_minutes=interval_minutes)
         if setting == "scan-interval"
-        else {"managed": True, "serverUrl": wsus_server_url}
+        else build_setting_value(
+            setting, windows_update_source="WSUS", wsus_server_url=wsus_server_url
+        )
     )
     try:
         result = await client.post(
@@ -327,10 +340,10 @@ async def list_devices_by_setting_value(
     if setting == "scan-interval":
         path = f"{base}/scan-interval/{value['intervalMinutes']}/devices"
     else:
-        chosen = os_auto_update if setting == "os-auto-update" else windows_update_source
-        path = f"{base}/os-patch/{setting}/{_OS_PATCH_SLUGS[setting][str(chosen)]}/devices"
-        if wsus_server_url is not None:
-            params["server"] = wsus_server_url
+        chosen = str(os_auto_update or windows_update_source)
+        path = f"{base}/os-patch/{setting}/{_OS_PATCH_SLUGS[setting][chosen]}/devices"
+        if value.get("serverUrl"):
+            params["server"] = value["serverUrl"]
     try:
         result = await client.get(path, params=params)
     except AutomoxAPIError as exc:
@@ -340,18 +353,23 @@ async def list_devices_by_setting_value(
         {key: row.get(key) for key in _DEVICE_FIELDS} for row in rows if isinstance(row, Mapping)
     ]
     total = result.get("total") if isinstance(result, Mapping) else None
-    if isinstance(total, int) and not isinstance(total, bool):
-        complete = (page + 1) * limit >= total
-    else:
+    if not isinstance(total, int) or isinstance(total, bool):
         total = None
-        complete = len(rows) < limit
     return {
         "data": {"devices": devices},
-        "metadata": {"total": total, "page": page, "limit": limit, "complete": complete},
+        "metadata": {
+            "pagination": build_pagination_metadata(
+                page=page,
+                page_size=limit,
+                total_elements=total,
+                has_more=None if total is not None else len(rows) >= limit,
+            ),
+        },
     }
 
 
 __all__ = [
+    "UNCLEAR_CREATE_NOTE",
     "UnclearJobCreateError",
     "add_device_setting_value",
     "build_setting_value",

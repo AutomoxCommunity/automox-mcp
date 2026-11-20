@@ -139,26 +139,6 @@ def test_apply_token_budget_truncation_marks_has_more_true():
     assert pagination["last"] is False
 
 
-@pytest.mark.parametrize("data_is_list", [True, False])
-def test_apply_token_budget_truncation_clears_complete(data_is_list: bool):
-    """A truncated page must not report metadata.complete=True."""
-    devices = _oversized_devices(10)
-    response = {
-        "data": devices if data_is_list else {"devices": devices},
-        "metadata": {"complete": True},
-    }
-
-    result = _apply_token_budget(response, budget=10)
-
-    assert result["metadata"]["truncated"] is True
-    assert result["metadata"]["complete"] is False
-
-
-def test_apply_token_budget_leaves_incomplete_flag_alone():
-    response = {"data": {"devices": _oversized_devices(10)}, "metadata": {"complete": False}}
-    assert _apply_token_budget(response, budget=10)["metadata"]["complete"] is False
-
-
 def test_apply_token_budget_reconciles_sibling_counts():
     """No surviving total_*/_returned count may exceed the returned list length."""
     devices = _oversized_devices(10)

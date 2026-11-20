@@ -22,8 +22,7 @@ _OS_PATCH_SLUGS: dict[str, dict[str, str]] = {
     "windows-update-source": {"KEEP": "keep", "WINDOWS_UPDATE": "windows-update", "WSUS": "wsus"},
 }
 
-# Error code -> (retry class, what the caller should do). Codes and retry classes
-# follow the API's ErrorCode table.
+# Error code -> (retry class, what the caller should do).
 _ERROR_GUIDANCE: dict[str, tuple[str, str]] = {
     "INVALID_SELECTION": ("no", "Fix the device lists: 1 to 500 distinct device UUIDs per half."),
     "SELECTION_OVERLAP": ("no", "A device is in both add and remove; list it in one only."),
@@ -56,10 +55,19 @@ _ERROR_GUIDANCE: dict[str, tuple[str, str]] = {
 
 _UNCLEAR_CREATE = (
     "The job create returned no clear result, so a job may already have been "
-    "created. Do not resend it blindly: call list_device_settings_jobs to look for "
-    "it first. Resending is safe only if no later job for the same setting has "
-    "been sent since; otherwise leave the devices that job shares out of the retry."
+    "created. Do not resend it blindly: look for it with list_device_settings_jobs "
+    "(jobs still running), and since a finished job is not listed there, check with "
+    "list_devices_by_setting_value whether the devices already hold the value. "
+    "Resending is safe only if no later job for the same setting has been sent "
+    "since; otherwise leave the devices that job shares out of the retry."
 )
+
+# Fields of a device row worth returning; every row on a page holds the same value.
+_DEVICE_FIELDS = ("uuid", "name", "isOnline", "osFamily", "osName")
+
+
+class UnclearJobCreateError(AutomoxAPIError):
+    """A job create whose outcome is unknown: the job may exist."""
 
 
 def _base(org_uuid: str) -> str:
@@ -67,20 +75,25 @@ def _base(org_uuid: str) -> str:
     return _BASE.format(org_uuid=quote(org_uuid.lower(), safe=""))
 
 
-def _with_guidance(exc: AutomoxAPIError) -> AutomoxAPIError:
+def _guidance(exc: AutomoxAPIError) -> tuple[str, str, str] | None:
     code = exc.payload.get("code") if isinstance(exc.payload, Mapping) else None
     guidance = _ERROR_GUIDANCE.get(code) if isinstance(code, str) else None
-    if guidance is None:
+    return None if guidance is None else (str(code), *guidance)
+
+
+def _with_guidance(exc: AutomoxAPIError) -> AutomoxAPIError:
+    found = _guidance(exc)
+    if found is None:
         return exc
-    retry, hint = guidance
+    code, retry, hint = found
     return AutomoxAPIError(
         f"{exc} [code={code}, retry={retry}] {hint}", exc.status_code, exc.payload
     )
 
 
 def _is_unclear(exc: AutomoxAPIError) -> bool:
-    # status 0 = no response (network error); 500/503 may have created the job.
-    return exc.status_code in (0, 500, 503)
+    # 0 = no response; a 2xx here is a body that could not be read.
+    return exc.status_code == 0 or exc.status_code >= 500 or 200 <= exc.status_code < 300
 
 
 def build_setting_value(
@@ -136,14 +149,24 @@ async def create_device_settings_job(
     *,
     org_uuid: str,
     setting: str,
-    value: Mapping[str, Any],
     add_device_uuids: list[str],
     remove_device_uuids: list[str] | None = None,
+    interval_minutes: int | None = None,
+    os_auto_update: str | None = None,
+    windows_update_source: str | None = None,
+    wsus_server_url: str | None = None,
 ) -> dict[str, Any]:
     """Create an apply job that sets one setting on the devices in ``add``."""
+    value = build_setting_value(
+        setting,
+        interval_minutes=interval_minutes,
+        os_auto_update=os_auto_update,
+        windows_update_source=windows_update_source,
+        wsus_server_url=wsus_server_url,
+    )
     body: dict[str, Any] = {
         "setting": setting,
-        "value": dict(value),
+        "value": value,
         "add": {"deviceUuids": add_device_uuids},
     }
     if remove_device_uuids:
@@ -151,8 +174,8 @@ async def create_device_settings_job(
     try:
         result = await client.post(f"{_base(org_uuid)}/jobs", json_data=body)
     except AutomoxAPIError as exc:
-        if _is_unclear(exc):
-            raise AutomoxAPIError(
+        if _guidance(exc) is None and _is_unclear(exc):
+            raise UnclearJobCreateError(
                 f"{exc}. {_UNCLEAR_CREATE}", exc.status_code, exc.payload
             ) from exc
         raise _with_guidance(exc) from exc
@@ -253,14 +276,11 @@ async def add_device_setting_value(
     wsus_server_url: str | None = None,
 ) -> dict[str, Any]:
     """Add a scan interval or WSUS server to the organization's list of values."""
-    if setting == "scan-interval":
-        if interval_minutes is None or wsus_server_url is not None:
-            raise ValueError("scan-interval takes interval_minutes only")
-        body: dict[str, Any] = {"intervalMinutes": interval_minutes}
-    else:
-        if not wsus_server_url or interval_minutes is not None:
-            raise ValueError("windows-update-source takes wsus_server_url only")
-        body = {"managed": True, "serverUrl": wsus_server_url}
+    body: dict[str, Any] = (
+        {"intervalMinutes": interval_minutes}
+        if setting == "scan-interval"
+        else {"managed": True, "serverUrl": wsus_server_url}
+    )
     try:
         result = await client.post(
             f"{_base(org_uuid)}/values/{quote(setting, safe='')}", json_data=body
@@ -292,7 +312,7 @@ async def list_devices_by_setting_value(
     windows_update_source: str | None = None,
     wsus_server_url: str | None = None,
     page: int = 0,
-    limit: int = 100,
+    limit: int = 50,
 ) -> dict[str, Any]:
     """List one page of the devices that hold one value of *setting*."""
     value = build_setting_value(
@@ -315,9 +335,16 @@ async def list_devices_by_setting_value(
         result = await client.get(path, params=params)
     except AutomoxAPIError as exc:
         raise _with_guidance(exc) from exc
-    devices = result.get("data", []) if isinstance(result, Mapping) else []
+    rows = result.get("data", []) if isinstance(result, Mapping) else []
+    devices = [
+        {key: row.get(key) for key in _DEVICE_FIELDS} for row in rows if isinstance(row, Mapping)
+    ]
     total = result.get("total") if isinstance(result, Mapping) else None
-    complete = not isinstance(total, int) or (page + 1) * limit >= total
+    if isinstance(total, int) and not isinstance(total, bool):
+        complete = (page + 1) * limit >= total
+    else:
+        total = None
+        complete = len(rows) < limit
     return {
         "data": {"devices": devices},
         "metadata": {"total": total, "page": page, "limit": limit, "complete": complete},
@@ -325,6 +352,7 @@ async def list_devices_by_setting_value(
 
 
 __all__ = [
+    "UnclearJobCreateError",
     "add_device_setting_value",
     "build_setting_value",
     "cancel_device_settings_job",

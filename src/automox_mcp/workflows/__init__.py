@@ -78,6 +78,7 @@ from .device_search import (
     update_saved_search,
 )
 from .device_settings import (
+    UnclearJobCreateError,
     add_device_setting_value,
     build_setting_value,
     cancel_device_settings_job,
@@ -198,6 +199,7 @@ from .webhooks import (
 from .worklets import get_worklet_detail, search_worklet_catalog
 
 __all__ = [
+    "UnclearJobCreateError",
     "account",
     "audit",
     "audit_v2",

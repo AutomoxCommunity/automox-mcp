@@ -185,6 +185,11 @@ async def create_device_settings_job(
                 f"{exc}. {UNCLEAR_CREATE_NOTE}", exc.status_code, exc.payload
             ) from exc
         raise _with_guidance(exc) from exc
+    except Exception as exc:
+        # The request may have reached the API before this failed.
+        raise UnclearJobCreateError(
+            f"The job create failed with {type(exc).__name__}. {UNCLEAR_CREATE_NOTE}", 0
+        ) from exc
     if not isinstance(result, Mapping) or not result.get("jobId"):
         raise UnclearJobCreateError(
             f"The job create answered without a jobId. {UNCLEAR_CREATE_NOTE}",
@@ -258,6 +263,13 @@ async def cancel_device_settings_job(
     try:
         result = await client.post(f"{_base(org_uuid)}/jobs/{quote(job_id, safe='')}/cancel")
     except AutomoxAPIError as exc:
+        if _guidance(exc) is None and _is_unclear(exc):
+            raise AutomoxAPIError(
+                f"{exc}. The cancel may have gone through; sending it again is safe and "
+                "answers with the job's status.",
+                exc.status_code,
+                exc.payload,
+            ) from exc
         payload = exc.payload if isinstance(exc.payload, Mapping) else {}
         # A refused cancel is a 409 whose body is the job itself, with no code.
         if exc.status_code == 409 and "code" not in payload and "jobId" in payload:
@@ -319,6 +331,17 @@ async def get_device_setting_values(
         result = await client.get(f"{_READ_BASE.format(org_id=org_id)}/{group}")
     except AutomoxAPIError as exc:
         raise _with_guidance(exc) from exc
+    if isinstance(result, Mapping) and isinstance(result.get("wsusServers"), list):
+        # valueKey repeats serverUrl; dropping it keeps a long server list in budget.
+        result = {
+            **result,
+            "wsusServers": [
+                {k: v for k, v in row.items() if k != "valueKey"}
+                if isinstance(row, Mapping)
+                else row
+                for row in result["wsusServers"]
+            ],
+        }
     return {"data": result, "metadata": {}}
 
 

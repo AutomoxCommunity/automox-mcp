@@ -556,7 +556,12 @@ async def test_get_values_reads_route_for_setting(setting: str, path: str, paylo
     client = StubClient(get_responses={path: [payload]})
     result = await workflows.get_device_setting_values(client, org_id=42, setting=setting)  # type: ignore[arg-type]
     assert client.calls == [("GET", path, None)]
-    assert result["data"] == payload
+    expected = dict(payload)
+    if "wsusServers" in expected:
+        expected["wsusServers"] = [
+            {k: v for k, v in row.items() if k != "valueKey"} for row in expected["wsusServers"]
+        ]
+    assert result["data"] == expected
 
 
 @pytest.mark.asyncio
@@ -1055,7 +1060,7 @@ async def test_unexpected_error_during_create_keeps_request_id() -> None:
 
     client = UndecodableClient()
     tool = _register_with(client).tools["create_device_settings_job"]
-    with pytest.raises(ToolError):
+    with pytest.raises(ToolError, match="no clear result"):
         await tool(**_CREATE_ARGS, request_id="undecodable-create-1")
     again = await tool(**_CREATE_ARGS, request_id="undecodable-create-1")
     assert len(client.calls) == 1
@@ -1096,3 +1101,34 @@ async def test_cancel_of_already_cancelled_job_says_so() -> None:
     assert result["metadata"]["cancelled"] is False
     assert "already CANCELLED" in result["metadata"]["note"]
     assert "earlier cancel" in result["metadata"]["note"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [0, 503])
+async def test_unclear_cancel_says_resending_is_safe(status: int) -> None:
+    client = RaisingClient(AutomoxAPIError("network error", status_code=status))
+    with pytest.raises(AutomoxAPIError, match="sending it again is safe"):
+        await workflows.cancel_device_settings_job(
+            client,  # type: ignore[arg-type]
+            org_uuid=ORG_UUID,
+            job_id=JOB_ID,
+        )
+
+
+@pytest.mark.asyncio
+async def test_get_values_keeps_wsus_server_url() -> None:
+    path = f"{READ_BASE}/os-patch"
+    client = StubClient(get_responses={path: [OS_PATCH_VALUES]})
+    result = await workflows.get_device_setting_values(
+        client,  # type: ignore[arg-type]
+        org_id=42,
+        setting="windows-update-source",
+    )
+    assert result["data"]["wsusServers"] == [
+        {
+            "serverUrl": WSUS_URL,
+            "deviceCount": 1,
+            "dateUpdated": "2026-11-12T18:19:05Z",
+            "isDefault": False,
+        }
+    ]

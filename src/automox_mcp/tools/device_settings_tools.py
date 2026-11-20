@@ -21,8 +21,13 @@ from ..utils.tooling import (
 )
 
 SettingName = Literal["scan-interval", "os-auto-update", "windows-update-source"]
+OsAutoUpdate = Literal["ENABLED", "DISABLED", "KEEP"]
+WindowsUpdateSource = Literal["KEEP", "WINDOWS_UPDATE", "WSUS"]
 
 _MAX_DEVICES = 500
+_MAX_PAGE_LIMIT = 500
+# RFC 9562 defines UUID versions 1 to 8.
+_UUID_VERSIONS = range(1, 9)
 
 _OWNERSHIP_NOTE = (
     "Only for organizations whose devices own their settings (server groups there "
@@ -32,9 +37,11 @@ _OWNERSHIP_NOTE = (
 
 
 def _check_device_uuids(values: list[UUID] | None, field: str) -> list[UUID] | None:
-    if values is None:
+    if not values:
+        if values is not None and field == "add_device_uuids":
+            raise ValueError(f"{field} must list 1 to {_MAX_DEVICES} devices")
         return None
-    if not 1 <= len(values) <= _MAX_DEVICES:
+    if len(values) > _MAX_DEVICES:
         raise ValueError(
             f"{field} must list 1 to {_MAX_DEVICES} devices; split a larger set into "
             "jobs yourself, knowing that the newest job for a setting wins on every "
@@ -43,26 +50,41 @@ def _check_device_uuids(values: list[UUID] | None, field: str) -> list[UUID] | N
     if len(set(values)) != len(values):
         raise ValueError(f"{field} lists a device more than once")
     for value in values:
-        if value.variant != uuid_lib.RFC_4122 or value.version not in range(1, 9):
+        if value.variant != uuid_lib.RFC_4122 or value.version not in _UUID_VERSIONS:
             raise ValueError(f"{field} holds {value}, which is not an RFC 9562 UUID")
     return values
 
 
-class CreateDeviceSettingsJobParams(ForbidExtraModel):
-    org_uuid: UUID
+class _SettingValueFields(ForbidExtraModel):
+    """One value of one setting, given as flat arguments."""
+
     setting: SettingName
     interval_minutes: int | None = Field(None, ge=1)
-    os_auto_update: Literal["ENABLED", "DISABLED", "KEEP"] | None = None
-    windows_update_source: Literal["KEEP", "WINDOWS_UPDATE", "WSUS"] | None = None
+    os_auto_update: OsAutoUpdate | None = None
+    windows_update_source: WindowsUpdateSource | None = None
     wsus_server_url: str | None = Field(None, min_length=1, max_length=100)
+
+    @model_validator(mode="after")
+    def _check_setting_value(self) -> _SettingValueFields:
+        workflows.build_setting_value(
+            self.setting,
+            interval_minutes=self.interval_minutes,
+            os_auto_update=self.os_auto_update,
+            windows_update_source=self.windows_update_source,
+            wsus_server_url=self.wsus_server_url,
+        )
+        return self
+
+
+class CreateDeviceSettingsJobParams(_SettingValueFields):
+    org_uuid: UUID
     add_device_uuids: list[UUID]
     remove_device_uuids: list[UUID] | None = None
 
     @field_validator("add_device_uuids")
     @classmethod
-    def _check_add(cls, value: list[UUID]) -> list[UUID]:
-        _check_device_uuids(value, "add_device_uuids")
-        return value
+    def _check_add(cls, value: list[UUID]) -> list[UUID] | None:
+        return _check_device_uuids(value, "add_device_uuids")
 
     @field_validator("remove_device_uuids")
     @classmethod
@@ -71,17 +93,8 @@ class CreateDeviceSettingsJobParams(ForbidExtraModel):
 
     @model_validator(mode="after")
     def _check_halves(self) -> CreateDeviceSettingsJobParams:
-        if self.remove_device_uuids:
-            overlap = set(self.add_device_uuids) & set(self.remove_device_uuids)
-            if overlap:
-                raise ValueError("a device is in both add_device_uuids and remove_device_uuids")
-        workflows.build_setting_value(
-            self.setting,
-            interval_minutes=self.interval_minutes,
-            os_auto_update=self.os_auto_update,
-            windows_update_source=self.windows_update_source,
-            wsus_server_url=self.wsus_server_url,
-        )
+        if self.remove_device_uuids and set(self.add_device_uuids) & set(self.remove_device_uuids):
+            raise ValueError("a device is in both add_device_uuids and remove_device_uuids")
         return self
 
 
@@ -117,36 +130,14 @@ class GetDeviceSettingValuesParams(OrgIdRequiredMixin, ForbidExtraModel):
     setting: SettingName
 
 
-class ListDevicesBySettingValueParams(OrgIdRequiredMixin, ForbidExtraModel):
-    setting: SettingName
-    interval_minutes: int | None = Field(None, ge=1)
-    os_auto_update: Literal["ENABLED", "DISABLED", "KEEP"] | None = None
-    windows_update_source: Literal["KEEP", "WINDOWS_UPDATE", "WSUS"] | None = None
-    wsus_server_url: str | None = Field(None, min_length=1, max_length=100)
+class ListDevicesBySettingValueParams(OrgIdRequiredMixin, _SettingValueFields):
     page: int = Field(0, ge=0)
-    limit: int = Field(100, ge=1, le=_MAX_DEVICES)
-
-    @model_validator(mode="after")
-    def _check_value(self) -> ListDevicesBySettingValueParams:
-        workflows.build_setting_value(
-            self.setting,
-            interval_minutes=self.interval_minutes,
-            os_auto_update=self.os_auto_update,
-            windows_update_source=self.windows_update_source,
-            wsus_server_url=self.wsus_server_url,
-        )
-        return self
+    limit: int = Field(50, ge=1, le=_MAX_PAGE_LIMIT)
 
 
-async def _create_job(client: AutomoxClient, **params: Any) -> dict[str, Any]:
-    value = workflows.build_setting_value(
-        params["setting"],
-        interval_minutes=params.pop("interval_minutes", None),
-        os_auto_update=params.pop("os_auto_update", None),
-        windows_update_source=params.pop("windows_update_source", None),
-        wsus_server_url=params.pop("wsus_server_url", None),
-    )
-    return await workflows.create_device_settings_job(client, value=value, **params)
+def _with_org_id(params: dict[str, Any], org_id: int | None) -> dict[str, Any]:
+    # An absent org_id falls back to the client's organization.
+    return params if org_id is None else {**params, "org_id": org_id}
 
 
 def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient) -> None:
@@ -220,7 +211,8 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
             "many devices hold it, and which value is the default. setting=scan-interval "
             "returns intervals in minutes; os-auto-update or windows-update-source "
             "returns both OS patch settings and the WSUS servers. Use a value from here "
-            "in list_devices_by_setting_value or create_device_settings_job. " + _OWNERSHIP_NOTE
+            "in list_devices_by_setting_value or create_device_settings_job. org_id "
+            "defaults to the configured organization. " + _OWNERSHIP_NOTE
         ),
         annotations={
             "readOnlyHint": True,
@@ -231,11 +223,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     )
     async def get_device_setting_values(
         setting: SettingName,
+        org_id: int | None = None,
     ) -> dict[str, Any]:
         return await call_tool_workflow(
             client,
             workflows.get_device_setting_values,
-            {"setting": setting},
+            _with_org_id({"setting": setting}, org_id),
             params_model=GetDeviceSettingValuesParams,
         )
 
@@ -243,12 +236,16 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         name="list_devices_by_setting_value",
         description=(
             "List the devices that hold one value of a device setting, one page at a "
-            "time (page from 0, limit up to 500, default 100). Give the value the same "
-            "way as create_device_settings_job: interval_minutes, os_auto_update, or "
-            "windows_update_source (with wsus_server_url for WSUS). Each device carries "
-            "its uuid, for use in create_device_settings_job, and its current values. "
-            "A value or WSUS server that is not one of the organization's values "
-            "returns VALUE_NOT_FOUND. Page until metadata.complete is true. " + _OWNERSHIP_NOTE
+            "time (page from 0, limit up to 500, default 50), each with its uuid for "
+            "create_device_settings_job. Give the value the same way as "
+            "create_device_settings_job: interval_minutes, os_auto_update, or "
+            "windows_update_source (with wsus_server_url for WSUS). Page until "
+            "metadata.complete is true, and read every page before sending a job: a job "
+            "moves devices off this list and shifts later pages. If metadata.truncated "
+            "is true the page was cut to fit the response size; read it again with a "
+            "smaller limit. A value or WSUS server that is not one of the organization's "
+            "values returns VALUE_NOT_FOUND. org_id defaults to the configured "
+            "organization. " + _OWNERSHIP_NOTE
         ),
         annotations={
             "readOnlyHint": True,
@@ -260,11 +257,12 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
     async def list_devices_by_setting_value(
         setting: SettingName,
         interval_minutes: int | None = None,
-        os_auto_update: Literal["ENABLED", "DISABLED", "KEEP"] | None = None,
-        windows_update_source: Literal["KEEP", "WINDOWS_UPDATE", "WSUS"] | None = None,
+        os_auto_update: OsAutoUpdate | None = None,
+        windows_update_source: WindowsUpdateSource | None = None,
         wsus_server_url: str | None = None,
         page: int = 0,
-        limit: int = 100,
+        limit: int = 50,
+        org_id: int | None = None,
     ) -> dict[str, Any]:
         params = {
             "setting": setting,
@@ -278,7 +276,7 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         return await call_tool_workflow(
             client,
             workflows.list_devices_by_setting_value,
-            params,
+            _with_org_id(params, org_id),
             params_model=ListDevicesBySettingValueParams,
         )
 
@@ -312,8 +310,8 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         setting: SettingName,
         add_device_uuids: list[str],
         interval_minutes: int | None = None,
-        os_auto_update: Literal["ENABLED", "DISABLED", "KEEP"] | None = None,
-        windows_update_source: Literal["KEEP", "WINDOWS_UPDATE", "WSUS"] | None = None,
+        os_auto_update: OsAutoUpdate | None = None,
+        windows_update_source: WindowsUpdateSource | None = None,
         wsus_server_url: str | None = None,
         remove_device_uuids: list[str] | None = None,
         org_uuid: str | None = None,
@@ -335,14 +333,17 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
         try:
             result = await call_tool_workflow(
                 client,
-                _create_job,
+                workflows.create_device_settings_job,
                 params,
                 params_model=CreateDeviceSettingsJobParams,
                 org_uuid_field="org_uuid",
                 dump_mode="json",
             )
-        except BaseException:
-            await release_idempotency(request_id, "create_device_settings_job")
+        except BaseException as exc:
+            # A job may exist after an unclear create: keep the request_id taken so
+            # a resend with it cannot create a second job.
+            if not isinstance(exc.__cause__, workflows.UnclearJobCreateError):
+                await release_idempotency(request_id, "create_device_settings_job")
             raise
         await store_idempotency(request_id, "create_device_settings_job", result)
         return result

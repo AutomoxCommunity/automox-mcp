@@ -677,7 +677,7 @@ async def run_readonly_tools() -> None:
             record("get_server_group", False, "skipped — no group_id")
 
         # ---- Device Settings ----
-        # 19a. list_device_settings_jobs — answers in any organization (an empty
+        # 19a. list_device_settings_jobs answers in any organization (an empty
         # list where settings are group-owned); the cursor must report completeness.
         resp = await _safe_call(session, "list_device_settings_jobs", {"limit": 5})
         meta = resp.get("metadata", {}) if isinstance(resp, dict) else {}
@@ -688,20 +688,25 @@ async def run_readonly_tools() -> None:
             f"jobs={len(jobs) if isinstance(jobs, list) else None} complete={meta.get('complete')}",
         )
 
-        # 19b. get_device_settings_job — an unknown id must come back 404 JOB_NOT_FOUND,
+        # 19b. get_device_settings_job: an unknown id must come back 404 JOB_NOT_FOUND,
         # which proves the path and the org UUID resolve.
         resp = await _safe_call(
             session,
             "get_device_settings_job",
             {"job_id": "00000000-0000-4000-8000-000000000000"},
             tolerate=(404,),
+            tolerate_code="JOB_NOT_FOUND",
         )
         record("get_device_settings_job", resp is _TOLERATED, "unknown id -> 404 expected")
 
-        # 19c. get_device_setting_values — a group-owned organization answers 409
+        # 19c. get_device_setting_values: a group-owned organization answers 409
         # ORG_NOT_DEVICE_OWNED; a device-owned one must list values with the default.
         resp = await _safe_call(
-            session, "get_device_setting_values", {"setting": "scan-interval"}, tolerate=(409,)
+            session,
+            "get_device_setting_values",
+            {"setting": "scan-interval"},
+            tolerate=(409,),
+            tolerate_code="ORG_NOT_DEVICE_OWNED",
         )
         values = resp.get("data", {}).get("values") if isinstance(resp, dict) else None
         default = (
@@ -713,26 +718,32 @@ async def run_readonly_tools() -> None:
             "group-owned -> 409" if resp is _TOLERATED else f"values={values} default={default}",
         )
 
-        # 19d. list_devices_by_setting_value — in a device-owned organization every
-        # device listed under the default interval must report that interval.
+        # 19d. list_devices_by_setting_value: in a device-owned organization the
+        # device total under the default interval must match its count in 19c.
+        counts = {
+            v.get("intervalMinutes"): v.get("deviceCount")
+            for v in (values if isinstance(values, list) else [])
+        }
         resp = await _safe_call(
             session,
             "list_devices_by_setting_value",
             {"setting": "scan-interval", "interval_minutes": default or 1440, "limit": 5},
             tolerate=(409,),
+            tolerate_code="ORG_NOT_DEVICE_OWNED",
         )
         devices = resp.get("data", {}).get("devices") if isinstance(resp, dict) else None
+        total = resp.get("metadata", {}).get("total") if isinstance(resp, dict) else None
         record(
             "list_devices_by_setting_value",
             resp is _TOLERATED
             or (
                 isinstance(devices, list)
-                and all(d.get("scanIntervalMinutes") == (default or 1440) for d in devices)
-                and isinstance(resp.get("metadata", {}).get("complete"), bool)
+                and all(isinstance(d.get("uuid"), str) for d in devices)
+                and total == counts.get(default)
             ),
             "group-owned -> 409"
             if resp is _TOLERATED
-            else f"devices={len(devices) if isinstance(devices, list) else None}",
+            else f"devices={len(devices) if isinstance(devices, list) else None} total={total}",
         )
 
         # ---- Events ----
@@ -1964,13 +1975,15 @@ async def _safe_call(
     *,
     retries: int = 2,
     tolerate: tuple[int, ...] = (),
+    tolerate_code: str | None = None,
 ) -> dict[str, Any] | None | object:
     """Call a tool, returning None on any exception (the caller records the failure).
 
     Retries on rate-limit errors (60s pause) and on transient upstream
     connection resets (short pause). If the tool errors with an HTTP status in
     ``tolerate``, returns the ``_TOLERATED`` sentinel (the caller records
-    skip-OK) instead of None.
+    skip-OK) instead of None. With ``tolerate_code``, the error must also name
+    that API error code.
     """
     for attempt in range(1 + retries):
         try:
@@ -1986,7 +1999,9 @@ async def _safe_call(
                     log.info(f"    rate-limited on {name}, waiting 60s…")
                     await asyncio.sleep(60)
                     continue
-                if any(f"status={code}" in text for code in tolerate):
+                if any(f"status={code}" in text for code in tolerate) and (
+                    tolerate_code is None or f"code={tolerate_code}" in text
+                ):
                     log.info(f"    {YELLOW}skip-OK{RESET} {name}: tolerated — {text[:120]}")
                     return _TOLERATED
                 log.warning(f"    {YELLOW}WARN{RESET} {name}: tool error — {text[:200]}")

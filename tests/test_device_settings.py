@@ -1,7 +1,7 @@
 """Tests for the device settings workflows and tools.
 
 Response fixtures are sanitized payloads captured from a live organization whose
-devices own their settings (ids replaced).
+devices own their settings (ids, names and counts replaced).
 """
 
 from __future__ import annotations
@@ -15,6 +15,7 @@ from fastmcp.exceptions import ToolError
 from automox_mcp import workflows
 from automox_mcp.client import AutomoxAPIError
 from automox_mcp.tools import device_settings_tools
+from automox_mcp.workflows import device_settings as device_settings_workflows
 from automox_mcp.workflows import groups as group_workflows
 
 ORG_UUID = "ABCDEF01-2345-4678-9abc-def012345678"
@@ -148,7 +149,7 @@ async def test_create_job_posts_body_to_lowercase_org_path() -> None:
         client,  # type: ignore[arg-type]
         org_uuid=ORG_UUID,
         setting="scan-interval",
-        value={"intervalMinutes": 1440},
+        interval_minutes=1440,
         add_device_uuids=[DEVICE_A],
         remove_device_uuids=[DEVICE_B],
     )
@@ -175,26 +176,58 @@ async def test_create_job_omits_empty_remove() -> None:
         client,  # type: ignore[arg-type]
         org_uuid=ORG_UUID,
         setting="scan-interval",
-        value={"intervalMinutes": 1440},
+        interval_minutes=1440,
         add_device_uuids=[DEVICE_A],
     )
     assert "remove" not in client.calls[0][2]
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("status", [0, 500, 503])
+@pytest.mark.parametrize("status", [0, 200, 500, 502, 503, 504])
 async def test_create_job_unclear_result_warns_against_blind_resend(status: int) -> None:
     client = RaisingClient(AutomoxAPIError("boom", status_code=status))
-    with pytest.raises(AutomoxAPIError, match="list_device_settings_jobs") as info:
+    with pytest.raises(
+        workflows.UnclearJobCreateError, match="list_devices_by_setting_value"
+    ) as info:
         await workflows.create_device_settings_job(
             client,  # type: ignore[arg-type]
             org_uuid=ORG_UUID,
             setting="scan-interval",
-            value={"intervalMinutes": 1440},
+            interval_minutes=1440,
             add_device_uuids=[DEVICE_A],
         )
     assert info.value.status_code == status
     assert len(client.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_create_job_coded_5xx_keeps_its_guidance() -> None:
+    payload = _problem(503, "Service Unavailable", "not ready", "ORG_NOT_OPEN")
+    client = RaisingClient(AutomoxAPIError("unavailable", status_code=503, payload=payload))
+    with pytest.raises(AutomoxAPIError) as info:
+        await workflows.create_device_settings_job(
+            client,  # type: ignore[arg-type]
+            org_uuid=ORG_UUID,
+            setting="scan-interval",
+            interval_minutes=1440,
+            add_device_uuids=[DEVICE_A],
+        )
+    assert not isinstance(info.value, workflows.UnclearJobCreateError)
+    assert "[code=ORG_NOT_OPEN, retry=yes]" in str(info.value)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("code", sorted(device_settings_workflows._ERROR_GUIDANCE))
+async def test_every_error_code_gets_its_retry_class(code: str) -> None:
+    retry, hint = device_settings_workflows._ERROR_GUIDANCE[code]
+    client = RaisingClient(AutomoxAPIError("refused", status_code=409, payload={"code": code}))
+    with pytest.raises(AutomoxAPIError) as info:
+        await workflows.get_device_settings_job(
+            client,  # type: ignore[arg-type]
+            org_uuid=ORG_UUID,
+            job_id=JOB_ID,
+        )
+    assert f"[code={code}, retry={retry}] {hint}" in str(info.value)
 
 
 @pytest.mark.asyncio
@@ -208,7 +241,7 @@ async def test_create_job_org_not_device_owned_points_to_group_tool() -> None:
             client,  # type: ignore[arg-type]
             org_uuid=ORG_UUID,
             setting="scan-interval",
-            value={"intervalMinutes": 1440},
+            interval_minutes=1440,
             add_device_uuids=[DEVICE_A],
         )
     message = str(info.value)
@@ -364,29 +397,6 @@ async def test_add_existing_value_keeps_code() -> None:
         )
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("setting", "kwargs"),
-    [
-        ("scan-interval", {}),
-        ("scan-interval", {"interval_minutes": 480, "wsus_server_url": "https://w.example.com"}),
-        ("windows-update-source", {}),
-        (
-            "windows-update-source",
-            {"wsus_server_url": "https://w.example.com", "interval_minutes": 480},
-        ),
-    ],
-)
-async def test_add_value_rejects_wrong_arguments(setting: str, kwargs: dict[str, Any]) -> None:
-    with pytest.raises(ValueError):
-        await workflows.add_device_setting_value(
-            StubClient(),  # type: ignore[arg-type]
-            org_uuid=ORG_UUID,
-            setting=setting,
-            **kwargs,
-        )
-
-
 # ---------------------------------------------------------------------------
 # Group tools point device-owned refusals at the new tool
 # ---------------------------------------------------------------------------
@@ -406,6 +416,44 @@ async def test_group_create_device_owned_refusal_points_to_job_tool() -> None:
         )
     assert info.value.status_code == 422
     assert info.value.payload == payload
+
+
+class _PutRaisingClient(StubClient):
+    def __init__(self, group: dict[str, Any], exc: AutomoxAPIError) -> None:
+        super().__init__(get_responses={f"/servergroups/{group['id']}": [group]})
+        self.exc = exc
+
+    async def put(self, path: str, **kwargs: Any) -> Any:
+        self.calls.append(("PUT", path, kwargs.get("json_data")))
+        raise self.exc
+
+
+@pytest.mark.asyncio
+async def test_group_update_device_owned_refusal_points_to_job_tool() -> None:
+    group = {
+        "id": 5,
+        "name": "g",
+        "refresh_interval": None,
+        "parent_server_group_id": 1,
+        "ui_color": "#059F1D",
+        "notes": "",
+        "policies": [],
+        "server_count": 0,
+    }
+    payload = {"code": "DEVICE_OWNED_SETTINGS", "errors": ["refresh_interval is device-owned"]}
+    client = _PutRaisingClient(
+        group, AutomoxAPIError("unprocessable", status_code=422, payload=payload)
+    )
+    with pytest.raises(AutomoxAPIError, match="create_device_settings_job") as info:
+        await group_workflows.update_server_group(
+            client,  # type: ignore[arg-type]
+            org_id=42,
+            group_id=5,
+            name="g",
+            refresh_interval=720,
+        )
+    assert info.value.status_code == 422
+    assert client.calls[-1][0] == "PUT"
 
 
 @pytest.mark.asyncio
@@ -514,17 +562,17 @@ async def test_get_values_reads_route_for_setting(setting: str, path: str, paylo
         (
             {"setting": "scan-interval", "interval_minutes": 720},
             f"{READ_BASE}/scan-interval/720/devices",
-            {"page": 0, "limit": 100},
+            {"page": 0, "limit": 50},
         ),
         (
             {"setting": "os-auto-update", "os_auto_update": "ENABLED"},
             f"{READ_BASE}/os-patch/os-auto-update/enabled/devices",
-            {"page": 0, "limit": 100},
+            {"page": 0, "limit": 50},
         ),
         (
             {"setting": "windows-update-source", "windows_update_source": "WINDOWS_UPDATE"},
             f"{READ_BASE}/os-patch/windows-update-source/windows-update/devices",
-            {"page": 0, "limit": 100},
+            {"page": 0, "limit": 50},
         ),
         (
             {
@@ -533,7 +581,7 @@ async def test_get_values_reads_route_for_setting(setting: str, path: str, paylo
                 "wsus_server_url": WSUS_URL,
             },
             f"{READ_BASE}/os-patch/windows-update-source/wsus/devices",
-            {"page": 0, "limit": 100, "server": WSUS_URL},
+            {"page": 0, "limit": 50, "server": WSUS_URL},
         ),
     ],
 )
@@ -570,6 +618,46 @@ async def test_list_devices_reports_completion(
         "limit": limit,
         "complete": complete,
     }
+
+
+@pytest.mark.asyncio
+async def test_list_devices_returns_only_targeting_fields() -> None:
+    path = f"{READ_BASE}/scan-interval/1440/devices"
+    client = StubClient(get_responses={path: [_device_page(1, 0, 50)]})
+    result = await workflows.list_devices_by_setting_value(
+        client,  # type: ignore[arg-type]
+        org_id=42,
+        setting="scan-interval",
+        interval_minutes=1440,
+    )
+    assert result["data"]["devices"] == [
+        {
+            "uuid": DEVICE_A,
+            "name": "host-a",
+            "isOnline": False,
+            "osFamily": "Windows",
+            "osName": "10 Enterprise",
+        }
+    ]
+    assert client.calls[0][2] == {"page": 0, "limit": 50}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("limit", "complete"), [(1, False), (2, True)])
+async def test_list_devices_without_total_uses_page_fill(limit: int, complete: bool) -> None:
+    path = f"{READ_BASE}/scan-interval/1440/devices"
+    page = _device_page(1, 0, limit)
+    del page["total"]
+    client = StubClient(get_responses={path: [page]})
+    result = await workflows.list_devices_by_setting_value(
+        client,  # type: ignore[arg-type]
+        org_id=42,
+        setting="scan-interval",
+        interval_minutes=1440,
+        limit=limit,
+    )
+    assert result["metadata"]["total"] is None
+    assert result["metadata"]["complete"] is complete
 
 
 @pytest.mark.asyncio
@@ -676,7 +764,8 @@ async def test_create_tool_builds_value_and_uses_client_org(recorded: dict[str, 
     assert recorded["create_device_settings_job"] == {
         "org_uuid": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
         "setting": "windows-update-source",
-        "value": {"managed": True, "serverUrl": "https://wsus.example.com"},
+        "windows_update_source": "WSUS",
+        "wsus_server_url": "https://wsus.example.com",
         "add_device_uuids": [DEVICE_A],
         "remove_device_uuids": [DEVICE_B],
     }
@@ -694,7 +783,6 @@ async def test_create_tool_builds_value_and_uses_client_org(recorded: dict[str, 
         ({"add_device_uuids": [DEVICE_A, DEVICE_A.upper()]}, "more than once"),
         ({"add_device_uuids": ["11111111-1111-1111-1111-111111111111"]}, "RFC 9562"),
         ({"add_device_uuids": [DEVICE_A], "remove_device_uuids": [DEVICE_A]}, "both"),
-        ({"add_device_uuids": [DEVICE_A], "remove_device_uuids": []}, "1 to 500"),
         ({"add_device_uuids": [DEVICE_A], "os_auto_update": "KEEP"}, "does not apply"),
         ({"add_device_uuids": ["not-a-uuid"]}, "uuid"),
     ],
@@ -798,3 +886,48 @@ async def test_list_devices_tool_rejects_bad_input(
     with pytest.raises(ToolError):
         await _register().tools["list_devices_by_setting_value"](**kwargs)
     assert "list_devices_by_setting_value" not in recorded
+
+
+@pytest.mark.asyncio
+async def test_value_read_tools_accept_explicit_org_id(recorded: dict[str, Any]) -> None:
+    server = _register()
+    await server.tools["get_device_setting_values"](setting="scan-interval", org_id=7)
+    await server.tools["list_devices_by_setting_value"](
+        setting="scan-interval", interval_minutes=1440, org_id=7
+    )
+    assert recorded["get_device_setting_values"]["org_id"] == 7
+    assert recorded["list_devices_by_setting_value"]["org_id"] == 7
+
+
+@pytest.mark.asyncio
+async def test_create_tool_treats_empty_remove_as_absent(recorded: dict[str, Any]) -> None:
+    await _register().tools["create_device_settings_job"](
+        setting="scan-interval",
+        interval_minutes=720,
+        add_device_uuids=[DEVICE_A],
+        remove_device_uuids=[],
+    )
+    assert "remove_device_uuids" not in recorded["create_device_settings_job"]
+
+
+@pytest.mark.asyncio
+async def test_unclear_create_keeps_request_id_taken(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+
+    async def unclear(client: Any, **kwargs: Any) -> dict[str, Any]:
+        calls.append("create")
+        raise workflows.UnclearJobCreateError("timed out", 0)
+
+    monkeypatch.setattr(device_settings_tools.workflows, "create_device_settings_job", unclear)
+    tool = _register().tools["create_device_settings_job"]
+    kwargs = {
+        "setting": "scan-interval",
+        "interval_minutes": 720,
+        "add_device_uuids": [DEVICE_A],
+        "request_id": "unclear-create-1",
+    }
+    with pytest.raises(ToolError, match="no clear result|timed out"):
+        await tool(**kwargs)
+    again = await tool(**kwargs)
+    assert calls == ["create"]
+    assert again["data"]["duplicate"] is True

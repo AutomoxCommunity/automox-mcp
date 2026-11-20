@@ -61,7 +61,8 @@ UNCLEAR_CREATE_NOTE = (
     "(jobs still running), and since a finished job is not listed there, check with "
     "list_devices_by_setting_value whether the devices already hold the value. "
     "Resending is safe only if no later job for the same setting has been sent "
-    "since; otherwise leave the devices that job shares out of the retry."
+    "since; otherwise leave the devices that job shares out of the retry. Resend "
+    "with a new request_id."
 )
 
 # Fields of a device row worth returning; every row on a page holds the same value.

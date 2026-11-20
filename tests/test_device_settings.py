@@ -993,3 +993,54 @@ async def test_job_tools_reject_dot_ids(recorded: dict[str, Any], job_id: str) -
 async def test_list_jobs_tool_sends_default_limit(recorded: dict[str, Any]) -> None:
     await _register().tools["list_device_settings_jobs"]()
     assert recorded["list_device_settings_jobs"]["limit"] == 10
+
+
+@pytest.mark.asyncio
+async def test_create_that_fails_after_the_job_answers_keeps_request_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = StubClient(post_responses={f"{BASE}/jobs": [JOB_ACCEPTED]})
+
+    def broken_response(result: Any) -> Any:
+        raise RuntimeError("response build failed")
+
+    monkeypatch.setattr("automox_mcp.utils.tooling.as_tool_response", broken_response)
+    tool = _register_with(client).tools["create_device_settings_job"]
+    with pytest.raises(RuntimeError):
+        await tool(**_CREATE_ARGS, request_id="answered-create-1")
+    monkeypatch.undo()
+    again = await tool(**_CREATE_ARGS, request_id="answered-create-1")
+    assert [c[0] for c in client.calls] == ["POST"]
+    assert again["data"]["unclear"] is True
+
+
+@pytest.mark.asyncio
+async def test_list_devices_tool_accepts_long_existing_wsus_server(
+    recorded: dict[str, Any],
+) -> None:
+    url = "https://" + "w" * 120 + ".example.com"
+    await _register().tools["list_devices_by_setting_value"](
+        setting="windows-update-source",
+        windows_update_source="WSUS",
+        wsus_server_url=f"  {url} ",
+    )
+    assert recorded["list_devices_by_setting_value"]["wsus_server_url"] == url
+
+
+@pytest.mark.asyncio
+async def test_create_tool_strips_and_caps_wsus_server(recorded: dict[str, Any]) -> None:
+    server = _register()
+    await server.tools["create_device_settings_job"](
+        setting="windows-update-source",
+        windows_update_source="WSUS",
+        wsus_server_url=" https://wsus.example.com ",
+        add_device_uuids=[DEVICE_A],
+    )
+    assert recorded["create_device_settings_job"]["wsus_server_url"] == "https://wsus.example.com"
+    with pytest.raises(ToolError):
+        await server.tools["create_device_settings_job"](
+            setting="windows-update-source",
+            windows_update_source="WSUS",
+            wsus_server_url="https://" + "w" * 100,
+            add_device_uuids=[DEVICE_A],
+        )

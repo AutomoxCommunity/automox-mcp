@@ -19,6 +19,7 @@ classifiers = [
   "Topic :: System :: Systems Administration"
 ]
 dependencies = [
+  "authlib>=1.9.1",  # PYSEC-2026-4354..4360, CVE-2026-96760, CVE-2026-116672; transitive via fastmcp
   "click>=8.3.3",  # PYSEC-2026-2132: click.edit() command injection; transitive via typer/fastmcp
   "cryptography>=48.0.1",  # GHSA-537c-gmf6-5ccf: bundled-OpenSSL fix in wheels
   # fastmcp-slim[server], not the fastmcp metapackage: fastmcp is a code-less
@@ -31,7 +32,9 @@ dependencies = [
   "fastmcp-slim[server]>=3.4.2",
   "httpx>=0.28",
   "joserfc>=1.7.6",  # CVE-2026-48990 (JWS payload-size-limit bypass); CVE-2026-119283, CVE-2026-119284; transitive via fastmcp
+  "mcp>=1.30.0,!=2.0.*,!=2.1.*",  # imported directly; CVE-2026-59951, CVE-2026-116684, CVE-2026-116685, CVE-2026-116686 (fixed in 1.30.0 and 2.2.0)
   "pydantic>=2.12",
+  "pyjwt>=2.15.0",  # PYSEC-2026-4140..4152, PYSEC-2026-4183, GHSA-pxh4-856f-4h89; transitive via mcp (pyjwt[crypto])
   "python-dotenv>=1.1"
 ]
 

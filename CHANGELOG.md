@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **The published package now declares floors for `mcp` (`>=1.30.0`, excluding 2.0 and 2.1), `authlib` (`>=1.9.1`) and `pyjwt` (`>=2.15.0`).** All three were already installed through `fastmcp-slim[server]`, and the server imports `mcp` directly. fastmcp-slim 3.x still accepts the vulnerable versions, so an environment that stays on it (for example an upgrade without `--upgrade-strategy eager`) could keep them; declaring the floors in `[project].dependencies` makes installs of this package pull the fixed versions, not only re-locks of this repo.
+
 ## [2.2.10] - 2026-11-19
 
 ### Changed

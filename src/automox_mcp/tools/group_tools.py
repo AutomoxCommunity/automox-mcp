@@ -100,7 +100,8 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 "In an organization whose devices own their settings, omit "
                 "refresh_interval: the API rejects a group save that changes a "
                 "device-owned setting, on create anything but the 1440 default "
-                "(code DEVICE_OWNED_SETTINGS)."
+                "(code DEVICE_OWNED_SETTINGS); change those settings per device with "
+                "create_device_settings_job."
             ),
             annotations={
                 "readOnlyHint": False,
@@ -163,7 +164,8 @@ def register(server: FastMCP, *, read_only: bool = False, client: AutomoxClient)
                 'fails the update rules, the error names the field to pass. ui_color "" '
                 "clears the color. In an organization whose devices own their settings, "
                 "omit refresh_interval: the API rejects a group save that changes a "
-                "device-owned setting (code DEVICE_OWNED_SETTINGS)."
+                "device-owned setting (code DEVICE_OWNED_SETTINGS); change those settings "
+                "per device with create_device_settings_job."
             ),
             annotations={
                 "readOnlyHint": False,

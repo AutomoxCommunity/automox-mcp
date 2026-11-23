@@ -115,6 +115,7 @@ def test_all_domains_present():
         "policy_history",
         "patches",
         "groups",
+        "device_settings",
         "events",
         "reports",
         "audit",

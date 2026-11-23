@@ -31,6 +31,7 @@ _MODULE_REGISTRY: dict[str, tuple[str, bool]] = {
     "audit_v2": ("audit_v2_tools", False),
     "devices": ("device_tools", True),
     "device_search": ("device_search_tools", False),
+    "device_settings": ("device_settings_tools", True),
     "policies": ("policy_tools", True),
     "policy_history": ("policy_history_tools", False),
     "users": ("account_tools", True),

@@ -22,8 +22,10 @@ import pytest
 from conftest import FakeClient, StubServer
 from fastmcp.exceptions import ToolError
 
+from automox_mcp.client import AutomoxAPIError
 from automox_mcp.tools import (
     account_tools,
+    device_settings_tools,
     group_tools,
     policy_windows_tools,
     vuln_sync_tools,
@@ -56,6 +58,24 @@ def _wire_via_workflows_attr(
             return _success()
 
         monkeypatch.setattr(module.workflows, wf_name, fail_then_succeed)
+
+    return wire
+
+
+def _wire_refusal_then_success(
+    module: Any, wf_name: str
+) -> Callable[[pytest.MonkeyPatch, list[bool]], None]:
+    """Fail with a clear API refusal: a tool that keeps the slot when a write may
+    have landed still frees it when the API refused the write."""
+
+    def wire(monkeypatch: pytest.MonkeyPatch, calls: list[bool]) -> None:
+        async def refuse_then_succeed(client, **_):
+            calls.append(True)
+            if len(calls) == 1:
+                raise AutomoxAPIError("refused", status_code=400, payload={"code": "INVALID_VALUE"})
+            return _success()
+
+        monkeypatch.setattr(module.workflows, wf_name, refuse_then_succeed)
 
     return wire
 
@@ -113,6 +133,30 @@ _CASES = [
         policy_windows_tools,
         _wire_via_workflows_attr(policy_windows_tools, "delete_policy_window"),
         {"org_uuid": _ORG_UUID, "window_uuid": _ORG_UUID},
+    ),
+    # device_settings
+    (
+        "create_device_settings_job",
+        device_settings_tools,
+        _wire_refusal_then_success(device_settings_tools, "create_device_settings_job"),
+        {
+            "org_uuid": _ORG_UUID,
+            "setting": "scan-interval",
+            "interval_minutes": 720,
+            "add_device_uuids": ["11111111-1111-4111-8111-111111111111"],
+        },
+    ),
+    (
+        "cancel_device_settings_job",
+        device_settings_tools,
+        _wire_via_workflows_attr(device_settings_tools, "cancel_device_settings_job"),
+        {"org_uuid": _ORG_UUID, "job_id": "job-1"},
+    ),
+    (
+        "add_device_setting_value",
+        device_settings_tools,
+        _wire_via_workflows_attr(device_settings_tools, "add_device_setting_value"),
+        {"org_uuid": _ORG_UUID, "setting": "scan-interval", "interval_minutes": 480},
     ),
     # group
     (

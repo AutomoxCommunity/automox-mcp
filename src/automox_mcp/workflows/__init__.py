@@ -11,6 +11,7 @@ from . import (
     device_commands,
     device_inventory,
     device_search,
+    device_settings,
     devices,
     events,
     groups,
@@ -75,6 +76,18 @@ from .device_search import (
     refresh_saved_search_cache,
     run_saved_search,
     update_saved_search,
+)
+from .device_settings import (
+    UNCLEAR_CREATE_NOTE,
+    UnclearJobCreateError,
+    add_device_setting_value,
+    build_setting_value,
+    cancel_device_settings_job,
+    create_device_settings_job,
+    get_device_setting_values,
+    get_device_settings_job,
+    list_device_settings_jobs,
+    list_devices_by_setting_value,
 )
 from .devices import (
     batch_update_devices,
@@ -187,6 +200,8 @@ from .webhooks import (
 from .worklets import get_worklet_detail, search_worklet_catalog
 
 __all__ = [
+    "UNCLEAR_CREATE_NOTE",
+    "UnclearJobCreateError",
     "account",
     "audit",
     "audit_v2",
@@ -195,6 +210,7 @@ __all__ = [
     "device_commands",
     "device_inventory",
     "device_search",
+    "device_settings",
     "devices",
     "events",
     "groups",
@@ -339,4 +355,12 @@ __all__ = [
     "get_policy_window",
     "search_policy_windows",
     "update_policy_window",
+    "add_device_setting_value",
+    "build_setting_value",
+    "cancel_device_settings_job",
+    "create_device_settings_job",
+    "get_device_setting_values",
+    "get_device_settings_job",
+    "list_device_settings_jobs",
+    "list_devices_by_setting_value",
 ]

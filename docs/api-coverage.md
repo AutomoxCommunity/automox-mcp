@@ -4,9 +4,9 @@ This document records what the Automox MCP server deliberately does **not** expo
 
 Audited against the Automox Console API OpenAPI bundle (`ax-console-bundle.yaml`, version `2026-05-28`): **115 documented operations**. Coverage verified by registering the server and reading the live tool set, not by reading prose. Undocumented-but-wrapped paths (endpoints the live tenant serves that the spec omits) are tracked separately in [#95](https://github.com/AutomoxCommunity/automox-mcp/issues/95) and are **not** coverage gaps.
 
-The server exposes 133 tools (85 read / 48 write). Effectively every documented **read** operation is covered; the omissions below are all secret-exposing endpoints (every documented write/delete/upload is now either wrapped or gated).
+The server exposes 140 tools (89 read / 51 write). Effectively every documented **read** operation is covered; the omissions below are all secret-exposing endpoints (every documented write/delete/upload is now either wrapped or gated).
 
-The **Webhooks API** is a *separate* published OpenAPI document (`Automox Webhooks API` v1.0.0), not part of the Console API bundle above. The server now wraps **all 9** of its paths — see [Webhooks API coverage](#webhooks-api-coverage) below. Taken together, the server can assert it wraps **100% of the published Automox Console API and Webhooks API**, with the single deliberate exception of secret-exposing endpoints (Section 1).
+The **Webhooks API** is a *separate* published OpenAPI document (`Automox Webhooks API` v1.0.0), not part of the Console API bundle above. The server now wraps **all 9** of its paths — see [Webhooks API coverage](#webhooks-api-coverage) below. The **Device Settings API** is a third OpenAPI document; all 5 of its operations are wrapped, see [Device Settings API coverage](#device-settings-api-coverage). Taken together, the server can assert it wraps **100% of the published Automox Console API and Webhooks API**, and all of the Device Settings API, with the single deliberate exception of secret-exposing endpoints (Section 1).
 
 ## Three categories
 
@@ -154,6 +154,27 @@ The Webhooks API (`Automox Webhooks API` v1.0.0) is published as a **separate** 
 **Spec drift (cross-ref [#95](https://github.com/AutomoxCommunity/automox-mcp/issues/95)):** the doc documents the update operation as `PUT`, but `update_webhook` issues a `PATCH` (partial update) — which the live API accepts. Tracked with the other API-team spec gaps.
 
 ---
+
+## Device Settings API coverage
+
+In an organization whose devices own their settings, the scan interval, OS auto update and Windows update source are set per device through apply jobs, and server-group saves that change them are refused (`DEVICE_OWNED_SETTINGS`). Every operation of the Device Settings API is wrapped:
+
+| Operation | Tool | Tier |
+|---|---|---|
+| `GET /organizations/{orgUuid}/scan/device-settings/jobs` | `list_device_settings_jobs` | Read |
+| `GET /organizations/{orgUuid}/scan/device-settings/jobs/{jobId}` | `get_device_settings_job` | Read |
+| `POST /organizations/{orgUuid}/scan/device-settings/jobs` | `create_device_settings_job` | Tier 1 ask-first. Bulk (up to 500 devices), but it changes configuration, not code. A job does not keep the devices' earlier values, so the tool tells the caller to build each job from one value's device list; one job with that value then undoes it. |
+| `POST /organizations/{orgUuid}/scan/device-settings/jobs/{jobId}/cancel` | `cancel_device_settings_job` | Tier 1 ask-first. Does not undo devices already changed. |
+| `POST /organizations/{orgUuid}/scan/device-settings/values/{setting}` | `add_device_setting_value` | Plain write, no gate. Adds an option to the organization's list without applying it; values cannot be removed through the API. |
+
+Selections are validated locally the way the API does (1 to 500 distinct RFC 9562 device UUIDs per half, no device in both halves) and are never split into several jobs, because the newest job for a setting wins on every device it shares with an earlier one. A job create that ends with no clear result (no response, a 5xx without a known error code, a reply that cannot be read or has no `jobId`, or a cancelled call) may have created its job, so it is not retried, a resend with its `request_id` is answered with `unclear: true` instead of being sent, and the error says to check the job list and the devices' values first. Page sizes are capped (15 jobs, 50 devices) so a page fits the default response budget.
+
+Reading which value each device holds is not part of the Device Settings API; two Console API routes that are not in the published spec cover it. Both were verified live with an API key, and answer `ORG_NOT_DEVICE_OWNED` (409) in an organization whose settings are managed on server groups:
+
+| Operation | Tool | Tier |
+|---|---|---|
+| `GET /orgs/{orgId}/device-settings/scan-interval`, `GET /orgs/{orgId}/device-settings/os-patch` | `get_device_setting_values` | Read |
+| `GET /orgs/{orgId}/device-settings/scan-interval/{minutes}/devices`, `GET /orgs/{orgId}/device-settings/os-patch/{setting}/{value}/devices` (`server` for a WSUS server) | `list_devices_by_setting_value` | Read |
 
 ## Not a gap — redundant
 

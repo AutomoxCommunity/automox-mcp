@@ -129,7 +129,7 @@ That's it. Start asking questions.
 
 ## What Can I Ask?
 
-The server exposes 130+ tools across devices, policies, patches, groups, webhooks, worklets, vulnerability sync, maintenance windows, and more. You don't need to know the tool names — just describe what you want:
+The server exposes 130+ tools across devices, policies, patches, groups, webhooks, worklets, vulnerability sync, maintenance windows, device settings, and more. You don't need to know the tool names — just describe what you want:
 
 | Ask this | What happens |
 |---|---|
@@ -159,7 +159,7 @@ Applies only to self-hosted 2.x servers. Not applicable to the hosted 3.0+ serve
 | `AUTOMOX_API_KEY` | Yes | — | Automox API key (org-scoped recommended — see [key types](#1-get-your-automox-credentials)) |
 | `AUTOMOX_ACCOUNT_UUID` | Yes | — | Account UUID from Secrets & Keys |
 | `AUTOMOX_ORG_ID` | Recommended | — | Numeric organization ID (required by most tools) |
-| `AUTOMOX_MCP_READ_ONLY` | No | `false` | Disable all write operations (85 of 133 tools remain) |
+| `AUTOMOX_MCP_READ_ONLY` | No | `false` | Disable all write operations (89 of 140 tools remain) |
 | `AUTOMOX_MCP_ALLOW_APPLY_REMEDIATION_ACTIONS` | No | `false` | Opt in to the `apply_remediation_actions` tool, which patches/runs worklets on endpoints immediately. Off by default even in write mode. |
 | `AUTOMOX_MCP_ALLOW_SPLASHTOP_BULK_INSTALL_UNINSTALL` | No | `false` | Opt in to the `splashtop_bulk_install_uninstall` tool, which installs/uninstalls the Splashtop client across an entire server group in one call. Off by default even in write mode. |
 | `AUTOMOX_MCP_ALLOW_DELETE_DEVICE` | No | `false` | Opt in to the `delete_device` tool, which permanently deletes a device record and its history (`DELETE /servers/{id}`). Irreversible and not reconstructable through the MCP. Off by default even in write mode. |
@@ -193,7 +193,7 @@ Applies only to self-hosted 2.x servers. Not applicable to the hosted 3.0+ serve
 AUTOMOX_MCP_READ_ONLY=true
 ```
 
-Disables all write operations. Only read-only tools are registered (85 of 133). Useful for auditing and monitoring.
+Disables all write operations. Only read-only tools are registered (89 of 140). Useful for auditing and monitoring.
 
 ### Modular Loading
 
@@ -203,7 +203,7 @@ Load only the tool modules you need:
 AUTOMOX_MCP_MODULES=devices,policies
 ```
 
-Available modules: `audit`, `audit_v2`, `devices`, `device_search`, `policies`, `policy_history`, `users`, `groups`, `events`, `reports`, `packages`, `webhooks`, `worklets`, `data_extracts`, `vuln_sync`, `compound`, `policy_windows`
+Available modules: `audit`, `audit_v2`, `devices`, `device_search`, `policies`, `policy_history`, `users`, `groups`, `events`, `reports`, `packages`, `webhooks`, `worklets`, `data_extracts`, `vuln_sync`, `compound`, `policy_windows`, `device_settings`
 
 Both settings can be combined:
 
@@ -245,7 +245,7 @@ The Automox MCP server is designed for enterprise deployment with defense-in-dep
 
 **Highlights:**
 
-- **Read-only mode** (`AUTOMOX_MCP_READ_ONLY`) disables all 48 write tools
+- **Read-only mode** (`AUTOMOX_MCP_READ_ONLY`) disables all 51 write tools
 - **Module filtering** (`AUTOMOX_MCP_MODULES`) for least-privilege tool loading
 - **Correlation IDs** on every tool call, forwarded to Automox API as `X-Correlation-ID`
 - **Rate limiting** (30 calls/60s) with token budget estimation and auto-truncation

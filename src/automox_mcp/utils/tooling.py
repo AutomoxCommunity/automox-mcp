@@ -34,6 +34,7 @@ _VALID_MODULES: frozenset[str] = frozenset(
         "audit_v2",
         "devices",
         "device_search",
+        "device_settings",
         "policies",
         "policy_history",
         "users",
@@ -808,7 +809,8 @@ async def call_tool_workflow(
         # --- parameter validation & org_id injection ---
         if params_model is not None:
             if issubclass(params_model, (OrgIdContextMixin, OrgIdRequiredMixin)):
-                params.setdefault("org_id", client_org_id)
+                if params.get("org_id") is None:
+                    params["org_id"] = client_org_id
                 if params.get("org_id") is None:
                     raise ToolError(
                         "org_id required - set AUTOMOX_ORG_ID or pass org_id explicitly."

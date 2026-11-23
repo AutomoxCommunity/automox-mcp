@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Device settings tools for organizations whose devices own their settings.** There, the scan interval, OS auto update and Windows update source are set per device, and a server-group save that changes them is refused (`DEVICE_OWNED_SETTINGS`). Seven tools cover them: `create_device_settings_job` sets one setting on 1 to 500 devices as a background job (with an optional `remove` half that sets devices back to the organization's default), `get_device_settings_job` and `list_device_settings_jobs` read job status and outcome counts, `cancel_device_settings_job` stops a job, and `add_device_setting_value` adds a scan interval or WSUS server to the organization's list. `get_device_setting_values` reads the organization's values with their device counts, and `list_devices_by_setting_value` lists the devices that hold one value, so a job can target them. Device lists are checked locally the way the API checks them and are never split into several jobs. A job create that ends with no clear result is not retried, keeps its `request_id` taken, and the error says to check before sending it again. Errors with a known `code` say whether retrying can help; in an organization whose settings are managed on server groups the value reads, the job create and the value add answer `ORG_NOT_DEVICE_OWNED` and point to `update_server_group` for the scan interval. The tool count is now 140 (89 read, 51 write) across 19 domains.
+
+### Changed
+
+- **A tool call that passes `org_id` as null now uses the configured organization.** It used to fail with "org_id required" even when `AUTOMOX_ORG_ID` was set.
+- **`create_server_group` and `update_server_group` point a `DEVICE_OWNED_SETTINGS` refusal at `create_device_settings_job`.** The error and the tool descriptions now say to leave these settings out of the group save and change them per device.
+
 ### Security
 
 - **The published package now declares floors for `mcp` (`>=1.30.0`, excluding 2.0 and 2.1), `authlib` (`>=1.9.1`) and `pyjwt` (`>=2.15.0`).** All three were already installed through `fastmcp-slim[server]`, and the server imports `mcp` directly. fastmcp-slim 3.x still accepts the vulnerable versions, so an environment that stays on it (for example an upgrade without `--upgrade-strategy eager`) could keep them; declaring the floors in `[project].dependencies` makes installs of this package pull the fixed versions, not only re-locks of this repo.
